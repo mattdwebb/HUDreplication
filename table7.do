@@ -1,4 +1,6 @@
-/*MDW - table 7*/
+/*Written by: Matthew D. Webb - table 7*/
+/*Date: August 21, 2023 */
+
 clear
 
 /*set path here*/
@@ -46,14 +48,13 @@ replace acarownx = "." if acarownx  == "NA"
 
 global VARS "whitehi_rec ofcolor w2012pc_ad b2012pc_ad a2012pc_ad hisp2012pc_ad logadprice povrate_ad  sequencexx monthx   arelate2x hhmtypex savlbadx stotunit_rec sapptamx tsexxx thhegaix tpegaix thighedux tcurtenrx algncurx aelng1x dpmtexpx amoversx agex aleasetpx acarownx "
 
-
 foreach var in $VARS {
 	cap replace `var' = "." if `var' == ""
 	cap destring `var', replace force
 }
 
 /*corrected city*/
-	qui do "${PATH}DO\cleaner.do"
+	qui do "${PATH}DO\table7_cleaner.do"
 	
 /*--------------------------------------*/
 /*regressions*/
@@ -69,9 +70,6 @@ global ABSVARSSAME "control sequencexx monthx market arelate2x hhmtypex savlbadx
 
 global depvar_1 = "ofcolor"
 global depvar_2 = "racecat*"
-
-/*original*/ 
-*set trace on
 
 foreach cluster in $CLUSTER {
 	
@@ -108,9 +106,8 @@ foreach cluster in $CLUSTER {
 			qui estadd local ln_price "No", replace
 			qui estadd local race_compo "No", replace
 			qui estadd local pov_share "No", replace
-			
-			local coltab_`d'_`cluster' = " `coltab_`d'_`cluster'' clus_`cluster'_dep_`d'_col_`cols'  "
-			
+
+			local coltab_`d'_`cluster' = " `coltab_`d'_`cluster'' clus_`cluster'_dep_`d'_col_`cols'  "	
 		}
 	}
 	
