@@ -6,7 +6,7 @@ clear
 /*set path here*/
 global PATH "C:\Users\mattw\Dropbox\HuD_Replication\"
 
-import delimited "${PATH}\csv\HUDprocessed_JPE_census_042021.csv"
+import delimited "${PATH}\HUDprocessed_JPE_census_042021.csv"
 
 /*--------------------------------------*/
 /*clearning*/
@@ -54,7 +54,7 @@ foreach var in $VARS {
 }
 
 /*corrected city*/
-	qui do "${PATH}DO\table7_cleaner.do"
+	qui do "${PATH}table7_cleaner.do"
 	
 /*--------------------------------------*/
 /*regressions*/
@@ -125,7 +125,7 @@ foreach cluster in $CLUSTER {
 	forvalues d =1/2 {
 			
 		esttab `coltab_`d'_`cluster''  ///
-		using "${PATH}/Table7/table7_d`d'_clust_`cluster'.tex", ///
+		using "${PATH}/table7_d`d'_clust_`cluster'.tex", ///
 		replace booktabs label ///
 		mgroups("Original Data" "Updated City Name Only" "Correct Race Only" "Updated City Name \& Correct Race" "Zip Code FE",pattern(1 1 1 1 1) ///
 		prefix(\multicolumn{@span}{c}{) suffix(}) span erepeat(\cmidrule(lr){@span})) ///
