@@ -11,7 +11,7 @@
 	destring zip, replace force
 
 /*merging city*/
-	merge m:1 zip using "${PATH}data\zipinfo.dta"
+	merge m:1 zip using "${DATA}\zipinfo.dta"
 	
 *drop the not matched from zip file
 	drop if _merge==2	
@@ -21,8 +21,8 @@
 	drop allaccept17-allaccept31
 	
 
-/*merging county*/
-	merge m:1 zip using "${PATH}data\zipinfo-county.dta"
+/* merging county */
+	merge m:1 zip using "${DATA}\zipinfo-county.dta"
 	
 *drop the not matched from zip file
 	drop if _merge==2	
@@ -204,9 +204,9 @@ bysort group_zip: egen group_freq_zip = count(group_zip)
 /*generate frequency of the groups*/
 	bysort grouped_hcity: egen group_freq = count(grouped_hcity)	
 	keep clean_hcityx grouped_hcity group_freq	
-	save "${PATH}data\uniquehcity.dta", replace 
+	save "${OUTPUT}\uniquehcity.dta", replace 
 	restore
-	merge m:1 clean_hcityx using  "${PATH}data\uniquehcity.dta"
+	merge m:1 clean_hcityx using  "${OUTPUT}\uniquehcity.dta"
 	
 	drop _merge
 	
@@ -510,10 +510,10 @@ bysort group_zip: egen group_freq_zip = count(group_zip)
 	duplicates drop
 
 	bysort market clean_hcityx: egen bad_count = count(clean_hcityx)
-	save "${PATH}data\uniquehlistings.dta", replace 
+	save "${OUTPUT}\uniquehlistings.dta", replace 
 	restore
 	
-	merge m:1 clean_hcityx market hsitead_rec using  "${PATH}data\uniquehlistings.dta"
+	merge m:1 clean_hcityx market hsitead_rec using  "${OUTPUT}\uniquehlistings.dta"
 	drop _merge
 	replace final_city = clean_hcityx if (bad_count >=3) & (final_city == ".")
 	replace good_city = 1 if bad_count >=3

@@ -7,12 +7,18 @@
 /*-------------------------------------*/
 	clear all
 
-	/* Please set path here */
-	global PATH "/Users/shichen/Desktop/uottawa_i4r/final_HuD_table5"
+	/* Set path to the parent folder of the local location of the git repository */
+	global PATH "C:\Users\antho\OneDrive - University of Toronto\Research\Replication Games"
+
+	global CODE "${PATH}/HUDreplication" //set the file path to the main code directory
+	global DATA "${CODE}/Data" // set the file path to the data subdirectory
+
+	cap mkdir "${PATH}/Output" // make an Output folder if it doesn't already exist
+	global OUTPUT "${PATH}/Output" // set the output file path
 	
 	cap log close
-	log using "${PATH}/table5_log.txt", text replace
-	import delimited "${PATH}/adsprocessed_JPE.csv", bindquote(strict)
+	log using "${OUTPUT}/table5_log.txt", text replace
+	import delimited "${DATA}/adsprocessed_JPE.csv", bindquote(strict)
 	
 	local PKG "egenmore strgroup matchit freqindex reghdfe estout"
 	foreach var in `PKG' {
@@ -23,6 +29,8 @@
 	}
 	
 	set more off
+
+	disp "testing"
 	
 /*-------------------------------------*/
 /*---- Cleaning, labelling variables --*/
@@ -65,7 +73,7 @@
 /*-------------------------------------*/
 /*---- Getting correct city names -----*/
 /*-------------------------------------*/
-	qui do "${PATH}/table5_cleaner.do"
+	qui do "${CODE}/table5_cleaner.do"
 
 /*-------------------------------------*/
 /*---- Regressions --------------------*/
@@ -129,7 +137,7 @@
 			forvalues d = 1/2 {
 				local tvar = "${tvar_`t'}"
 				esttab `ct_`t'_`d'_`cluster'' ///
-				using "${PATH}/table5_`t'_`d'_`cluster'.tex", ///
+				using "${OUTPUT}/table5_`t'_`d'_`cluster'.tex", ///
 				replace booktabs label ///
 				mgroups("Original Data" "Updated City Name Only" "Correct Race Only" "Updated City Name \& Correct Race" "Zip Code FE",pattern(1 1 1 1 1) ///
 				prefix(\multicolumn{@span}{c}{) suffix(}) span erepeat(\cmidrule(lr){@span})) ///

@@ -12,7 +12,7 @@
 	destring zip, replace force
 
 /* merging city */
-	merge m:1 zip using "${PATH}/zipinfo.dta"
+	merge m:1 zip using "${DATA}/zipinfo.dta"
 
 /* drop the not matched from zip file */
 	drop if _merge==2
@@ -22,7 +22,7 @@
 	drop allaccept17-allaccept31
 
 /* merging county */
-	merge m:1 zip using "${PATH}/zipinfo-county.dta"
+	merge m:1 zip using "${DATA}/zipinfo-county.dta"
 
 /* drop the not matched from zip file */
 	drop if _merge==2
@@ -166,9 +166,9 @@
 	/* generate frequency of the groups */
 	bysort grouped_hcity: egen group_freq = count(grouped_hcity)
 	keep clean_hcity grouped_hcity group_freq
-	save "${PATH}/uniquehcity_t5.dta", replace 
+	save "${OUTPUT}/uniquehcity_t5.dta", replace 
 	restore
-	merge m:1 clean_hcity using  "${PATH}/uniquehcity_t5.dta"
+	merge m:1 clean_hcity using  "${OUTPUT}/uniquehcity_t5.dta"
 	drop _merge
 		
 	/* find the modal string for each string group */
@@ -460,10 +460,10 @@
 	keep clean_hcity hsitead market
 	duplicates drop
 	bysort market clean_hcity: egen bad_count = count(clean_hcity)
-	save "${PATH}/uniquehlistings_t5.dta", replace 
+	save "${OUTPUT}/uniquehlistings_t5.dta", replace 
 	restore
 
-	merge m:1 clean_hcity market hsitead using  "${PATH}/uniquehlistings_t5.dta"
+	merge m:1 clean_hcity market hsitead using  "${OUTPUT}/uniquehlistings_t5.dta"
 	drop _merge
 	replace final_city = clean_hcity if (bad_count >=3) & (final_city == ".")
 	replace good_city = 1 if bad_count >=3
@@ -472,9 +472,9 @@
 	gen temp_city = ""
 	replace temp_city = final_city if good_city==1
 	replace temp_city = clean_hcity if good_city==0
-	save "${PATH}/tab5addzip.dta", replace
+	save "${OUTPUT}/tab5addzip.dta", replace
 
 /*drop new variables*/
 	drop zip decommissioned primary_city acceptable_cities unacceptable_cities county timezone area_codes world_region country irs_estimated_population allaccept1 allaccept2 allaccept3 allaccept4 allaccept5 allaccept6 allaccept7 allaccept8 allaccept9 allaccept10 allaccept11 allaccept12 allaccept13 allaccept14 allaccept15 allaccept16 officialuspscityname officialuspsstatecode officialstatename officialcountyname allcounty1 allcounty2 allcounty3 allcounty4 allcounty5 allcounty6 upper_hcity upper_primary upper_usps upper_allaccept1 upper_allaccept2 upper_allaccept3 upper_allaccept4 upper_allaccept5 upper_allaccept6 upper_allaccept7 upper_allaccept8 upper_allaccept9 upper_allaccept10 upper_allaccept11 upper_allaccept12 upper_allaccept13 upper_allaccept14 upper_allaccept15 upper_allaccept16 upper_allcounty1 upper_allcounty2 upper_allcounty3 upper_allcounty4 upper_allcounty5 upper_allcounty6 clean_primary clean_usps clean_allaccept1 clean_allaccept2 clean_allaccept3 clean_allaccept4 clean_allaccept5 clean_allaccept6 clean_allaccept7 clean_allaccept8 clean_allaccept9 clean_allaccept10 clean_allaccept11 clean_allaccept12 clean_allaccept13 clean_allaccept14 clean_allaccept15 clean_allaccept16 clean_allaccept14 clean_allcounty1 clean_allcounty2 clean_allcounty3 clean_allcounty4 clean_allcounty5 clean_allcounty6 split_hcity1 split_hcity2 split_hcity3 split_hcity4 grouped_hcity group_freq grouping_hcity group_mode
 	compress
-	save "${PATH}/tab5addzip_small.dta", replace
+	save "${OUTPUT}/tab5addzip_small.dta", replace

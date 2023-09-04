@@ -3,13 +3,22 @@
 
 clear
 
-/*set path here*/
-global PATH "C:\Users\mattw\Dropbox\HuD_Replication\"
+	/* Set path to the parent folder of the local location of the git repository */
+	global PATH "C:\Users\antho\OneDrive - University of Toronto\Research\Replication Games"
 
-import delimited "${PATH}\HUDprocessed_JPE_census_042021.csv"
+	global CODE "${PATH}/HUDreplication" //set the file path to the main code directory
+	global DATA "${CODE}/Data" // set the file path to the data subdirectory
+
+	cap mkdir "${PATH}/Output" // make an Output folder if it doesn't already exist
+	global OUTPUT "${PATH}/Output" // set the output file path
+	
+	cap log close
+	log using "${OUTPUT}/table7_log.txt", text replace
+
+import delimited "${DATA}\HUDprocessed_JPE_census_042021.csv"
 
 /*--------------------------------------*/
-/*clearning*/
+/*cleaning*/
 /*--------------------------------------*/	
 
 /*generate incorrect ofcolor variable*/
@@ -32,7 +41,7 @@ gen market = substr(control,1,2)
 	gen racecat5 = apracex==5 
 	label variable racecat5 "Other Race"
 
-/*generate incorrect ofcolor variable*/
+/*generate correct ofcolor variable*/
 	gen newofcolor = 0
 	replace newofcolor = 1 if apracex == 2 | apracex == 3 | apracex == 4 | apracex == 5
 
@@ -54,7 +63,7 @@ foreach var in $VARS {
 }
 
 /*corrected city*/
-	qui do "${PATH}table7_cleaner.do"
+	qui do "${CODE}/table_7_city_name_cleaner.do"
 	
 /*--------------------------------------*/
 /*regressions*/
@@ -125,7 +134,7 @@ foreach cluster in $CLUSTER {
 	forvalues d =1/2 {
 			
 		esttab `coltab_`d'_`cluster''  ///
-		using "${PATH}/table7_d`d'_clust_`cluster'.tex", ///
+		using "${OUTPUT}/table7_d`d'_clust_`cluster'.tex", ///
 		replace booktabs label ///
 		mgroups("Original Data" "Updated City Name Only" "Correct Race Only" "Updated City Name \& Correct Race" "Zip Code FE",pattern(1 1 1 1 1) ///
 		prefix(\multicolumn{@span}{c}{) suffix(}) span erepeat(\cmidrule(lr){@span})) ///

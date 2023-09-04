@@ -2,19 +2,28 @@
 clear
 
 /*set path here*/
-global PATH "C:\Users\sunny\OneDrive\Desktop\Replication Games"
-global OUTPUT "C:\Users\sunny\OneDrive\Desktop\Replication Games\Cleaned Datasets"
+	/* Set path to the parent folder of the local location of the git repository */
+	global PATH "C:\Users\antho\OneDrive - University of Toronto\Research\Replication Games"
+
+	global CODE "${PATH}/HUDreplication" //set the file path to the main code directory
+	global DATA "${CODE}/Data" // set the file path to the data subdirectory
+
+	cap mkdir "${PATH}/Output" // make an Output folder if it doesn't already exist
+	global OUTPUT "${PATH}/Output" // set the output file path
+	
+	cap log close
+	log using "${OUTPUT}/table10_log.txt", text replace
 
 /*corrected city*/
-//	qui do "${PATH}\Cleaner\cleanerTable10.do"
+	qui do "${CODE}/cleanerTable10.do"
 
 /*---------------------------------------------*/
-/*Clearning first dataset with Adjusted Cities */
+/*Cleaning first dataset with Adjusted Cities */
 /*---------------------------------------------*/
 
 clear
 
-use "${PATH}\Cleaned Datasets\Table10_2_cityadjusted.dta"
+use "${OUTPUT}/Table10_2_cityadjusted.dta"
 
 /*generate correct correct ofcolor and aprace variable*/
 	gen noc = ofcolor
@@ -48,7 +57,7 @@ save "${OUTPUT}\Table10_adjustedcities_score.dta", replace
 
 clear
 
-use "${PATH}\Cleaned Datasets\Table10_cityadjusted.dta"	
+use "${OUTPUT}\Table10_cityadjusted.dta"	
 
 /*generate the market variable*/
 drop market
