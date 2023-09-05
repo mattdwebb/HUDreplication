@@ -1,35 +1,13 @@
 /* Stata Do File for Table 5 */
 /* Written by: Shi Chen */
 /* Date: August 21, 2023 */
+/* Updated: September 4, 2023, by Anthony McCanny */
 
-/*-------------------------------------*/
-/*----- Path, ssc, log, load data -----*/
-/*-------------------------------------*/
-	clear all
+clear
 
-	/* Set path to the parent folder of the local location of the git repository */
-	global PATH "C:\Users\antho\OneDrive - University of Toronto\Research\Replication Games"
+// import data
+import delimited "${DATA}/adsprocessed_JPE.csv", bindquote(strict)
 
-	global CODE "${PATH}/HUDreplication" //set the file path to the main code directory
-	global DATA "${CODE}/Data" // set the file path to the data subdirectory
-
-	cap mkdir "${PATH}/Output" // make an Output folder if it doesn't already exist
-	global OUTPUT "${PATH}/Output" // set the output file path
-	
-	cap log close
-	log using "${OUTPUT}/table5_log.txt", text replace
-	import delimited "${DATA}/adsprocessed_JPE.csv", bindquote(strict)
-	
-	local PKG "egenmore strgroup matchit freqindex reghdfe estout"
-	foreach var in `PKG' {
-		cap which `var'
-		if _rc!=0 {
-			ssc install `var'
-		}
-	}
-	
-	set more off
-	
 /*-------------------------------------*/
 /*---- Cleaning, labelling variables --*/
 /*-------------------------------------*/

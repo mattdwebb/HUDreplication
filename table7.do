@@ -1,20 +1,11 @@
-/*Written by: Matthew D. Webb - table 7*/
-/*Date: August 21, 2023 */
+/* Stata Do File for Table 7 */
+/* Written by: Matthew D. Webb */
+/* Created: August 21, 2023 */
+/* Updated: September 4, 2023, by Anthony McCanny */
 
 clear
 
-	/* Set path to the parent folder of the local location of the git repository */
-	global PATH "C:\Users\antho\OneDrive - University of Toronto\Research\Replication Games"
-
-	global CODE "${PATH}/HUDreplication" //set the file path to the main code directory
-	global DATA "${CODE}/Data" // set the file path to the data subdirectory
-
-	cap mkdir "${PATH}/Output" // make an Output folder if it doesn't already exist
-	global OUTPUT "${PATH}/Output" // set the output file path
-	
-	cap log close
-	log using "${OUTPUT}/table7_log.txt", text replace
-
+// import data
 import delimited "${DATA}\HUDprocessed_JPE_census_042021.csv"
 
 /*--------------------------------------*/
