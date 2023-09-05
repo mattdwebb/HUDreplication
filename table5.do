@@ -29,8 +29,6 @@
 	}
 	
 	set more off
-
-	disp "testing"
 	
 /*-------------------------------------*/
 /*---- Cleaning, labelling variables --*/
@@ -73,7 +71,7 @@
 /*-------------------------------------*/
 /*---- Getting correct city names -----*/
 /*-------------------------------------*/
-	qui do "${CODE}/table5_cleaner.do"
+	do "${CODE}/data_cleaner.do"	
 
 /*-------------------------------------*/
 /*---- Regressions --------------------*/

@@ -63,7 +63,7 @@ foreach var in $VARS {
 }
 
 /*corrected city*/
-	qui do "${CODE}/table_7_city_name_cleaner.do"
+	do "${CODE}/data_cleaner.do"
 	
 /*--------------------------------------*/
 /*regressions*/
@@ -96,7 +96,7 @@ foreach cluster in $CLUSTER {
 				local depvaruse = "${depvar_`d'}"
 			}
 			if inlist(`cols',1,3) {
-				local geofe = "hcityx"
+				local geofe = "hcity"
 			}
 			else if inlist(`cols',2,4){
 				local geofe = "temp_city"
