@@ -6,7 +6,7 @@
 clear
 
 // import data
-import delimited "${DATA}\HUDprocessed_JPE_census_042021.csv"
+import delimited "${DATA}/HUDprocessed_JPE_census_042021.csv"
 
 /*--------------------------------------*/
 /*cleaning*/

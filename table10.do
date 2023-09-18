@@ -11,7 +11,7 @@ clear
 clear
 
 // import data
-import delimited "${DATA}\table10_2_mom.csv", bindquote(strict)
+import delimited "${DATA}/table10_2_mom.csv", bindquote(strict)
 
 // clean city names
 do "${CODE}/data_cleaner.do"	
@@ -53,7 +53,7 @@ global YVARS "ranking skill sf"  /*--stems */
 foreach dvar in $DVAR {
 	foreach cluster in $CLUSTER {
 	
-		qui reghdfe score_rec i.`dvar' score_ad w2012pc_ad b2012pc_ad a2012pc_ad hisp2012pc_ad logadprice, absorb(control sequencex monthx hcityx arelate2x sapptamx tsexxx thhegaix tpegaix thighedux tcurtenrx agex) keepsingle cluster(`cluster')
+		qui reghdfe score_rec i.`dvar' score_ad w2012pc_ad b2012pc_ad a2012pc_ad hisp2012pc_ad logadprice, absorb(control sequencex monthx hcity arelate2x sapptamx tsexxx thhegaix tpegaix thighedux tcurtenrx agex) keepsingle cluster(`cluster')
 		qui eststo score_`dvar'_`cluster'
 		qui estadd local ln_price "Yes", replace
 		qui estadd local race_compo "Yes", replace
@@ -100,7 +100,7 @@ foreach dvar in $DVAR {
 clear
 
 // import data
-import delimited "${DATA}\table10_mom.csv", bindquote(strict)
+import delimited "${DATA}/table10_mom.csv", bindquote(strict)
 
 // clean city names
 do "${CODE}/data_cleaner.do"
@@ -151,7 +151,7 @@ foreach yvar in $YVARS {
 	foreach cluster in $CLUSTER {
 		foreach dvar in $DVAR {
 		
-		qui reghdfe `yvar'_rec i.`dvar' `yvar'_ad ${CONTVARS}, absorb(${ABSVARSSAME} hcityx) keepsingle cluster(`cluster')
+		qui reghdfe `yvar'_rec i.`dvar' `yvar'_ad ${CONTVARS}, absorb(${ABSVARSSAME} hcity) keepsingle cluster(`cluster')
 		qui eststo `yvar'_`dvar'_`cluster'
 		qui estadd local ln_price "Yes", replace
 		qui estadd local race_compo "Yes", replace
@@ -214,7 +214,7 @@ global YVAR "score ranking skill sf"
 foreach yvar in $YVAR {
 	foreach cluster in $CLUSTER {
 	
-	esttab `yvar'_oc_`cluster' `yvar'_noc_`cluster' `yvar'_oc_`cluster'_ca `yvar'_noc_`cluster'_ca `yvar'_noc_`cluster'_zip using "C:\Users\sunny\OneDrive\Desktop\Replication Games\Output\row1_`cluster'_`yvar'.tex" ///
+	esttab `yvar'_oc_`cluster' `yvar'_noc_`cluster' `yvar'_oc_`cluster'_ca `yvar'_noc_`cluster'_ca `yvar'_noc_`cluster'_zip using "${DATA}/Output/row1_`cluster'_`yvar'.tex" ///
 	, b(%8.3f) se(%8.3f) ///
 	replace booktabs label ///
 		mgroups("Original Data" "Updated City Name Only" "Correct Race Only" "Updated City Name and Correct Race" "Zip Code FE",pattern(1 1 1 1 1) ///
@@ -232,7 +232,7 @@ foreach yvar in $YVAR {
 foreach yvar in $YVAR {
 	foreach cluster in $CLUSTER {
 	
-	esttab `yvar'_race_`cluster' `yvar'_nrace_`cluster' `yvar'_race_`cluster'_ca `yvar'_nrace_`cluster'_ca `yvar'_nrace_`cluster'_zip using "C:\Users\sunny\OneDrive\Desktop\Replication Games\Output\row2_`cluster'_`yvar'.tex" ///
+	esttab `yvar'_race_`cluster' `yvar'_nrace_`cluster' `yvar'_race_`cluster'_ca `yvar'_nrace_`cluster'_ca `yvar'_nrace_`cluster'_zip using "${DATA}/Output/row2_`cluster'_`yvar'.tex" ///
 	, b(%8.3f) se(%8.3f) ///
 	replace booktabs label ///
 		mgroups("Original Data" "Updated City Name Only" "Correct Race Only" "Updated City Name and Correct Race" "Zip Code FE",pattern(1 1 1 1 1) ///

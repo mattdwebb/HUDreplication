@@ -25,14 +25,6 @@
 	// Generate city name flag
 	gen good_city = 0 // Initialize flag for whether city name is good
 
-	/* REMOVE, THIS CODE IS DUPLICATED BELOW// Loop over all acceptable cities and counties matched with the zip code
-	forvalues i = 1 /16{	
-		replace good_city = 1 if hcity == allaccept`i' // Loop over all acceptable cities, flag as good if match
-	}
-	forvalues i = 1 /6{	
-		replace good_city = 1 if hcity == allcounty`i' // Loop over all acceptable counties, flag as good if match
-	} */
-
 // Section 2: Clean up the strings
 	// Generate uppercase values of hcity and primary_city
 	// These will be used later to match on subsections of the string
@@ -49,7 +41,7 @@
         gen `newvarname' = `varname'
 		
 		// Loop over a set of characters
-		foreach char in " " "." "-" "'" "," "0" "1" "2" "3" "4" "5" "6" "7" "8" "9" {
+		foreach char in " " "." "-" "'" "," "0" "1" "2" "3" "4" "5" "6" "7" "8" "9" "\\" {
 			// For each character, replace its occurrence in 'varname' with an empty string
 			// This effectively removes the character from 'varname'
 			replace `newvarname' = subinstr(`newvarname', "`char'", "", .)
@@ -77,29 +69,24 @@
 		replace good_city = 1 if clean_hcity == clean_allcounty`i'
 	}
 
-// If two hcities share a name, and one is flagged good, then all should be
-bysort clean_hcity: egen mean_good = mean(good_city)
-replace good_city = 1 if mean_good != 0
+	// If two hcities share a name, and one is flagged good, then all should be
+	bysort clean_hcity: egen mean_good = mean(good_city)
+	replace good_city = 1 if mean_good != 0
 
-// Create the final city
-gen final_city = "."
-replace final_city = clean_hcity if good_city==1
+	// Create the final city
+	gen final_city = "."
+	replace final_city = clean_hcity if good_city==1
 
-// ANTHONY EDIT - THIS CODE APPEARS TO DO NOTHING
-/* // Try some more string groups using zip codes	
-gen strzip = zip
-tostring strzip, replace force
-gen ziplength = strlen(strzip)
-replace strzip = "0" + strzip if ziplength==4
-gen zipfour = substr(strzip,1,4) */
+	// Tries to match on splits of the typed city name and the primary city name
+	split upper_hcity, parse(" ") generate(split_hcity)
 
-// Tries to match on splits of the typed city name and the primary city name
-split upper_hcity, parse(" ") generate(split_hcity)
-
-forvalues i = 1/4 {
-    replace final_city =clean_primary if (split_hcity`i' == clean_primary) & (good_city == 0) & (upper_primary != "")
-    replace good_city = 1 if (split_hcity`i' == clean_primary) & (upper_primary != "")
-}
+	forvalues i = 1/4 {
+		capture confirm variable split_hcity`i'
+		if _rc == 0 {
+			replace final_city =clean_primary if (split_hcity`i' == clean_primary) & (good_city == 0) & (upper_primary != "")
+			replace good_city = 1 if (split_hcity`i' == clean_primary) & (upper_primary != "")
+		}
+	}
 
 // Section 3: Fuzzy matching approach
 
@@ -156,8 +143,7 @@ forvalues i = 1/4 {
 
 // Section 4: Manual changes
     // Create a list of pairs of strings to replace with the format "ORIGINAL_VALUE>NEW_VALUE"
-	local manual_changes "87111>ALBUQUERQUE " ///
-	"CAROLLTON>CARROLLTON " ///
+	local manual_changes "CAROLLTON>CARROLLTON " ///
 	"SMRYNA>SMYRNA " ///
 	"ANN>ANNAPOLIS " ///
 	"COLUMBIAMD>COLUMBIA " ///
@@ -169,6 +155,7 @@ forvalues i = 1/4 {
 	"SACSHE>SACHSE " ///
 	"MACOMBTWP>MACOMB " ///
 	"MACOMBTOWNSHIP>MACOMB " ///
+	"SANANTONIOTX>SANANTONIO " ///
 	"NORTHRICHLANDS>NORTHRICHLANDHILLS " ///
 	"NRICHLANDHILLS>NORTHRICHLANDHILLS " ///
 	"HOUS>HOUSTON " ///
@@ -194,8 +181,8 @@ forvalues i = 1/4 {
 	"MOUNTOLIVETWP>MOUNTOLIVE " ///
 	"MTOLIVE>MOUNTOLIVE " ///
 	"MTOLIVETWP>MOUNTOLIVE " ///
-	"PARSIPPANY-TROYHILLS>PARSIPPANY " ///
-	"BAYRIDGE,BROOKLYN>BROOKLYN " ///
+	"PARSIPPANYTROYHILLS>PARSIPPANY " ///
+	"BAYRIDGEBROOKLYN>BROOKLYN " ///
 	"BKLYN>BROOKLYN " ///
 	"FLUSHINGQUEENS>FLUSHING " ///
 	"ARDMOOR>ARDMORE " ///
@@ -204,16 +191,11 @@ forvalues i = 1/4 {
 	"WARRINGTONLANE>WARRINGTON " ///
 	"WARRINGTONTWP>WARRINGTON " ///
 	"CHESTEFILED>CHESTERFIELD " ///
-	"92284>YUCCAVALLEY " ///
-	"SANANTONIO,TX>SANANTONIO " ///
 	"DELMARHEIGHTS>DELMAR " ///
 	"SOUTHSANJOSE>SANJOSE " ///
-	"33614>TAMPA " ///
-	"33511>BRANDON " ///
 	"CLEARWATERBEACH>CLEARWATER " ///
-	"PALM/HUDSON>PALMHARBOR " ///
+	"PALMHUDSON>PALMHARBOR " ///
 	"REDINGTONSHORES>REDINGTONBEACH " ///
-	"BEACHWOODOH44122>BEACHWOOD " ///
 	"HILLSBORO>HILLSBOROUGH " ///
 	"THORTON>THORNTON " ///
 	"NBELAIR>BELAIR " ///
@@ -240,7 +222,15 @@ forvalues i = 1/4 {
 	"KENDALL>MIAMI " ///
 	"NOLMSTEAD>NORTHOLMSTED " ///
 	"BUMPASS>BUMPASS " ///
-	"ROXBURY>ROXBURY"
+	"ROXBURY>ROXBURY " ///
+	"REINTERSTOWN>REISTERSTOWN " ///
+	"GROSSPOINTEWOODS>GROSSEPOINTEWOODS " ///
+	"MELBANE>MEBANE " ///
+	"RANDELMAN>RANDLEMAN " ///
+	"PARSIPPANYTROYHILLSTWP>PARSIPPANY " ///
+	"AUDOBON>AUDUBON " ///
+	"ROYERSFORDPA>ROYERSFORD" ///
+
 
     // Loop over each pair in the list and manually change the city name
 	foreach pair in `manual_changes' {
@@ -251,28 +241,27 @@ forvalues i = 1/4 {
 		replace good_city = 1 if clean_hcity == "`old_city'"
 	}
 
-	// One manual replacement based on zip code for Hesperia
-	replace final_city = "HESPERIA" if (hzip == "92344")  & (good_city == 0)
-	replace good_city = 1 if final_city == "HESPERIA"
+	// Declare the list of manual changes to city names due to zip codes
+	local zip_manual_changes "87111>ALBUQUERQUE " ///
+	"92284>YUCCAVALLEY " ///
+	"33614>TAMPA " ///
+	"33511>BRANDON " ///
+	"92344>HESPERIA " ///
+	"33777>SEMINOLE " ///
+	"10003>MANHATTAN " ///
+	"92660>NEWPORTBEACH"
 
-// Section 5: Keep common but unmatched city names
-	preserve
-    // Keep only entries without a final city name matched	
-	keep if good_city == 0
-	keep clean_hcity hsitead market
-    // Drop the same address being counted twice
-	duplicates drop
-    // Count the number of times each city name appears
-	bysort market clean_hcity: egen bad_count = count(clean_hcity)
-	tempfile temp
-	save "`temp'", replace 
-	restore
-    // Merge the count data back into the original data
-	merge m:1 clean_hcity market hsitead using "`temp'"
-	drop _merge
-    // If the unmatched city name occurs three or more times, make it the final city name and flag it as good
-	replace final_city = clean_hcity if (bad_count >=3) & (final_city == ".")
-	replace good_city = 1 if bad_count >=3
+
+	disp "`zip_manual_changes'"
+	
+	// Loop over each pair in the list and manually change the city name based on the zip code
+	foreach pair in `zip_manual_changes' {
+		local pair = subinstr("`pair'", ">", " ", .)
+		local old_zip = word("`pair'", 1)
+		local new_city = word("`pair'", 2)
+		replace final_city = "`new_city'" if (hzip == "`old_zip'")
+		replace good_city = 1 if hzip == "`old_zip'"
+	}
 
 // Generate city names to serve as fixed effects in the regression, final_city if good_city==1, otherwise clean_hcity
 	gen temp_city = ""
@@ -280,6 +269,6 @@ forvalues i = 1/4 {
 	replace temp_city = clean_hcity if good_city==0
 
 // Drop new variables
-	drop zip decommissioned primary_city acceptable_cities unacceptable_cities county timezone area_codes world_region country irs_estimated_population allaccept1 allaccept2 allaccept3 allaccept4 allaccept5 allaccept6 allaccept7 allaccept8 allaccept9 allaccept10 allaccept11 allaccept12 allaccept13 allaccept14 allaccept15 allaccept16 officialuspscityname officialuspsstatecode officialstatename officialcountyname allcounty1 allcounty2 allcounty3 allcounty4 allcounty5 allcounty6 upper_hcity upper_primary clean_primary clean_usps clean_allaccept1 clean_allaccept2 clean_allaccept3 clean_allaccept4 clean_allaccept5 clean_allaccept6 clean_allaccept7 clean_allaccept8 clean_allaccept9 clean_allaccept10 clean_allaccept11 clean_allaccept12 clean_allaccept13 clean_allaccept14 clean_allaccept15 clean_allaccept16 clean_allaccept14 clean_allcounty1 clean_allcounty2 clean_allcounty3 clean_allcounty4 clean_allcounty5 clean_allcounty6 split_hcity1 split_hcity2 split_hcity3 split_hcity4 grouped_hcity group_freq grouping_hcity group_mode
+	capture drop zip decommissioned primary_city acceptable_cities unacceptable_cities county timezone area_codes world_region country irs_estimated_population allaccept1 allaccept2 allaccept3 allaccept4 allaccept5 allaccept6 allaccept7 allaccept8 allaccept9 allaccept10 allaccept11 allaccept12 allaccept13 allaccept14 allaccept15 allaccept16 officialuspscityname officialuspsstatecode officialstatename officialcountyname allcounty1 allcounty2 allcounty3 allcounty4 allcounty5 allcounty6 upper_hcity upper_primary clean_primary clean_usps clean_allaccept1 clean_allaccept2 clean_allaccept3 clean_allaccept4 clean_allaccept5 clean_allaccept6 clean_allaccept7 clean_allaccept8 clean_allaccept9 clean_allaccept10 clean_allaccept11 clean_allaccept12 clean_allaccept13 clean_allaccept14 clean_allaccept15 clean_allaccept16 clean_allaccept14 clean_allcounty1 clean_allcounty2 clean_allcounty3 clean_allcounty4 clean_allcounty5 clean_allcounty6 split_hcity1 split_hcity2 split_hcity3 split_hcity4 grouped_hcity group_freq grouping_hcity group_mode
 	compress
 
