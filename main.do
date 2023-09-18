@@ -3,7 +3,7 @@ clear all
 // Set paths, open log and install packages
 
 	/* Set path to the parent folder of the local location of the git repository */
-	global PATH "C:\Users\antho\OneDrive - University of Toronto\Research\Replication Games"
+	global PATH "/Users/anthony/Library/CloudStorage/OneDrive-UniversityofToronto/Research/Replication Games"
 
 	global CODE "${PATH}/HUDreplication" //set the file path to the main code directory
 	global DATA "${CODE}/Data" // set the file path to the data subdirectory
@@ -14,7 +14,7 @@ clear all
 	cap log close
 	log using "${OUTPUT}/HUDreplication_log.txt", text replace
 	
-	local PKG "egenmore strgroup matchit freqindex reghdfe estout"
+	local PKG "egenmore strgroup matchit freqindex reghdfe estout ftools"
 	foreach var in `PKG' {
 		cap which `var'
 		if _rc!=0 {
