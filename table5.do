@@ -50,6 +50,7 @@ import delimited "${DATA}/adsprocessed_JPE.csv", bindquote(strict)
 /*---- Getting correct city names -----*/
 /*-------------------------------------*/
 	do "${CODE}/data_cleaner.do"
+	save "${OUTPUT}/test.dta"
 	
 
 /*-------------------------------------*/

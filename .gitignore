@@ -6,3 +6,12 @@ Data/new_data_cleaner5.csv
 ~fixedeffectsdemonstration.do.stswp
 ~main.do.stswp
 .DS_Store
+Data/adsprocessed_JPE.csv
+Data/adsprocessed_JPE.csv
+Data/HUDprocessed_JPE_census_042021.csv
+Data/table10_2_mom.csv
+Data/table10_mom.csv
+Data/zipinfo-county.dta
+Data/zipinfo.dta
+fixedeffectsdemonstration.do
+~table10.do.stswp

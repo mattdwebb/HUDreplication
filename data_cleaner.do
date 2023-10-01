@@ -41,7 +41,7 @@
         gen `newvarname' = `varname'
 		
 		// Loop over a set of characters
-		foreach char in " " "." "-" "'" "," "0" "1" "2" "3" "4" "5" "6" "7" "8" "9" "\\" {
+		foreach char in " " "." "-" "'" "," "0" "1" "2" "3" "4" "5" "6" "7" "8" "9" "\\" "," ":" "#" "$" "%" "[" "]" "(" ")" char(34) {
 			// For each character, replace its occurrence in 'varname' with an empty string
 			// This effectively removes the character from 'varname'
 			replace `newvarname' = subinstr(`newvarname', "`char'", "", .)
@@ -184,7 +184,7 @@
 	"PARSIPPANYTROYHILLS>PARSIPPANY " ///
 	"BAYRIDGEBROOKLYN>BROOKLYN " ///
 	"BKLYN>BROOKLYN " ///
-	"FLUSHINGQUEENS>FLUSHING " ///
+	"FLUSHINGQUEENS>QUEENS " ///
 	"ARDMOOR>ARDMORE " ///
 	"HAVERTOWNTOWNSHIP>HAVERTOWN " ///
 	"PROSPECTPARKBORO>PROSPECTPARK " ///
@@ -229,7 +229,8 @@
 	"RANDELMAN>RANDLEMAN " ///
 	"PARSIPPANYTROYHILLSTWP>PARSIPPANY " ///
 	"AUDOBON>AUDUBON " ///
-	"ROYERSFORDPA>ROYERSFORD" ///
+	"ROYERSFORDPA>ROYERSFORD"
+	
 
 
     // Loop over each pair in the list and manually change the city name
@@ -262,6 +263,16 @@
 		replace final_city = "`new_city'" if (hzip == "`old_zip'")
 		replace good_city = 1 if hzip == "`old_zip'"
 	}
+	
+	// Change "NEWYORK" to "MANHATTAN", as by manual inspection all "New York" entries come from Manhattan
+	// We narrow the city to the borough for consistency with the rest of the code and 
+	// because the size of the boroughs and the difference in housing markets suggests they are 
+	// appropriate units for analysis
+	replace final_city = "MANHATTAN" if clean_hcity == "NEWYORK"
+	replace final_city = "MANHATTAN" if clean_hcity == "NEWYORKCITY"
+	replace final_city = "MANHATTAN" if final_city == "NEWYORK"
+	replace good_city = 1 if clean_hcity == "NEWYORK"
+	replace good_city = 1 if clean_hcity == "NEWYORKCITY"
 
 // Generate city names to serve as fixed effects in the regression, final_city if good_city==1, otherwise clean_hcity
 	gen temp_city = ""

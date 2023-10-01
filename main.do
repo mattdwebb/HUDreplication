@@ -3,7 +3,7 @@ clear all
 // Set paths, open log and install packages
 
 	/* Set path to the parent folder of the local location of the git repository */
-	global PATH "/Users/anthony/Library/CloudStorage/OneDrive-UniversityofToronto/Research/Replication Games"
+	global PATH "PATH/TO/PARENT/FOLDER/FOR/THIS/REPOSITORY"
 
 	global CODE "${PATH}/HUDreplication" //set the file path to the main code directory
 	global DATA "${CODE}/Data" // set the file path to the data subdirectory

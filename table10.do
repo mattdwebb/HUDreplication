@@ -214,7 +214,7 @@ global YVAR "score ranking skill sf"
 foreach yvar in $YVAR {
 	foreach cluster in $CLUSTER {
 	
-	esttab `yvar'_oc_`cluster' `yvar'_noc_`cluster' `yvar'_oc_`cluster'_ca `yvar'_noc_`cluster'_ca `yvar'_noc_`cluster'_zip using "${DATA}/Output/row1_`cluster'_`yvar'.tex" ///
+	esttab `yvar'_oc_`cluster' `yvar'_noc_`cluster' `yvar'_oc_`cluster'_ca `yvar'_noc_`cluster'_ca `yvar'_noc_`cluster'_zip using "${OUTPUT}/row1_`cluster'_`yvar'.tex" ///
 	, b(%8.3f) se(%8.3f) ///
 	replace booktabs label ///
 		mgroups("Original Data" "Updated City Name Only" "Correct Race Only" "Updated City Name and Correct Race" "Zip Code FE",pattern(1 1 1 1 1) ///
@@ -232,7 +232,7 @@ foreach yvar in $YVAR {
 foreach yvar in $YVAR {
 	foreach cluster in $CLUSTER {
 	
-	esttab `yvar'_race_`cluster' `yvar'_nrace_`cluster' `yvar'_race_`cluster'_ca `yvar'_nrace_`cluster'_ca `yvar'_nrace_`cluster'_zip using "${DATA}/Output/row2_`cluster'_`yvar'.tex" ///
+	esttab `yvar'_race_`cluster' `yvar'_nrace_`cluster' `yvar'_race_`cluster'_ca `yvar'_nrace_`cluster'_ca `yvar'_nrace_`cluster'_zip using "${OUTPUT}/row2_`cluster'_`yvar'.tex" ///
 	, b(%8.3f) se(%8.3f) ///
 	replace booktabs label ///
 		mgroups("Original Data" "Updated City Name Only" "Correct Race Only" "Updated City Name and Correct Race" "Zip Code FE",pattern(1 1 1 1 1) ///
