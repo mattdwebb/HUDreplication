@@ -1,14 +1,8 @@
 # HUDreplication
-files used in replication of Christensen and Timmins (2022)
+Files used in replication of Christensen and Timmins (2022)
 
-To replicate Table 5:
-1) edit the PATH global on line 11
-2) run the table5.do file
+To Replicate All Tables:
 
-To replicate Table 7:
-1) edit the PATH global on line 7
-2) run the table7.do file
-
-To replicate Table 10:
-1) Edit the path and output global in lines 5 and 6 (can be merged)
-2) run Table 10 Do file
+1. Set the path in main.do to the PARENT DIRECTORY of this repository
+2. Create a directory named "Output" in the PARENT DIRECTORY of this repository
+3. Run main.do, all table and cleaning code will be run from this script
