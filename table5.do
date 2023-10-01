@@ -1,37 +1,13 @@
 /* Stata Do File for Table 5 */
 /* Written by: Shi Chen */
 /* Date: August 21, 2023 */
+/* Updated: September 4, 2023, by Anthony McCanny */
 
-/*-------------------------------------*/
-/*----- Path, ssc, log, load data -----*/
-/*-------------------------------------*/
-	clear all
+clear
 
-	/* Set path to the parent folder of the local location of the git repository */
-	global PATH "C:\Users\antho\OneDrive - University of Toronto\Research\Replication Games"
+// import data
+import delimited "${DATA}/adsprocessed_JPE.csv", bindquote(strict)
 
-	global CODE "${PATH}/HUDreplication" //set the file path to the main code directory
-	global DATA "${CODE}/Data" // set the file path to the data subdirectory
-
-	cap mkdir "${PATH}/Output" // make an Output folder if it doesn't already exist
-	global OUTPUT "${PATH}/Output" // set the output file path
-	
-	cap log close
-	log using "${OUTPUT}/table5_log.txt", text replace
-	import delimited "${DATA}/adsprocessed_JPE.csv", bindquote(strict)
-	
-	local PKG "egenmore strgroup matchit freqindex reghdfe estout"
-	foreach var in `PKG' {
-		cap which `var'
-		if _rc!=0 {
-			ssc install `var'
-		}
-	}
-	
-	set more off
-
-	disp "testing"
-	
 /*-------------------------------------*/
 /*---- Cleaning, labelling variables --*/
 /*-------------------------------------*/
@@ -73,14 +49,16 @@
 /*-------------------------------------*/
 /*---- Getting correct city names -----*/
 /*-------------------------------------*/
-	qui do "${CODE}/table5_cleaner.do"
+	do "${CODE}/data_cleaner.do"
+	save "${OUTPUT}/test.dta"
+	
 
 /*-------------------------------------*/
 /*---- Regressions --------------------*/
 /*-------------------------------------*/	
 	global CLUSTER "control market"
 	global CONTVARS "w2012pc_ad b2012pc_ad a2012pc_ad hisp2012pc_ad logadprice"
-	global ABSVARSSAME "control sequencex month hcity market arelate2 hhmtype sapptam tsexx thhegai tpegai thighedu tcurtenr algncur aelng1 dpmtexp amovers age aleasetp acarown"
+	global ABSVARSSAME "control sequencex month market arelate2 hhmtype sapptam tsexx thhegai tpegai thighedu tcurtenr algncur aelng1 dpmtexp amovers age aleasetp acarown"
 	global depvar_1 = "ofcolor"
 	global depvar_2 = "i.racecat"
 	global tvar_1 = "show"
@@ -115,7 +93,7 @@
 					disp as text "Indep. Var. is: " as result "`depvaruse'"
 					disp as text "Geo. FE is: " as result "`geofe'"
 					disp as text "Clusterd by: " as result "`cluster'"
-					qui reghdfe `tvaruse' `depvaruse' ${CONTVARS}, absorb(${ABSVARSSAME} `geofe') keepsingle cluster(`cluster')
+					reghdfe `tvaruse' `depvaruse' ${CONTVARS}, absorb(${ABSVARSSAME} `geofe') keepsingle cluster(`cluster')
 					qui eststo s`t'_cl_`cluster'_dp_`d'_co_`cols'
 					qui estadd local ln_price "Yes", replace
 					qui estadd local race_compo "Yes", replace
