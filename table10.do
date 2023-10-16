@@ -217,7 +217,7 @@ foreach yvar in $YVAR {
 	esttab `yvar'_oc_`cluster' `yvar'_noc_`cluster' `yvar'_oc_`cluster'_ca `yvar'_noc_`cluster'_ca `yvar'_noc_`cluster'_zip using "${OUTPUT}/row1_`cluster'_`yvar'.tex" ///
 	, b(%8.3f) se(%8.3f) ///
 	replace booktabs label ///
-		mgroups("Original Data" "Updated City Name Only" "Correct Race Only" "Updated City Name and Correct Race" "Zip Code FE",pattern(1 1 1 1 1) ///
+		mgroups("Original Data" "Correct Race Only" "Updated City Name Only" "Updated City Name and Correct Race" "Zip Code FE",pattern(1 1 1 1 1) ///
 		prefix(\multicolumn{@span}{c}{) suffix(}) span erepeat(\cmidrule(lr){@span})) ///
 		title(School Quality and Neighbourhood Safety: Elementary School Test Scores (Panel A)) ///
 		alignment(c) page(dcolumn) nomtitle ///
@@ -235,7 +235,7 @@ foreach yvar in $YVAR {
 	esttab `yvar'_race_`cluster' `yvar'_nrace_`cluster' `yvar'_race_`cluster'_ca `yvar'_nrace_`cluster'_ca `yvar'_nrace_`cluster'_zip using "${OUTPUT}/row2_`cluster'_`yvar'.tex" ///
 	, b(%8.3f) se(%8.3f) ///
 	replace booktabs label ///
-		mgroups("Original Data" "Updated City Name Only" "Correct Race Only" "Updated City Name and Correct Race" "Zip Code FE",pattern(1 1 1 1 1) ///
+		mgroups("Original Data" "Correct Race Only" "Updated City Name Only" "Updated City Name and Correct Race" "Zip Code FE",pattern(1 1 1 1 1) ///
 		prefix(\multicolumn{@span}{c}{) suffix(}) span erepeat(\cmidrule(lr){@span})) ///
 		title(School Quality and Neighbourhood Safety: Elementary School Test Scores (Panel A)) ///
 		alignment(c) page(dcolumn) nomtitle ///
