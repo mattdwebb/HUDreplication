@@ -279,6 +279,8 @@
 	replace temp_city = final_city if good_city==1
 	replace temp_city = clean_hcity if good_city==0
 
+	drop if temp_city == ""
+
 // Drop new variables
 	capture drop zip decommissioned primary_city acceptable_cities unacceptable_cities county timezone area_codes world_region country irs_estimated_population allaccept1 allaccept2 allaccept3 allaccept4 allaccept5 allaccept6 allaccept7 allaccept8 allaccept9 allaccept10 allaccept11 allaccept12 allaccept13 allaccept14 allaccept15 allaccept16 officialuspscityname officialuspsstatecode officialstatename officialcountyname allcounty1 allcounty2 allcounty3 allcounty4 allcounty5 allcounty6 upper_hcity upper_primary clean_primary clean_usps clean_allaccept1 clean_allaccept2 clean_allaccept3 clean_allaccept4 clean_allaccept5 clean_allaccept6 clean_allaccept7 clean_allaccept8 clean_allaccept9 clean_allaccept10 clean_allaccept11 clean_allaccept12 clean_allaccept13 clean_allaccept14 clean_allaccept15 clean_allaccept16 clean_allaccept14 clean_allcounty1 clean_allcounty2 clean_allcounty3 clean_allcounty4 clean_allcounty5 clean_allcounty6 split_hcity1 split_hcity2 split_hcity3 split_hcity4 grouped_hcity group_freq grouping_hcity group_mode
 	compress
