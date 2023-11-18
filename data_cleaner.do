@@ -7,6 +7,21 @@
 	gen lenzip = strlen(hzip) // Generate length of zip code
 	gen zip = substr(hzip,1,5) // Clean up 9/10 digit zips
 	destring zip, replace force // Convert string to numeric to match other file
+	
+	gen temp_zip = .
+	replace temp_zip = zip if zip!=.
+	
+	gen ad_zip = zip_ad
+	
+	replace ad_zip = substr(ad_zip,2,5)
+	
+	destring ad_zip, replace force // Convert string to numeric to match other file
+	
+
+	replace temp_zip = ad_zip if zip == .
+	
+	rename zip rec_zip
+	rename temp_zip zip
 
 	// Merge city data
 	merge m:1 zip using "${DATA}/zipinfo.dta" // Merge with zip data
@@ -76,6 +91,8 @@
 	// Create the final city
 	gen final_city = "."
 	replace final_city = clean_hcity if good_city==1
+	
+	
 
 	// Tries to match on splits of the typed city name and the primary city name
 	split upper_hcity, parse(" ") generate(split_hcity)
@@ -256,13 +273,19 @@
 	disp "`zip_manual_changes'"
 	
 	// Loop over each pair in the list and manually change the city name based on the zip code
+	
+	codebook good_city 
+	
 	foreach pair in `zip_manual_changes' {
 		local pair = subinstr("`pair'", ">", " ", .)
 		local old_zip = word("`pair'", 1)
 		local new_city = word("`pair'", 2)
 		replace final_city = "`new_city'" if (hzip == "`old_zip'")
-		replace good_city = 1 if hzip == "`old_zip'"
+		replace good_city = 1 if hzip == "`old_zip'" 
 	}
+	
+	
+	
 	
 	// Change "NEWYORK" to "MANHATTAN", as by manual inspection all "New York" entries come from Manhattan
 	// We narrow the city to the borough for consistency with the rest of the code and 
@@ -278,6 +301,9 @@
 	gen temp_city = ""
 	replace temp_city = final_city if good_city==1
 	replace temp_city = clean_hcity if good_city==0
+	
+	//MDW - this line is new
+	replace temp_city = clean_hcity if good_city==1 & temp_city==""
 
 // Drop new variables
 	capture drop zip decommissioned primary_city acceptable_cities unacceptable_cities county timezone area_codes world_region country irs_estimated_population allaccept1 allaccept2 allaccept3 allaccept4 allaccept5 allaccept6 allaccept7 allaccept8 allaccept9 allaccept10 allaccept11 allaccept12 allaccept13 allaccept14 allaccept15 allaccept16 officialuspscityname officialuspsstatecode officialstatename officialcountyname allcounty1 allcounty2 allcounty3 allcounty4 allcounty5 allcounty6 upper_hcity upper_primary clean_primary clean_usps clean_allaccept1 clean_allaccept2 clean_allaccept3 clean_allaccept4 clean_allaccept5 clean_allaccept6 clean_allaccept7 clean_allaccept8 clean_allaccept9 clean_allaccept10 clean_allaccept11 clean_allaccept12 clean_allaccept13 clean_allaccept14 clean_allaccept15 clean_allaccept16 clean_allaccept14 clean_allcounty1 clean_allcounty2 clean_allcounty3 clean_allcounty4 clean_allcounty5 clean_allcounty6 split_hcity1 split_hcity2 split_hcity3 split_hcity4 grouped_hcity group_freq grouping_hcity group_mode
