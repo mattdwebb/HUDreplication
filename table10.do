@@ -13,6 +13,8 @@ clear
 // import data
 import delimited "${DATA}/table10_2_mom.csv", bindquote(strict)
 
+tostring zip_ad, replace
+
 // clean city names
 do "${CODE}/data_cleaner.do"	
 
@@ -101,6 +103,8 @@ clear
 
 // import data
 import delimited "${DATA}/table10_mom.csv", bindquote(strict)
+
+tostring zip_ad, replace
 
 // clean city names
 do "${CODE}/data_cleaner.do"
