@@ -11,14 +11,13 @@
 	gen temp_zip = .
 	replace temp_zip = zip if zip!=.
 	
-	gen ad_zip = zip_ad
+	capture gen ad_zip = zip_ad
 	
-	replace ad_zip = substr(ad_zip,2,5)
+	capture replace ad_zip = substr(ad_zip,2,5)
 	
-	destring ad_zip, replace force // Convert string to numeric to match other file
+	capture destring ad_zip, replace force // Convert string to numeric to match other file
 	
-
-	replace temp_zip = ad_zip if zip == .
+	capture replace temp_zip = ad_zip if zip == .
 	
 	rename zip rec_zip
 	rename temp_zip zip
