@@ -2,6 +2,7 @@
 /* Written by: Matthew D. Webb */
 /* Created: August 21, 2023 */
 /* Updated: September 4, 2023, by Anthony McCanny */
+/* updated: November 21, 2023, by Matt Webb */
 
 clear
 
@@ -28,13 +29,31 @@ gen market = substr(control,1,2)
 
 	gen racecat4 = apracex==4 
 	label variable racecat4 "Asian"
-
+	
 	gen racecat5 = apracex==5 
-	label variable racecat5 "Other Race"
+	label variable racecat5 "Other"
 
 /*generate correct ofcolor variable*/
-	gen newofcolor = 0
-	replace newofcolor = 1 if apracex == 2 | apracex == 3 | apracex == 4 | apracex == 5
+	gen newofcolor = .
+	replace newofcolor =0 if apracex == 1 
+	replace newofcolor = 1 if apracex == 2 | apracex == 3 | apracex == 4 
+	
+/*generate new race variables*/
+	gen newracecat2 = .
+	replace newracecat2 = 1 if apracex==2
+	replace newracecat2 = 0 if inlist(apracex,1,3,4)
+	label variable newracecat2 "African American"
+
+	gen newracecat3 = .
+	replace newracecat3 = 1 if apracex==3
+	replace newracecat3 = 0 if inlist(apracex,1,2,4)
+	label variable newracecat3 "Hispanic"
+
+	gen newracecat4 = .
+	replace newracecat4 = 1 if apracex==4
+	replace newracecat4 = 0 if inlist(apracex,1,2,3)
+	label variable newracecat4 "Asian"
+	
 
 /*destring everything*/
 
@@ -83,8 +102,14 @@ foreach cluster in $CLUSTER {
 			if inlist(`cols',3,4,5) &  `d'==1 {
 				local depvaruse = "newofcolor"
 			}
-			else{
-				local depvaruse = "${depvar_`d'}"
+			if inlist(`cols',3,4,5) &  `d'==2 {
+				local depvaruse = "newracecat*"
+			}
+			if inlist(`cols',1,2) &  `d'==1 {
+				local depvaruse = "ofcolor"
+			}
+			if inlist(`cols',1,2) &  `d'==2 {
+				local depvaruse = "racecat*"
 			}
 			if inlist(`cols',1,3) {
 				local geofe = "hcity"
@@ -118,7 +143,7 @@ foreach cluster in $CLUSTER {
 /*build the tables*/
 
 global depvar_1 = "ofcolor newofcolor"
-global depvar_2 = "racecat*"
+global depvar_2 = "racecat* newracecat*"
 
 foreach cluster in $CLUSTER {
 	
@@ -133,7 +158,7 @@ foreach cluster in $CLUSTER {
 		alignment(c) page(dcolumn) nomtitle ///
 		se star(* 0.10 ** 0.05 *** 0.01) ///
 		s(share_white ln_price race_compo pov_share N r2_a, ///
-		label("Share White Advert Home" "ln(price), advertised home" "Racial composition, advertised home" "Poverty Share Advert Home" "Observations" "Adjusted R$^2$")) ///
+		label("Share white, advertised home" "ln(price), advertised home" "Racial composition, advertised home" "Poverty Share Advert Home" "Observations" "Adjusted R$^2$")) ///
 		keep(${depvar_`d'})
 				
 	}
