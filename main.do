@@ -28,3 +28,5 @@ clear all
 	do "${CODE}/table5.do"
 	do "${CODE}/table7.do"
 	do "${CODE}/table10.do"
+	do "${CODE}/table11.do"
+	do "${CODE}/table13.do"
