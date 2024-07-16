@@ -19,3 +19,6 @@ main_anthony.do
 ~table9.do.stswp
 ~table12.do.stswp
 ~main_anthony.do.stswp
+Output/HUDreplication_log.txt
+temp_data_table14.dta
+temp_data_table9.dta

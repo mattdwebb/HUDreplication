@@ -53,7 +53,17 @@ replace mother = 1 if kidsx == 1 & tsexxx == 0
 /*---- Getting correct city names -----*/
 /*-------------------------------------*/
 
-do "${CODE}/data_cleaner.do"
+//do "${CODE}/data_cleaner.do"
+
+// Save the cleaned data to be reloaded later
+//save "temp_data_table9.dta", replace
+
+use "temp_data_table9.dta", clear
+
+
+// In original R analysis, missing values of hcity were treated as their own category, to allow this in Stata, we set missing values to the string "missing"
+replace hcity = "missing" if hcity == ""
+replace temp_city = "missing" if temp_city == ""
 
 /*-------------------------------------*/
 /*---- Regressions --------------------*/
@@ -119,7 +129,7 @@ forvalues d = 1/2 {
         reghdfe `dependent_var_`d'' `racial_minority' `CONTROL_VARS' `control_var_`d'' if `condition_`d'' == 1, absorb(`ABS_VARS' `geofe') keepsingle cluster(control)
         qui eststo dep_var_`d'_col_`cols'_minority
         // Make list of column object names to combine into one plot later
-        local cols_for_depvar_`d'_minority = " `cols_for_depvar_`d'_minority' dep_var_`d'_col_`cols'_minority "
+        local cols_for_depvar_`d'_minority = " `cols_for_depvar_`d'_minority' dep_var_`d'_col_`cols'_minority "	
     
         // Estimate the 'racial category' regression for this column
         reghdfe `dependent_var_`d'' i.aprace `CONTROL_VARS' `control_var_`d'' if `condition_`d'' == 1, absorb(`ABS_VARS' `geofe') keepsingle cluster(control)
