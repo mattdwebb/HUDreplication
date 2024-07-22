@@ -22,3 +22,5 @@ main_anthony.do
 Output/HUDreplication_log.txt
 temp_data_table14.dta
 temp_data_table9.dta
+table_formatting.R
+table_formatting_2.R
