@@ -27,6 +27,27 @@ qui label variable othrace "Other Race"
 qui label define race 1 "White" 2 "African American" 3 "Hispanic" 4 "Asian" 5 "Other Race"
 qui label values aprace race
 
+capture program drop clean_vars
+program define clean_vars
+    args all_vars
+    foreach var in `all_vars' {
+        qui cap replace `var' = "." if `var' == "NA" | `var' == ""
+        
+        // Check if the variable is a string
+        capture confirm string variable `var'
+        if !_rc {
+            // If the variable is a string, check for non-numeric values
+            qui {
+                count if missing(real(`var')) & `var' != "."
+                local non_numeric = r(N)
+            }
+            if `non_numeric' == 0 {
+                qui destring `var', replace
+            }
+        }
+    }
+end
+
 
 //global DESVARS "w2012pc_ad b2012pc_ad a2012pc_ad hisp2012pc_ad sequencex monthx sapptamx algncurx aelng1x dpmtexpx agex aleasetpx acarownx elementary_school_score_ad elementary_school_score_rec skill_ad skill_rec logadprice sf_count_rec sf_count_ad kidsx tsexxx "
 	
@@ -74,6 +95,11 @@ gen transmid11 = 0
 replace transmid11 = 1 if recordingdate_rec_date > mdy(1, 6, 2011)
 replace transmid11 = . if missing(recordingdate_rec_date)
 
+//Create log of salespriceamount_rec
+
+clean_vars "salespriceamount_rec"
+
+gen salespriceamount_rec_log = log(salespriceamount_rec)
 
 // In original R analysis, missing values of hcity were treated as their own category, to allow this in Stata, we set missing values to the string "missing"
 replace hcity = "missing" if hcity == ""
@@ -84,14 +110,14 @@ replace temp_city = "missing" if temp_city == ""
 /*-------------------------------------*/
 
 // Define the general control variables for the regression
-local CONTROL_VARS "transmonth transyear logadprice"
+local CONTROL_VARS "w2012pc_ad b2012pc_ad a2012pc_ad hisp2012pc_ad i.transmonth i.transyear logadprice"
 
 // Define the general fixed effects to be absorbed in the estimation process
 local ABS_VARS "control sequencexx monthx arelate2x sapptamx tsexxx thhegaix tpegaix thighedux tcurtenrx algncurx aelng1x dpmtexpx amoversx agex aleasetpx acarownx"
 
 // Define the dependent variables in the two sets of regressions
-local dependent_var_1 = "salespriceamount_rec"
-local dependent_var_2 = "salespriceamount_rec"
+local dependent_var_1 = "salespriceamount_rec_log"
+local dependent_var_2 = "salespriceamount_rec_log"
 
 // Define the regression specific control variables to be introduced to regressions 1 and 2 (corresponding to dependent_var_1 and 2 above)
 local control_var_1 = ""
@@ -103,61 +129,7 @@ local condition_vars = ""
 
 local all_vars "`CONTROL_VARS' `ABS_VARS' `dependent_var_1' `dependent_var_2' `control_var_1' `control_var_2' `condition_vars'"
 
-foreach var in `all_vars' {
-    qui cap replace `var' = "." if `var' == "NA" | `var' == ""
-    
-    // Check if the variable is a string
-    capture confirm string variable `var'
-    if !_rc {
-        // If the variable is a string, check for non-numeric values
-        qui {
-            count if missing(real(`var')) & `var' != "."
-            local non_numeric = r(N)
-        }
-        if `non_numeric' == 0 {
-            qui destring `var', replace
-        }
-    }
-}
-
-save "temp_data_table14_formatted.dta", replace
-
-// Output the exact type of salespriceamount_rec
-describe salespriceamount_rec
-local var_type = r(type)
-display as text "The type of salespriceamount_rec is: " as result "`var_type'"
-
-
-
-// New testing code for salespriceamount_rec
-
-    // Check if the variable is a string
-    capture confirm numeric variable salespriceamount_rec
-    if _rc {
-        display as text "salespriceamount_rec is not numeric."
-    } 
-    else {
-        display as text "salespriceamount_rec is numeric."
-    }
-
-    // Check for missing values
-    count if missing(salespriceamount_rec)
-    local missing_values = r(N)
-    disp as text "Number of missing values in salespriceamount_rec: " as result "`missing_values'"
-    
-    // Check for outliers (values outside the range 10000 to 10000000)
-    count if salespriceamount_rec < 10000 | salespriceamount_rec > 10000000
-    local outliers = r(N)
-    disp as text "Number of outliers in salespriceamount_rec: " as result "`outliers'"
-    
-    // Summary statistics
-    summarize salespriceamount_rec
-    disp as text "Summary statistics for salespriceamount_rec:"
-    disp as text "Mean: " as result `r(mean)'
-    disp as text "Min: " as result `r(min)'
-    disp as text "Max: " as result `r(max)'
-
-
+clean_vars "`all_vars'"
 
 // Define the data subset indicator variable for regressions 1 and 2 (corresponding to dependent_var_1 and 2 above)
 gen condition_1 = 0 
@@ -173,6 +145,7 @@ local cols_for_depvar_2_categories = " "
 
 
 save "temp_data_table14_formatted.dta", replace
+
 
 forvalues d = 1/2 {
 

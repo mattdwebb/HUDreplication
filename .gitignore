@@ -23,4 +23,11 @@ Output/HUDreplication_log.txt
 temp_data_table14.dta
 temp_data_table9.dta
 table_formatting.R
-table_formatting_2.R
+
+~table14.do.stswp
+table11_control.aux
+table11_control.fdb_latexmk
+table11_control.fls
+table11_control.log
+table11_control.pdf
+table11_control.synctex.gz
