@@ -14,6 +14,7 @@ input_files <- list(
 )
 output_file <- paste0("Output/combined_table", table_number, ".tex")
 single_panel <- TRUE  # Set this to TRUE for a single panel plot, FALSE for a double panel plot
+set_dashes <- FALSE  # Set this to TRUE to replace estimates and standard errors with dashes in columns 3 and 4
 
 # Rows to include in the top and bottom of the table
 top_rows <- list(
@@ -34,11 +35,35 @@ extract_data <- function(file_path) {
   return(data_lines)
 }
 
+# Function to replace estimates and standard errors with dashes in columns 3 and 4
+replace_with_dashes <- function(data_lines) {
+  for (i in seq_along(data_lines)) {
+    if (grepl("&", data_lines[i])) {
+      parts <- unlist(strsplit(data_lines[i], "&"))
+      if (length(parts) >= 5) {
+        parts[4] <- "     -     "
+        parts[5] <- "     -     "
+        data_lines[i] <- paste(parts, collapse = "&")
+        if (!grepl("\\\\\\\\$", data_lines[i])) {
+          data_lines[i] <- paste0(data_lines[i], " \\\\")
+        }
+      }
+    }
+  }
+  return(data_lines)
+}
+
 # Read and extract data from the LaTeX tables
 data1_minority <- extract_data(input_files$data1_minority)
 data1_categories <- extract_data(input_files$data1_categories)
 data2_minority <- extract_data(input_files$data2_minority)
 data2_categories <- extract_data(input_files$data2_categories)
+
+# Apply dashes to category rows if set_dashes is TRUE
+if (set_dashes) {
+  data1_categories <- replace_with_dashes(data1_categories)
+  data2_categories <- replace_with_dashes(data2_categories)
+}
 
 # Extract adjusted R^2 values
 extract_adj_r2 <- function(file_path) {
@@ -115,4 +140,7 @@ combined_table <- c(
 )
 
 # Write the combined table to a new LaTeX file
+if (set_dashes) {
+  output_file <- sub("(\\.tex)$", "_dashes\\1", output_file)
+}
 writeLines(combined_table, output_file)
