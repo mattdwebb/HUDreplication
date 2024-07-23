@@ -64,6 +64,11 @@ program define process_data
 
     do "${CODE}/data_cleaner.do"
 
+    // In original R analysis, missing values of hcity were treated as their own category, to allow this in Stata, we set missing values to the string "missing"
+    replace hcity = "missing" if hcity == ""
+    replace temp_city = "missing" if temp_city == ""
+
+
     // Save the cleaned data to be reloaded later
     save "${OUTPUT}/`cleaned_file'", replace
 end
@@ -85,20 +90,18 @@ program define run_regressions, rclass
     save "temp_data_table`table_number'_formatted.dta", replace
 
     forvalues d = 1/2 {
-        forvalues cols = 1/4 {
+        forvalues cols = 1/3 {
             // SET RACIAL MINORITY VARIABLE FOR THIS COLUMN
-            if inlist(`cols',1,2) {
+            if `cols' == 1 {
                 local racial_minority = "ofcolor"
-            }
-            else if inlist(`cols',3,4) {
-                local racial_minority = "ofcolor othrace"
-            }
-
-            // SET CITY FIXED EFFECT FOR THIS COLUMN
-            if inlist(`cols',1,3) {
                 local geofe = "hcity"
             }
-            else {
+            else if `cols' == 2 {
+                local racial_minority = "ofcolor othrace"
+                local geofe = "hcity"
+            }
+            else if `cols' == 3 {
+                local racial_minority = "ofcolor othrace"
                 local geofe = "temp_city"
             }
 
@@ -109,11 +112,17 @@ program define run_regressions, rclass
             disp as text "Clustered by: control (a variable representing the trial)"
 
             // ESTIMATE MODELS
-            reghdfe `dependent_var_`d'' `racial_minority' `CONTROL_VARS' `control_var_`d'' if condition_`d', absorb(`ABS_VARS' `geofe') keepsingle cluster(control)
+            reghdfe `dependent_var_`d'' `racial_minority' `CONTROL_VARS' `control_var_`d'' if condition_`d' absorb(`ABS_VARS' `geofe') keepsingle cluster(control)
+            levelsof `geofe' if condition_`d', local(geofe_levels)
+            local num_levels_geofe : word count `geofe_levels'
+            estadd scalar num_cities = `num_levels_geofe'
             qui eststo dep_var_`d'_col_`cols'_minority
             local cols_for_depvar_`d'_minority = " `cols_for_depvar_`d'_minority' dep_var_`d'_col_`cols'_minority "
 
             reghdfe `dependent_var_`d'' i.aprace `CONTROL_VARS' `control_var_`d'' if condition_`d', absorb(`ABS_VARS' `geofe') keepsingle cluster(control)
+            levelsof `geofe' if condition_`d', local(geofe_levels)
+            local num_levels_geofe : word count `geofe_levels'
+            estadd scalar num_cities = `num_levels_geofe'
             qui eststo dep_var_`d'_col_`cols'_categories
             local cols_for_depvar_`d'_categories = " `cols_for_depvar_`d'_categories' dep_var_`d'_col_`cols'_categories "
         }
@@ -127,48 +136,52 @@ program define run_regressions, rclass
     forvalues d = 1/2 {
         // Output the Latex table for the racial minority analyses
         esttab `cols_for_depvar_`d'_minority' ///
-        using "${OUTPUT}/table`table_number`_dep_var_`d'_minority.tex", ///
+        using "${OUTPUT}/table`table_number'_dep_var_`d'_minority.tex", ///
         replace booktabs label ///
-        mgroups("Original Data" "Updated City Name Only" "Correct Race Only" "Updated City Name \& Correct Race",pattern(1 1 1 1) ///
+        mgroups("Original Data" "Correct Race Only" "Updated City Name & Correct Race",pattern(1 1 1) ///
         prefix(\multicolumn{@span}{c}{) suffix(}) span erepeat(\cmidrule(lr){@span})) ///
         title(Neighbourhood Attributes as `dependent_var_`d'', Clustered at trial) ///
         alignment(c) page(dcolumn) nomtitle ///
-        se star(* 0.10 ** 0.05 *** 0.01) ///
-        s(N r2_a, ///
-        label("Observations" "Adjusted R$^2$")) ///
+        cells("b(star fmt(2))" se ci(fmt(2) par)) ///
+        starlevels(* 0.10 ** 0.05 *** 0.01) ///
+        s(N r2_a num_cities, ///
+        label("Observations" "Adjusted R$^2$" "Number of Cities")) ///
         keep(`racial_minority')
 
         // Output the csv file for the racial minority analyses
         esttab `cols_for_depvar_`d'_minority' ///
-        using "${OUTPUT}/table`table_number`_dep_var_`d'_minority.csv", ///
+        using "${OUTPUT}/table`table_number'_dep_var_`d'_minority.csv", ///
         replace csv label ///
-        mgroups("Original Data" "Updated City Name Only" "Correct Race Only" "Updated City Name & Correct Race", pattern(1 1 1 1)) ///
-        se star(* 0.10 ** 0.05 *** 0.01) ///
-        stats(N r2_a, ///
-        labels("Observations" "Adjusted R^2")) ///
+        mgroups("Original Data" "Correct Race Only" "Updated City Name & Correct Race", pattern(1 1 1)) ///
+        cells("b(star fmt(2))" se ci(fmt(2) par)) ///
+        starlevels(* 0.10 ** 0.05 *** 0.01) ///
+        stats(N r2_a num_cities, ///
+        labels("Observations" "Adjusted R^2" "Number of Cities")) ///
         keep(`racial_minority')
 
         // Output the Latex table for the racial categories analyses
         esttab `cols_for_depvar_`d'_categories' ///
-        using "${OUTPUT}/table`table_number`_dep_var_`d'_categories.tex", ///
+        using "${OUTPUT}/table`table_number'_dep_var_`d'_categories.tex", ///
         replace booktabs label ///
-        mgroups("Original Data" "Updated City Name Only" "Correct Race Only" "Updated City Name \& Correct Race",pattern(1 1 1 1) ///
+        mgroups("Original Data" "Correct Race Only" "Updated City Name & Correct Race",pattern(1 1 1) ///
         prefix(\multicolumn{@span}{c}{) suffix(}) span erepeat(\cmidrule(lr){@span})) ///
         title(Neighbourhood Attributes as `dependent_var_`d'', Clustered at trial) ///
         alignment(c) page(dcolumn) nomtitle ///
-        se star(* 0.10 ** 0.05 *** 0.01) ///
-        s(N r2_a, ///
-        label("Observations" "Adjusted R$^2$")) ///
+        cells("b(star fmt(2))" se ci(fmt(2) par)) ///
+        starlevels(* 0.10 ** 0.05 *** 0.01) ///
+        s(N r2_a num_cities, ///
+        label("Observations" "Adjusted R$^2$" "Number of Cities")) ///
         keep(2.apracex 3.apracex 4.apracex 5.apracex)
 
         // Output the CSV file for the racial categories analyses
         esttab `cols_for_depvar_`d'_categories' ///
-        using "${OUTPUT}/table`table_number`_dep_var_`d'_categories.csv", ///
+        using "${OUTPUT}/table`table_number'_dep_var_`d'_categories.csv", ///
         replace csv label ///
-        mgroups("Original Data" "Updated City Name Only" "Correct Race Only" "Updated City Name & Correct Race", pattern(1 1 1 1)) ///
-        se star(* 0.10 ** 0.05 *** 0.01) ///
-        stats(N r2_a, ///
-        labels("Observations" "Adjusted R^2")) ///
+        mgroups("Original Data" "Correct Race Only" "Updated City Name & Correct Race", pattern(1 1 1)) ///
+        cells("b(star fmt(2))" se ci(fmt(2) par)) ///
+        starlevels(* 0.10 ** 0.05 *** 0.01) ///
+        stats(N r2_a num_cities, ///
+        labels("Observations" "Adjusted R^2" "Number of Cities")) ///
         keep(2.apracex 3.apracex 4.apracex 5.apracex)
     }
 end

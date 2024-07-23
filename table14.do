@@ -81,6 +81,11 @@ replace mother = 1 if kidsx == 1 & tsexxx == 0
 
 use "temp_data_table14.dta", clear
 
+
+/*-------------------------------------*/
+/*------- Other data processing -------*/
+/*-------------------------------------*/
+
 // Convert RecordingDate_Rec to month and year
 gen recordingdate_rec_date = date(recordingdate_rec, "YMD")
 gen transmonth = month(recordingdate_rec_date)

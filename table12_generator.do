@@ -3,7 +3,10 @@ clear all
 
 do "${CODE}/table_generation_function.do"
 
-process_data "HUDprocessed_JPE_census_042021.rds" 0
+process_data "HUDprocessed_JPE_census_042021.csv" 0
+
+clean_vars "medincome_rec"
+qui gen lnmincome_rec = log(medincome_rec)
 
 gen condition_1 = 1
 gen condition_2 = 1
