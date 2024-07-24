@@ -39,3 +39,8 @@ temp_data_table_formatted.dta
 ~table11_generator.do.stswp
 ~table11.do.stswp
 temp_data_table11_formatted.dta
+~table14_generator.do.stswp
+~table7_generator.do.stswp
+temp_data_table7_formatted.dta
+temp_data_table9_formatted.dta
+table_formatting_archive.R

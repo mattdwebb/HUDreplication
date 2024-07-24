@@ -112,7 +112,7 @@ program define run_regressions, rclass
             disp as text "Clustered by: control (a variable representing the trial)"
 
             // ESTIMATE MODELS
-            reghdfe `dependent_var_`d'' `racial_minority' `CONTROL_VARS' `control_var_`d'' if condition_`d' absorb(`ABS_VARS' `geofe') keepsingle cluster(control)
+            reghdfe `dependent_var_`d'' `racial_minority' `CONTROL_VARS' `control_var_`d'' if condition_`d', absorb(`ABS_VARS' `geofe') keepsingle cluster(control)
             levelsof `geofe' if condition_`d', local(geofe_levels)
             local num_levels_geofe : word count `geofe_levels'
             estadd scalar num_cities = `num_levels_geofe'
@@ -142,9 +142,9 @@ program define run_regressions, rclass
         prefix(\multicolumn{@span}{c}{) suffix(}) span erepeat(\cmidrule(lr){@span})) ///
         title(Neighbourhood Attributes as `dependent_var_`d'', Clustered at trial) ///
         alignment(c) page(dcolumn) nomtitle ///
-        cells("b(star fmt(2))" se ci(fmt(2) par)) ///
+        cells("b(star fmt(4))" se(par fmt(4)) ci(fmt(4) par)) ///
         starlevels(* 0.10 ** 0.05 *** 0.01) ///
-        s(N r2_a num_cities, ///
+        stats(N r2_a num_cities, fmt(0 2 0) ///
         label("Observations" "Adjusted R$^2$" "Number of Cities")) ///
         keep(`racial_minority')
 
@@ -153,9 +153,9 @@ program define run_regressions, rclass
         using "${OUTPUT}/table`table_number'_dep_var_`d'_minority.csv", ///
         replace csv label ///
         mgroups("Original Data" "Correct Race Only" "Updated City Name & Correct Race", pattern(1 1 1)) ///
-        cells("b(star fmt(2))" se ci(fmt(2) par)) ///
+        cells("b(star fmt(4))" se(par fmt(4)) ci(fmt(4) par)) ///
         starlevels(* 0.10 ** 0.05 *** 0.01) ///
-        stats(N r2_a num_cities, ///
+        stats(N r2_a num_cities, fmt(0 2 0) ///
         labels("Observations" "Adjusted R^2" "Number of Cities")) ///
         keep(`racial_minority')
 
@@ -167,9 +167,9 @@ program define run_regressions, rclass
         prefix(\multicolumn{@span}{c}{) suffix(}) span erepeat(\cmidrule(lr){@span})) ///
         title(Neighbourhood Attributes as `dependent_var_`d'', Clustered at trial) ///
         alignment(c) page(dcolumn) nomtitle ///
-        cells("b(star fmt(2))" se ci(fmt(2) par)) ///
+        cells("b(star fmt(4))" se(par fmt(4)) ci(fmt(4) par)) ///
         starlevels(* 0.10 ** 0.05 *** 0.01) ///
-        s(N r2_a num_cities, ///
+        stats(N r2_a num_cities, fmt(0 2 0) ///
         label("Observations" "Adjusted R$^2$" "Number of Cities")) ///
         keep(2.apracex 3.apracex 4.apracex 5.apracex)
 
@@ -178,9 +178,9 @@ program define run_regressions, rclass
         using "${OUTPUT}/table`table_number'_dep_var_`d'_categories.csv", ///
         replace csv label ///
         mgroups("Original Data" "Correct Race Only" "Updated City Name & Correct Race", pattern(1 1 1)) ///
-        cells("b(star fmt(2))" se ci(fmt(2) par)) ///
+        cells("b(star fmt(4))" se(par fmt(4)) ci(fmt(4) par)) ///
         starlevels(* 0.10 ** 0.05 *** 0.01) ///
-        stats(N r2_a num_cities, ///
+        stats(N r2_a num_cities, fmt(0 2 0) ///
         labels("Observations" "Adjusted R^2" "Number of Cities")) ///
         keep(2.apracex 3.apracex 4.apracex 5.apracex)
     }
