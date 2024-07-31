@@ -7,6 +7,7 @@ clear all
 
 	global CODE "${PATH}/HUDreplication" //set the file path to the main code directory
 	global DATA "${CODE}/Data" // set the file path to the data subdirectory
+        global TABLE "${CODE}/tables" // set the file path to the table generators
 
 	cap mkdir "${CODE}/Output" // make an Output folder if it doesn't already exist
 	global OUTPUT "${CODE}/Output" // set the output file path
@@ -25,9 +26,11 @@ clear all
 	set more off
 
 // Run files for generating tables 5, 7 and 10
-	do "${CODE}/table5.do"
-	do "${CODE}/table6.do"
-	do "${CODE}/table7.do"
-	do "${CODE}/table10.do"
-	do "${CODE}/table11.do"
-	do "${CODE}/table13.do"
+	do "${TABLE}/table5.do"
+	do "${TABLE}/table7.do"
+	do "${TABLE}/table9.do"
+	do "${TABLE}/table10.do"
+	do "${TABLE}/table11.do"
+	do "${TABLE}/table12.do"
+	do "${TABLE}/table13.do"
+	do "${TABLE}/table14.do"
