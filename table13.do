@@ -1,6 +1,6 @@
 /* Stata Do File for Table 13 */
 /* Written by: Shi Chen */
-/* Updated on July 29, 2024 */
+/* Updated on Aug 07, 2024 */
 
 clear
 
@@ -89,8 +89,10 @@ forvalues t = 1/2 {
 						disp as text "Clusterd by: " as result "`cluster'"
 						reghdfe `tvaruse' `depvaruse' ${CONTVARS}, absorb(${ABSVARSSAME} `geofe') keepsingle cluster(`cluster')
 					}
-					qui levelsof `geofe'
-					qui estadd local numCiti "`r(r)'", replace
+					*qui levelsof `geofe'
+					matrix hdfe = e(dof_table)
+					local numGeofe = hdfe[rowsof(hdfe),1]
+					qui estadd local numCiti "`numGeofe'", replace
 					qui eststo s`t'_cl_`cluster'_dp_`d'_co_`cols'
 					local ct_`t'_`d'_`cluster' = " `ct_`t'_`d'_`cluster'' s`t'_cl_`cluster'_dp_`d'_co_`cols' "
 				}
