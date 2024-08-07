@@ -1,6 +1,6 @@
-/* Stata Do File for Table 10 */
+/* Stata Do File for Table 8 */
 /* Written by: Matthew D. Webb */
-/* Updated: September 4, 2023, by Anthony McCanny */
+/* Updated: July 30th, 2024, by Sunny Karim */
 
 clear
 
@@ -16,7 +16,7 @@ global OUTPUT "C:\Users\sunny\OneDrive\Desktop\Table 8 Replication HUD\Replicati
 global CODE "C:\Users\sunny\OneDrive\Desktop\Table 8 Replication HUD\Replication Folder Table 8\Code"
 
 /*----------------*/
-/* FIRST DATA SET */
+/* Cleaning dataset */
 /*----------------*/
 
 clear
@@ -25,17 +25,10 @@ clear
 use "${DATA}\Table 8.dta",replace
 rename *, lower // Changes variables to lower case
 
-tostring zip_ad, replace
-
-// clean city names
-do "${CODE}/temp2_data_cleaner.do"
-
-
 /*generate correct correct ofcolor and aprace variable*/
 	gen noc = ofcolor
-	replace noc = . if apracex == 5
+	replace noc = 2 if apracex == 5
 	gen nrace = apracex
-	replace nrace = . if apracex == 5
 
 /*generate the market variable*/
 	drop market
@@ -56,6 +49,12 @@ do "${CODE}/temp2_data_cleaner.do"
 	rename ofcolor oc
 	drop race
 	rename apracex race
+	
+tostring zip_ad, replace
+
+// clean city names
+do "${CODE}/temp2_data_cleaner.do"
+
 
 save "${OUTPUT}\Table8_adjustedcities_score.dta", replace
 
@@ -74,6 +73,7 @@ global ABSVARSSAME "control sequencex monthx market arelate2x sapptamx tsexxx th
 
 global YVARS "ranking pov"  /*--stems */ 
 
+
 foreach yvar in $YVARS {
 	foreach cluster in $CLUSTER {
 		foreach dvar in $DVAR {
@@ -89,7 +89,7 @@ foreach yvar in $YVARS {
 
 
 /*------------------------------------------------------------*/
-/*regressions adjusted city names new and old race categories */
+/*regressions adjusted city names new and new race categories */
 /*------------------------------------------------------------*/	
 
 foreach yvar in $YVARS {
@@ -108,7 +108,6 @@ foreach yvar in $YVARS {
 
 
 
-
 /*------------------------------------------------------------*/
 /*Generating Outputs */
 /*------------------------------------------------------------*/	
@@ -118,19 +117,22 @@ label variable noc "Racial Minority"
 
 global YVAR "ranking pov"
 
+
 foreach yvar in $YVAR {
 	foreach cluster in $CLUSTER {
 	
-	esttab `yvar'_oc_`cluster' `yvar'_noc_`cluster' `yvar'_oc_`cluster'_ca `yvar'_noc_`cluster'_ca using "${OUTPUT}/row1_`cluster'_`yvar'.tex" ///
+	esttab `yvar'_oc_`cluster' `yvar'_noc_`cluster' `yvar'_noc_`cluster'_ca using "${OUTPUT}/row1_`cluster'_`yvar'.tex" ///
 	, b(%8.3f) se(%8.3f) ///
 	replace booktabs label ///
-		mgroups("Original Data" "Correct Race Only" "Updated City Name Only" "Updated City Name and Correct Race",pattern(1 1 1 1) ///
+		mgroups("Original Data" "Correct Race Only" "Updated City Name and Correct Race",pattern(1 1 1) ///
 		prefix(\multicolumn{@span}{c}{) suffix(}) span erepeat(\cmidrule(lr){@span})) ///
-		title(School Quality and Neighbourhood Safety: Elementary School Test Scores (Panel A)) ///
+		title(School Quality and Neighbourhood Safety: Housing Search Platform (Elementary School) (Panel A)) ///
 		alignment(c) page(dcolumn) nomtitle ///
-		se star(* 0.10 ** 0.05 *** 0.01) ///
-		s(ln_price race_compo ad_home N r2_a, ///
-		label("ln(price) advertised home" "Racial composition, advertised home" "Outcome, advertised home" "Observations" "Adjusted R$^2$")) ///
+		cells("b(star fmt(4))" se ci(fmt(4) par)) ///
+		starlevels(* 0.10 ** 0.05 *** 0.01) ///
+		s(ln_price race_compo ad_home N r2_a num_cities, ///
+		label("ln(price) advertised home" "Racial composition, advertised home" "Outcome, advertised home" "Observations" "Adjusted R$^2$" "Number of Cities")) ///
+		keep(`racial_minority')
 		
 	}
 		
@@ -139,16 +141,17 @@ foreach yvar in $YVAR {
 foreach yvar in $YVAR {
 	foreach cluster in $CLUSTER {
 	
-	esttab `yvar'_race_`cluster' `yvar'_nrace_`cluster' `yvar'_race_`cluster'_ca `yvar'_nrace_`cluster'_ca  using "${OUTPUT}/row2_`cluster'_`yvar'.tex" ///
+	esttab `yvar'_race_`cluster' `yvar'_nrace_`cluster' `yvar'_nrace_`cluster'_ca  using "${OUTPUT}/row2_`cluster'_`yvar'.tex" ///
 	, b(%8.3f) se(%8.3f) ///
 	replace booktabs label ///
-		mgroups("Original Data" "Correct Race Only" "Updated City Name Only" "Updated City Name and Correct Race",pattern(1 1 1 1) ///
+		mgroups("Original Data" "Correct Race Only" "Updated City Name and Correct Race",pattern(1 1 1) ///
 		prefix(\multicolumn{@span}{c}{) suffix(}) span erepeat(\cmidrule(lr){@span})) ///
-		title(School Quality and Neighbourhood Safety: Elementary School Test Scores (Panel A)) ///
+		title(American Community Survey: Poverty Rate (Panel B)) ///
 		alignment(c) page(dcolumn) nomtitle ///
-		se star(* 0.10 ** 0.05 *** 0.01) ///
-		s(ln_price race_compo ad_home N r2_a, ///
-		label("ln(price) advertised home" "Racial composition, advertised home" "Outcome, advertised home" "Observations" "Adjusted R$^2$")) ///
+		cells("b(star fmt(4))" se ci(fmt(4) par)) ///
+		starlevels(* 0.10 ** 0.05 *** 0.01) ///
+		s(ln_price race_compo ad_home N r2_a num_cities, ///
+		label("ln(price) advertised home" "Racial composition, advertised home" "Outcome, advertised home" "Observations" "Adjusted R$^2$" "Number of Cities")) ///
 		
 	}
 		
