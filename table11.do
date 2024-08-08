@@ -96,7 +96,7 @@ global depvar = "2.apracex 3.apracex 4.apracex 2.racecat 3.racecat 4.racecat"
 foreach cluster in $CLUSTER {
 	local tvar = "${tvar}"
 	esttab `ct_`cluster'' ///
-	using "${CODE}/table11_`cluster'.tex", ///
+	using "${OUTPUT}/table11_`cluster'.tex", ///
 	replace booktabs label ///
 	mgroups("Original Data" "Updated City Name Only" "Correct Race Only" "Updated City Name \& Correct Race",pattern(1 1 1 1) ///
 	prefix(\multicolumn{@span}{c}{) suffix(}) span erepeat(\cmidrule(lr){@span})) ///

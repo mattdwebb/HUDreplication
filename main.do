@@ -8,8 +8,8 @@ clear all
 	global CODE "${PATH}/HUDreplication" //set the file path to the main code directory
 	global DATA "${CODE}/Data" // set the file path to the data subdirectory
 
-	cap mkdir "${PATH}/Output" // make an Output folder if it doesn't already exist
-	global OUTPUT "${PATH}/Output" // set the output file path
+	cap mkdir "${CODE}/Output" // make an Output folder if it doesn't already exist
+	global OUTPUT "${CODE}/Output" // set the output file path
 	
 	cap log close
 	log using "${OUTPUT}/HUDreplication_log.txt", text replace
