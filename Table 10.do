@@ -9,12 +9,12 @@ clear
 global DATA "C:\Users\sunny\OneDrive\Desktop\Table 10 Replication\Replication Folder Table 10\Data"
 global OUTPUT "C:\Users\sunny\OneDrive\Desktop\Table 10 Replication\Replication Folder Table 10\Output"
 global CODE "C:\Users\sunny\OneDrive\Desktop\Table 10 Replication\Replication Folder Table 10\Code"
+		
+/*----------------------------------------------------------------*/
+/* FIRST DATA SET: Elementary school test scores corrected replications*/
+/*----------------------------------------------------------------*/
 
-/*--------------------------------------------*/
-/* FIRST DATA SET: Elementary school rankings */
-/*--------------------------------------------*/
-
-		import delimited "C:\Users\sunny\OneDrive\Desktop\Table 10 Replication\Replication Folder Table 10\Data\table10_2_mom.csv", case(preserve)
+		import delimited "C:\Users\sunny\OneDrive\Desktop\Table 10 Replication\Replication Folder Table 10\Data\table10_2_mom.csv", bindquote(strict) case(preserve)
 			save "C:\Users\sunny\OneDrive\Desktop\Table 10 Replication\Replication Folder Table 10\Data\table10_2.dta", replace
 
 	// import data
@@ -61,7 +61,8 @@ global CODE "C:\Users\sunny\OneDrive\Desktop\Table 10 Replication\Replication Fo
 				global DVAR "oc noc race nrace"
 
 				global CONTVARS "w2012pc_ad b2012pc_ad a2012pc_ad hisp2012pc_ad logadprice"
-				global ABSVARSSAME "control sequencex monthx market arelate2x sapptamx tsexxx thhegaix tpegaix thighedux tcurtenrx algncurx aelng1x dpmtexpx amoversx agex aleasetpx acarownx"
+				*global ABSVARSSAME "control sequencex monthx market arelate2x sapptamx tsexxx thhegaix tpegaix thighedux tcurtenrx algncurx aelng1x dpmtexpx amoversx agex aleasetpx acarownx"
+				global ABSVARSSAME "control sequencex monthx arelate2x sapptamx tsexxx thhegaix tpegaix thighedux tcurtenrx agex"
 
 				global YVARS "score_rec"  /*--stems */ 
 
@@ -70,11 +71,12 @@ global CODE "C:\Users\sunny\OneDrive\Desktop\Table 10 Replication\Replication Fo
 					foreach cluster in $CLUSTER {
 						foreach dvar in $DVAR {
 						
-						qui reghdfe `yvar' i.`dvar' `yvar'_ad ${CONTVARS}, absorb(${ABSVARSSAME} hcity) keepsingle cluster(`cluster')
+						reghdfe `yvar' i.`dvar' `yvar'_ad ${CONTVARS}, absorb(${ABSVARSSAME} hcity) keepsingle cluster(`cluster')
 						qui eststo `yvar'_`dvar'_`cluster'
 						qui estadd local ln_price "Yes", replace
 						qui estadd local race_compo "Yes", replace
 						qui estadd local ad_home "Yes", replace
+
 						}
 					}
 				}
@@ -148,6 +150,22 @@ global CODE "C:\Users\sunny\OneDrive\Desktop\Table 10 Replication\Replication Fo
 					}
 						
 				}
+				
+// Manual City counter
+
+	//For number of hcityx
+	
+		generate id = _n
+		sort hcityx order
+		by x: gen count = _n == 1
+		
+		
+	// For number of tempcity
+	
+		generate id = _n
+		sort temp_city order
+		by x: gen count = _n == 1
+	
 	
 	
 	
@@ -179,13 +197,13 @@ rename *, lower // Changes variables to lower case
 
 /*Rename variables*/
 
-	rename elementary_school_score_rec ranking_rec
-	rename elementary_school_score_ad ranking_rec_ad
+	rename elementary_school_score_rec ranking
+	rename elementary_school_score_ad ranking_ad
 	
-	rename skill_ad skill_rec_ad
+	rename skill_rec skill
 	
-	rename singlefamily_rec sf_rec
-	rename singlefamily_ad sf_rec_ad
+	rename singlefamily_rec sf
+	rename singlefamily_ad sf_ad
 	
 	rename ofcolor oc
 	drop race
@@ -209,7 +227,7 @@ rename *, lower // Changes variables to lower case
 				global CONTVARS "w2012pc_ad b2012pc_ad a2012pc_ad hisp2012pc_ad logadprice"
 				global ABSVARSSAME "control sequencex monthx market arelate2x sapptamx tsexxx thhegaix tpegaix thighedux tcurtenrx algncurx aelng1x dpmtexpx amoversx agex aleasetpx acarownx"
 
-				global YVARS "ranking_rec skill sf_rec"  /*--stems */ 
+				global YVARS "ranking skill sf"  /*--stems */ 
 
 
 				foreach yvar in $YVARS {
@@ -294,6 +312,21 @@ rename *, lower // Changes variables to lower case
 					}
 						
 				}
+				
+// Manual City counter
+
+	//For number of hcityx
+	
+		generate id = _n
+		sort hcityx order
+		by x: gen count = _n == 1
+		
+		
+	// For number of tempcity
+	
+		generate id = _n
+		sort temp_city order
+		by x: gen count = _n == 1
 
 
 
