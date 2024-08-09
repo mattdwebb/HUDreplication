@@ -156,3 +156,19 @@ foreach yvar in $YVAR {
 	}
 		
 }
+
+
+// Manual City counter
+
+	//For number of hcityx
+	
+		generate id = _n
+		sort hcityx order
+		by x: gen count = _n == 1
+		
+		
+	// For number of tempcity
+	
+		generate id = _n
+		sort temp_city order
+		by x: gen count = _n == 1
