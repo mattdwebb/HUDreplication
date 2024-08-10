@@ -26,6 +26,7 @@ clear all
 
 // Run files for generating tables 5, 7 and 10
 	do "${CODE}/table5.do"
+	do "${CODE}/table6.do"
 	do "${CODE}/table7.do"
 	do "${CODE}/table10.do"
 	do "${CODE}/table11.do"
