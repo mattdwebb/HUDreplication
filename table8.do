@@ -4,16 +4,9 @@
 
 clear
 
-import delimited "C:\Users\sunny\OneDrive\Desktop\Table 8 Replication HUD\Replication Folder Table 8\Data\Table 8.csv", case(preserve)
+import delimited "${DATA}\Table 8.csv", case(preserve)
 
-save "C:\Users\sunny\OneDrive\Desktop\Table 8 Replication HUD\Replication Folder Table 8\Data\Table 8.dta", replace
-
-
-//Define Globals
-
-global DATA "C:\Users\sunny\OneDrive\Desktop\Table 8 Replication HUD\Replication Folder Table 8\Data"
-global OUTPUT "C:\Users\sunny\OneDrive\Desktop\Table 8 Replication HUD\Replication Folder Table 8\Output"
-global CODE "C:\Users\sunny\OneDrive\Desktop\Table 8 Replication HUD\Replication Folder Table 8\Code"
+save "${DATA}\Table 8.dta", replace
 
 /*----------------*/
 /* Cleaning dataset */
