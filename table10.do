@@ -3,23 +3,17 @@
 /* Updated: July 30, 2024, by Sunny Karim */
 
 clear
-
-//Define Globals
-
-global DATA "C:\Users\sunny\OneDrive\Desktop\Table 10 Replication\Replication Folder Table 10\Data"
-global OUTPUT "C:\Users\sunny\OneDrive\Desktop\Table 10 Replication\Replication Folder Table 10\Output"
-global CODE "C:\Users\sunny\OneDrive\Desktop\Table 10 Replication\Replication Folder Table 10\Code"
 		
 /*----------------------------------------------------------------*/
 /* FIRST DATA SET: Elementary school test scores corrected replications*/
 /*----------------------------------------------------------------*/
 
-		import delimited "C:\Users\sunny\OneDrive\Desktop\Table 10 Replication\Replication Folder Table 10\Data\table10_2_mom.csv", bindquote(strict) case(preserve)
-			save "C:\Users\sunny\OneDrive\Desktop\Table 10 Replication\Replication Folder Table 10\Data\table10_2.dta", replace
+	import delimited "${DATA}\table10_2_mom.csv", bindquote(strict) case(preserve)
+	save "${DATA}\table10_2.dta", replace
 
 	// import data
-	use "${DATA}\table10_2.dta",replace
-	rename *, lower // Changes variables to lower case
+		use "${DATA}\table10_2.dta",replace
+		rename *, lower // Changes variables to lower case
 
 	/*generate correct correct ofcolor and aprace variable*/
 		gen noc = ofcolor
@@ -175,12 +169,12 @@ global CODE "C:\Users\sunny\OneDrive\Desktop\Table 10 Replication\Replication Fo
 /* Second Dataset: Ranking, High Skill, Single Parent */
 /*----------------------------------------------------*/
 
-	import delimited "C:\Users\sunny\OneDrive\Desktop\Table 10 Replication\Replication Folder Table 10\Data\table10_mom.csv", case(preserve) clear
-		save "C:\Users\sunny\OneDrive\Desktop\Table 10 Replication\Replication Folder Table 10\Data\table10.dta", replace
+	import delimited "${DATA}\table10_mom.csv", case(preserve) clear
+	save "${DATA}\table10.dta", replace
 
 // import data
-use "${DATA}\table10.dta",replace
-rename *, lower // Changes variables to lower case
+	use "${DATA}\table10.dta",replace
+	rename *, lower // Changes variables to lower case
 
 /*generate correct correct ofcolor and aprace variable*/
 	gen noc = ofcolor
