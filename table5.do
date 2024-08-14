@@ -1,10 +1,8 @@
 /* Stata Do File for Table 5 */
 /* Originally written by: Shi Chen and Anthony McCanny */
-/* Updated by Shi Chen on Aug 07, 2024 */
+/* Updated by Shi Chen on Aug 14, 2024 */
 
 clear
-
-// import data
 import delimited "${DATA}/adsprocessed_JPE.csv", bindquote(strict)
 
 /*-------------------------------------*/
@@ -85,7 +83,6 @@ forvalues t = 1/2 {
 				qui eststo s`t'_cl_`cluster'_dp_`d'_co_`cols'
 				qui estadd local ln_price "Yes", replace
 				qui estadd local race_compo "Yes", replace
-				*qui levelsof `geofe'
 				matrix hdfe = e(dof_table)
 				local numGeofe = hdfe[rowsof(hdfe),1]
 				qui estadd local numCiti "`numGeofe'", replace
