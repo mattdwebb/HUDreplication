@@ -1,10 +1,8 @@
 /* Stata Do File for Table 13 */
 /* Written by: Shi Chen */
-/* Updated on Aug 07, 2024 */
+/* Updated on Aug 14, 2024 */
 
 clear
-
-// import data
 import delimited "${DATA}/HUDprocessed_JPE_census_042021.csv", bindquote(strict)
 
 /*-------------------------------------*/
@@ -89,7 +87,6 @@ forvalues t = 1/2 {
 						disp as text "Clusterd by: " as result "`cluster'"
 						reghdfe `tvaruse' `depvaruse' ${CONTVARS}, absorb(${ABSVARSSAME} `geofe') keepsingle cluster(`cluster')
 					}
-					*qui levelsof `geofe'
 					matrix hdfe = e(dof_table)
 					local numGeofe = hdfe[rowsof(hdfe),1]
 					qui estadd local numCiti "`numGeofe'", replace
