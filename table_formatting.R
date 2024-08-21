@@ -1,7 +1,7 @@
 # Load necessary libraries
 library(stringr)
 
-generate_combined_table <- function(table_title, panel_a_title, panel_b_title, table_number, single_panel, set_dashes = TRUE, top_rows = list(), bottom_rows = list(), show_minority_top = TRUE, show_minority_bottom = TRUE, two_columns = FALSE) {
+generate_combined_table <- function(table_title, subtitle, panel_a_title, panel_b_title, table_number, single_panel, set_dashes = TRUE, top_rows = list(), bottom_rows = list(), show_minority_top = TRUE, show_minority_bottom = TRUE, two_columns = FALSE) {
   
   # Automatically generate input_files and output_file based on table_number
   input_files <- list(
@@ -115,14 +115,14 @@ generate_combined_table <- function(table_title, panel_a_title, panel_b_title, t
     "\\begin{table}[p]",
     "\\centering",
     "\\def\\sym#1{\\ifmmode^{#1}\\else\\(^{#1}\\)\\fi}",
-    paste0("\\caption{", table_title, "}"),
+    paste0("\\caption{", table_title, "\\\\[0.5em]\\textit{", subtitle, "}}"),
     paste0("\\label{tab:table", table_number, "}"),
     "\\resizebox{\\textwidth}{!}{",
     paste0("\\begin{tabular}{l*", if (two_columns) "2" else "3", "{c}}"),
     "\\toprule",
     if (!single_panel) paste0("&\\multicolumn{", if (two_columns) "2" else "3", "}{c}{", panel_a_title, "}\\\\"),
     if (!single_panel) paste0("\\cmidrule{2-", if (two_columns) "3" else "4", "}"),
-    if (two_columns) paste0("&\\multicolumn{1}{c}{Original Data}&\\multicolumn{1}{c}{Updated City Name}\\\\") else paste0("&\\multicolumn{1}{c}{Original Data}&\\multicolumn{1}{c}{Correct Race Only}&\\multicolumn{1}{c}{Updated City Name \\& Correct Race}\\\\"),
+    if (two_columns) paste0("&\\multicolumn{1}{c}{Original Data}&\\multicolumn{1}{c}{Updated City Name}\\\\") else paste0("&\\multicolumn{1}{c}{Original Data}&\\multicolumn{1}{c}{Correct Race Only}&\\multicolumn{1}{c}{\\parbox[t]{7em}{\\centering Updated City Name \\& Correct Race}}\\\\"),
     if (two_columns) paste0("\\cmidrule(lr){2-2}\\cmidrule(lr){3-3}") else paste0("\\cmidrule(lr){2-2}\\cmidrule(lr){3-3}\\cmidrule(lr){4-4}"),
     if (two_columns) paste0("&\\multicolumn{1}{c}{(1)}         &\\multicolumn{1}{c}{(2)}         \\\\") else paste0("&\\multicolumn{1}{c}{(1)}         &\\multicolumn{1}{c}{(2)}         &\\multicolumn{1}{c}{(3)}         \\\\"),
     "\\midrule",
@@ -146,7 +146,7 @@ generate_combined_table <- function(table_title, panel_a_title, panel_b_title, t
     if (!single_panel && two_columns) paste0("&\\multicolumn{1}{c}{Original Data}&\\multicolumn{1}{c}{Updated City Name}\\\\"),
     if (!single_panel && two_columns) paste0("\\cmidrule(lr){2-2}\\cmidrule(lr){3-3}"),
     if (!single_panel && two_columns) paste0("&\\multicolumn{1}{c}{(1)}         &\\multicolumn{1}{c}{(2)}         \\\\"),
-    if (!single_panel && !two_columns) paste0("&\\multicolumn{1}{c}{Original Data}&\\multicolumn{1}{c}{Correct Race Only}&\\multicolumn{1}{c}{Updated City Name \\& Correct Race}\\\\"),
+    if (!single_panel && !two_columns) paste0("&\\multicolumn{1}{c}{Original Data}&\\multicolumn{1}{c}{Correct Race Only}&\\multicolumn{1}{c}{\\parbox[t]{7em}{\\centering Updated City Name \\& Correct Race}}\\\\"),
     if (!single_panel && !two_columns) paste0("\\cmidrule(lr){2-2}\\cmidrule(lr){3-3}\\cmidrule(lr){4-4}"),
     if (!single_panel && !two_columns) paste0("&\\multicolumn{1}{c}{(1)}         &\\multicolumn{1}{c}{(2)}         &\\multicolumn{1}{c}{(3)}         \\\\"),
     if (!single_panel) "\\midrule",
@@ -178,7 +178,8 @@ generate_combined_table <- function(table_title, panel_a_title, panel_b_title, t
 
 # Call function for Table 7
 generate_combined_table(
-  table_title = "Differences in Results for Racial Composition of Reccomended Neighbourhood (CT2022 Table 7)",
+  table_title = "Differences in Results for Racial Composition of Recommended Neighbourhood",
+  subtitle = "Table 7, CT2022",
   panel_a_title = "White Household Income Share in High Income Neighbourhoods (Column 1)",
   panel_b_title = "White Household Income Share in Low Income Neighbourhoods (Column 3)",
   table_number = 7,
@@ -190,7 +191,8 @@ generate_combined_table(
 
 # Call function for Table 9
 generate_combined_table(
-  table_title = "Differences in Results for Local Pollution Exposures (CT2022 Table 9)",
+  table_title = "Differences in Results for Local Pollution Exposure",
+  subtitle = "Table 9, CT2022",
   panel_a_title = "Differences in Superfund Proximity, Whole Sample (Panel A, Column 1)",
   panel_b_title = "Differences in Superfund Proximity, Mothers Only (Panel B, Column 1)",
   table_number = 9,
@@ -202,7 +204,8 @@ generate_combined_table(
 
 # Call function for Table 11
 generate_combined_table(
-  table_title = "Differences in Results for Low-Poverty Neighbourhood Recommendations (CT2022 Table 11, Column 1)",
+  table_title = "Differences in Results for Low-Poverty Neighbourhood Recommendations",
+  subtitle = "Table 11 Column 1, CT2022",
   panel_a_title = "",
   panel_b_title = "",
   table_number = 11,
@@ -215,7 +218,8 @@ generate_combined_table(
 
 # Call function for Table 12
 generate_combined_table(
-  table_title = "Differences in Results for Median Income (CT2022 Table 12, Column 1)",
+  table_title = "Differences in Results for Median Income",
+  subtitle = "Table 12 Column 1, CT 2022",
   panel_a_title = "",
   panel_b_title = "",
   table_number = 12,
@@ -228,7 +232,8 @@ generate_combined_table(
 
 # Call the function for Table 14
 generate_combined_table(
-  table_title = "Differences in Results for Recommended Home's Log Sale Price (CT2022 Table 14 Panel B, Column 5)",
+  table_title = "Differences in Results for Recommended Home's Log Sale Price",
+  subtitle = " Table 14 Panel B Column 5, CT2022",
   panel_a_title = "",
   panel_b_title = "",
   table_number = 14,

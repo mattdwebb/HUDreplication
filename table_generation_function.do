@@ -64,11 +64,6 @@ program define process_data
 
     do "${CODE}/data_cleaner.do"
 
-    // In original R analysis, missing values of hcity were treated as their own category, to allow this in Stata, we set missing values to the string "missing"
-    replace hcity = "missing" if hcity == ""
-    replace temp_city = "missing" if temp_city == ""
-
-
     // Save the cleaned data to be reloaded later
     save "${OUTPUT}/`cleaned_file'", replace
 end
@@ -111,18 +106,26 @@ program define run_regressions, rclass
             disp as text "City Fixed Effect is: " as result "`geofe'"
             disp as text "Clustered by: control (a variable representing the trial)"
 
+
             // ESTIMATE MODELS
             reghdfe `dependent_var_`d'' `racial_minority' `CONTROL_VARS' `control_var_`d'' if condition_`d', absorb(`ABS_VARS' `geofe') keepsingle cluster(control)
-            levelsof `geofe' if condition_`d', local(geofe_levels)
-            local num_levels_geofe : word count `geofe_levels'
-            estadd scalar num_cities = `num_levels_geofe'
+
+            // Extract number of levels of city variable
+			matrix hdfe = e(dof_table)
+			local num_levels_geofe = hdfe[rowsof(hdfe),1]
+			qui estadd scalar num_cities  =  `num_levels_geofe'
+
             qui eststo dep_var_`d'_col_`cols'_minority
             local cols_for_depvar_`d'_minority = " `cols_for_depvar_`d'_minority' dep_var_`d'_col_`cols'_minority "
 
+
             reghdfe `dependent_var_`d'' i.aprace `CONTROL_VARS' `control_var_`d'' if condition_`d', absorb(`ABS_VARS' `geofe') keepsingle cluster(control)
-            levelsof `geofe' if condition_`d', local(geofe_levels)
-            local num_levels_geofe : word count `geofe_levels'
-            estadd scalar num_cities = `num_levels_geofe'
+
+            // Extract number of levels of city variable
+			matrix hdfe = e(dof_table)
+			local num_levels_geofe = hdfe[rowsof(hdfe),1]
+			qui estadd scalar num_cities  =  `num_levels_geofe'
+
             qui eststo dep_var_`d'_col_`cols'_categories
             local cols_for_depvar_`d'_categories = " `cols_for_depvar_`d'_categories' dep_var_`d'_col_`cols'_categories "
         }
@@ -144,7 +147,7 @@ program define run_regressions, rclass
         alignment(c) page(dcolumn) nomtitle ///
         cells("b(star fmt(4))" se(par fmt(4)) ci(fmt(4) par)) ///
         starlevels(* 0.10 ** 0.05 *** 0.01) ///
-        stats(N r2_a num_cities, fmt(0 2 0) ///
+        stats(N r2_a num_cities, fmt(0 4 0) ///
         label("Observations" "Adjusted R$^2$" "Number of Cities")) ///
         keep(`racial_minority')
 
@@ -155,7 +158,7 @@ program define run_regressions, rclass
         mgroups("Original Data" "Correct Race Only" "Updated City Name & Correct Race", pattern(1 1 1)) ///
         cells("b(star fmt(4))" se(par fmt(4)) ci(fmt(4) par)) ///
         starlevels(* 0.10 ** 0.05 *** 0.01) ///
-        stats(N r2_a num_cities, fmt(0 2 0) ///
+        stats(N r2_a num_cities, fmt(0 4 0) ///
         labels("Observations" "Adjusted R^2" "Number of Cities")) ///
         keep(`racial_minority')
 
@@ -169,7 +172,7 @@ program define run_regressions, rclass
         alignment(c) page(dcolumn) nomtitle ///
         cells("b(star fmt(4))" se(par fmt(4)) ci(fmt(4) par)) ///
         starlevels(* 0.10 ** 0.05 *** 0.01) ///
-        stats(N r2_a num_cities, fmt(0 2 0) ///
+        stats(N r2_a num_cities, fmt(0 4 0) ///
         label("Observations" "Adjusted R$^2$" "Number of Cities")) ///
         keep(2.apracex 3.apracex 4.apracex 5.apracex)
 
@@ -180,7 +183,7 @@ program define run_regressions, rclass
         mgroups("Original Data" "Correct Race Only" "Updated City Name & Correct Race", pattern(1 1 1)) ///
         cells("b(star fmt(4))" se(par fmt(4)) ci(fmt(4) par)) ///
         starlevels(* 0.10 ** 0.05 *** 0.01) ///
-        stats(N r2_a num_cities, fmt(0 2 0) ///
+        stats(N r2_a num_cities, fmt(0 4 0) ///
         labels("Observations" "Adjusted R^2" "Number of Cities")) ///
         keep(2.apracex 3.apracex 4.apracex 5.apracex)
     }
