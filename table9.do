@@ -1,193 +1,22 @@
-/* Stata Do File for Table 9 */
-/* Written by: Anthony McCanny */
-/* Based on code by: Shi Chen */
-/* Date: May 14, 2024 */
-
 clear all
-// import data
-import delimited "${DATA}/HUDprocessed_JPE_census_042021.csv", bindquote(strict)
 
-/*-------------------------------------*/
-/*---- Cleaning, labelling variables --*/
-/*-------------------------------------*/
+do "${CODE}/table_generation_function.do"
 
-qui gen market = substr(control,1,2)
+process_data "HUDprocessed_JPE_census_042021.csv" 0
 
-// Generate ofcolor as originally generated
-qui gen ofcolor = 0
-qui replace ofcolor = 1 if aprace == 2 | aprace == 3 | aprace == 4
-qui label variable ofcolor "Racial Minority"
+// Generate condition_1 as the full dataset
+qui gen condition_1 = 1
 
-// Generate a dummy variable for 'other' individuals
-qui gen othrace = 0
-qui replace othrace = 1 if aprace == 5
-qui label variable othrace "Other Race"
+// Generate condition_2 as an indicator for mothers
+gen condition_2 = 0
+// Set condition_2 to 1 when a participant has kids and sex is female
+replace condition_2 = 1 if kidsx == 1 & tsexxx == 0
 
-// Define labels for aprace
-qui label define race 1 "White" 2 "African American" 3 "Hispanic" 4 "Asian" 5 "Other Race"
-qui label values aprace race
-
-
-global DESVARS "w2012pc_ad b2012pc_ad a2012pc_ad hisp2012pc_ad sequencex monthx sapptamx algncurx aelng1x dpmtexpx agex aleasetpx acarownx elementary_school_score_ad elementary_school_score_rec skill_ad skill_rec logadprice sf_count_rec sf_count_ad kidsx tsexxx "
-	
-foreach var in $DESVARS {
-	qui cap replace `var' = "." if `var' == "NA" | `var' == ""
-	qui cap destring `var', replace force
-}
-
-/*-------------------------------------*/
-/*--------- Subsetting Data -----------*/
-/*-------------------------------------*/
-
-// Generate an indicator for the full dataset
-qui gen full_dataset = 1
-
-// Generate an indicator for mothers
-gen mother = 0
-// Set mother to 1 when a participants has kids and sex is female
-replace mother = 1 if kidsx == 1 & tsexxx == 0
-
-
-
-/*-------------------------------------*/
-/*---- Getting correct city names -----*/
-/*-------------------------------------*/
-
-//do "${CODE}/data_cleaner.do"
-
-// Save the cleaned data to be reloaded later
-//save "temp_data_table9.dta", replace
-
-use "temp_data_table9.dta", clear
-
-
-// In original R analysis, missing values of hcity were treated as their own category, to allow this in Stata, we set missing values to the string "missing"
-replace hcity = "missing" if hcity == ""
-replace temp_city = "missing" if temp_city == ""
-
-/*-------------------------------------*/
-/*---- Regressions --------------------*/
-/*-------------------------------------*/
-
-// Define the general control variables for the regression
-local CONTROL_VARS "w2012pc_ad b2012pc_ad a2012pc_ad hisp2012pc_ad logadprice"
-
-// Define the general fixed effects to be absorbed in the estimation process
-local ABS_VARS "control sequencexx monthx market arelate2x sapptamx tsexxx thhegaix tpegaix thighedux tcurtenrx algncurx aelng1x dpmtexpx amoversx agex aleasetpx acarownx"
-
-// Define the dependent variables in the two sets of regressions
-local dependent_var_1 = "sfcount_rec"
-local dependent_var_2 = "sfcount_rec"
-
-// Define the regression specific control variables to be introduced to regressions 1 and 2 (corresponding to dependent_var_1 and 2 above)
-local control_var_1 = "sfcount_ad"
-local control_var_2 = "sfcount_ad"
-
-// Define the data subset indicator variable for regressions 1 and 2 (corresponding to dependent_var_1 and 2 above)
-local condition_1 = "full_dataset"
-local condition_2 = "mother"
-
-local cols_for_depvar_1_minority = " "
-local cols_for_depvar_1_categories = " "
-local cols_for_depvar_2_minority = " "
-local cols_for_depvar_2_categories = " "
-
-
-forvalues d = 1/2 {
-
-    forvalues cols = 1/4 {
-        // SET RACIAL MINORITY VARIABLE FOR THIS COLUMN
-        // In columns 1 and 2 we use the original specification for racial minority which takes as its reference group all 'white' and 'other' participants in the study
-        if inlist(`cols',1,2) {
-            local racial_minority = "ofcolor"
-        }
-        // In columns 3 and 4 we use our fixed specification for racial minority which takes only 'white' participants as its reference group, includes 'other' as a separate category
-        else if inlist(`cols',3,4) {
-            local racial_minority = "ofcolor othrace"
-        }
-
-        // SET CITY FIXED EFFECT FOR THIS COLUMN
-        // In columns 1 and 3 we use the original city name column which includes many duplications and misspellings of single cities, representing them as multiple fixed effects
-        if inlist(`cols',1,3) {
-            local geofe = "hcity"
-        }
-        // In columns 2 and 4 we use our corrected city names from our string matching algorithm in data_cleaner.do
-        // Forgive the variable name, temp_city is not very intuitive, but is in fact the final corrected city name to be generated by data_cleaner.do
-        else {
-            local geofe = "temp_city"
-        }
-
-        // Print the current specification of the model
-        disp as text "Dep. Var. is: " as result "`dependent_var_`d''" 
-        disp as text "Racial Minority specification is: " as result "`racial_minority'"
-        disp as text "City Fixed Effect is: " as result "`geofe'"
-        disp as text "Clustered by: control (a variable representing the trial)"
-		disp as text "Data Subset is: " as result "`condition_`d''"
-
-        // ESTIMATE MODELS
-        // Estimate the 'racial minority' regression for this column
-        reghdfe `dependent_var_`d'' `racial_minority' `CONTROL_VARS' `control_var_`d'' if `condition_`d'' == 1, absorb(`ABS_VARS' `geofe') keepsingle cluster(control)
-        qui eststo dep_var_`d'_col_`cols'_minority
-        // Make list of column object names to combine into one plot later
-        local cols_for_depvar_`d'_minority = " `cols_for_depvar_`d'_minority' dep_var_`d'_col_`cols'_minority "	
-    
-        // Estimate the 'racial category' regression for this column
-        reghdfe `dependent_var_`d'' i.aprace `CONTROL_VARS' `control_var_`d'' if `condition_`d'' == 1, absorb(`ABS_VARS' `geofe') keepsingle cluster(control)
-        qui eststo dep_var_`d'_col_`cols'_categories
-        local cols_for_depvar_`d'_categories = " `cols_for_depvar_`d'_categories' dep_var_`d'_col_`cols'_categories "
-    }
-	disp as text "*******************************************************"
-}
-
-/*-------------------------------------*/
-/*- Export Results to LaTeX and CSV ---*/
-/*-------------------------------------*/
-
-forvalues d = 1/2 {
-    // Output the Latex table for the racial minority analyses
-    esttab `cols_for_depvar_`d'_minority' ///
-    using "${OUTPUT}/table9_dep_var_`d'_minority.tex", ///
-    replace booktabs label ///
-    mgroups("Original Data" "Updated City Name Only" "Correct Race Only" "Updated City Name \& Correct Race",pattern(1 1 1 1) ///
-    prefix(\multicolumn{@span}{c}{) suffix(}) span erepeat(\cmidrule(lr){@span})) ///
-    title(Neighbourhood Attributes as `dependent_var_`d'', Clustered at trial) ///
-    alignment(c) page(dcolumn) nomtitle ///
-    se star(* 0.10 ** 0.05 *** 0.01) ///
-    s(N r2_a, ///
-    label("Observations" "Adjusted R$^2$")) ///
-    keep(`racial_minority')
-
-    // Output the csv file for the racial minority analyses
-    esttab `cols_for_depvar_`d'_minority' ///
-    using "${OUTPUT}/table9_dep_var_`d'_minority.csv", ///
-    replace csv label ///
-    mgroups("Original Data" "Updated City Name Only" "Correct Race Only" "Updated City Name & Correct Race", pattern(1 1 1 1)) ///
-    se star(* 0.10 ** 0.05 *** 0.01) ///
-    stats(N r2_a, ///
-    labels("Observations" "Adjusted R^2")) ///
-    keep(`racial_minority')
-	
-	
-    // Output the Latex table for the racial categories analyses
-    esttab `cols_for_depvar_`d'_categories' ///
-    using "${OUTPUT}/table9_dep_var_`d'_categories.tex", ///
-    replace booktabs label ///
-    mgroups("Original Data" "Updated City Name Only" "Correct Race Only" "Updated City Name \& Correct Race",pattern(1 1 1 1) ///
-    prefix(\multicolumn{@span}{c}{) suffix(}) span erepeat(\cmidrule(lr){@span})) ///
-    title(Neighbourhood Attributes as `dependent_var_`d'', Clustered at trial) ///
-    alignment(c) page(dcolumn) nomtitle ///
-    se star(* 0.10 ** 0.05 *** 0.01) ///
-    s(N r2_a, ///
-    label("Observations" "Adjusted R$^2$")) ///
-    keep(2.apracex 3.apracex 4.apracex 5.apracex)
-
-    // Output the CSV file for the racial categories analyses
-    esttab `cols_for_depvar_`d'_categories' ///
-    using "${OUTPUT}/table9_dep_var_`d'_categories.csv", ///
-    replace csv label ///
-    mgroups("Original Data" "Updated City Name Only" "Correct Race Only" "Updated City Name & Correct Race", pattern(1 1 1 1)) ///
-    se star(* 0.10 ** 0.05 *** 0.01) ///
-    stats(N r2_a, ///
-    labels("Observations" "Adjusted R^2")) ///
-    keep(2.apracex 3.apracex 4.apracex 5.apracex)
-}
+run_regressions ///
+    "w2012pc_ad b2012pc_ad a2012pc_ad hisp2012pc_ad logadprice" /// // CONTROL_VARS
+    "control sequencexx monthx market arelate2x sapptamx tsexxx thhegaix tpegaix thighedux tcurtenrx algncurx aelng1x dpmtexpx amoversx agex aleasetpx acarownx" /// // ABS_VARS
+    "sfcount_rec" /// // dependent_var_1
+    "sfcount_rec" /// // dependent_var_2
+    "sfcount_ad" /// // control_var_1
+    "sfcount_ad" /// // control_var_2
+    "9" // table_number
