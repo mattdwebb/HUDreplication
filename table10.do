@@ -65,7 +65,7 @@ clear
 					foreach cluster in $CLUSTER {
 						foreach dvar in $DVAR {
 						
-						reghdfe `yvar' i.`dvar' `yvar'_ad ${CONTVARS}, absorb(${ABSVARSSAME} hcity) keepsingle cluster(`cluster')
+						qui reghdfe `yvar' i.`dvar' `yvar'_ad ${CONTVARS}, absorb(${ABSVARSSAME} hcity) keepsingle cluster(`cluster')
 
 						// Extract number of levels of city variable
        						matrix hdfe = e(dof_table)
