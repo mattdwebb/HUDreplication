@@ -159,26 +159,6 @@ clear
 						
 				}
 				
-// Manual City counter
-
-	//For number of hcityx
-	
-		generate id = _n
-		sort hcityx order
-		by x: gen count = _n == 1
-		
-		
-	// For number of tempcity
-	
-		generate id = _n
-		sort temp_city order
-		by x: gen count = _n == 1
-	
-	
-	
-	
-
-
 /*----------------------------------------------------*/
 /* Second Dataset: Ranking, High Skill, Single Parent */
 /*----------------------------------------------------*/
@@ -243,6 +223,14 @@ clear
 						foreach dvar in $DVAR {
 						
 						qui reghdfe `yvar' i.`dvar' `yvar'_ad ${CONTVARS}, absorb(${ABSVARSSAME} hcity) keepsingle cluster(`cluster')
+
+						// Extract number of levels of city variable
+        					matrix hdfe = e(dof_table)
+						local geo_fe = "hcity"
+        					local num_levels_geofe = hdfe[rowsof(hdfe),1]
+        					qui estadd scalar num_cities = `num_levels_geofe'
+
+
 						qui eststo `yvar'_`dvar'_`cluster'
 						qui estadd local ln_price "Yes", replace
 						qui estadd local race_compo "Yes", replace
@@ -261,6 +249,14 @@ clear
 						foreach dvar in $DVAR {
 						
 						qui reghdfe `yvar' i.`dvar' `yvar'_ad ${CONTVARS}, absorb(${ABSVARSSAME} temp_city) keepsingle cluster(`cluster')
+
+						// Extract number of levels of city variable
+        					matrix hdfe = e(dof_table)
+						local geo_fe = "hcity"
+        					local num_levels_geofe = hdfe[rowsof(hdfe),1]
+        					qui estadd scalar num_cities = `num_levels_geofe'
+
+
 						qui eststo `yvar'_`dvar'_`cluster'_ca
 						qui estadd local ln_price "Yes", replace
 						qui estadd local race_compo "Yes", replace
@@ -321,20 +317,7 @@ clear
 						
 				}
 				
-// Manual City counter
 
-	//For number of hcityx
-	
-		generate id = _n
-		sort hcityx order
-		by x: gen count = _n == 1
-		
-		
-	// For number of tempcity
-	
-		generate id = _n
-		sort temp_city order
-		by x: gen count = _n == 1
 
 
 
