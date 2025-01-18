@@ -4,9 +4,9 @@
 
 clear
 
-import delimited "${DATA}\Table 8.csv", case(preserve)
+//import delimited "${DATA}/Table 8.csv", case(preserve)
 
-save "${DATA}\Table 8.dta", replace
+//save "${DATA}/Table 8.dta", replace
 
 /*----------------*/
 /* Cleaning dataset */
@@ -15,7 +15,7 @@ save "${DATA}\Table 8.dta", replace
 clear
 
 // import data
-use "${DATA}\Table 8.dta",replace
+use "${DATA}/Table 8.dta",replace
 rename *, lower // Changes variables to lower case
 
 /*generate correct correct ofcolor and aprace variable*/
@@ -46,10 +46,10 @@ rename *, lower // Changes variables to lower case
 tostring zip_ad, replace
 
 // clean city names
-do "${CODE}/temp2_data_cleaner.do"
+do "${CODE}/data_cleaner.do"
 
 
-save "${OUTPUT}\Table8_adjustedcities_score.dta", replace
+save "${OUTPUT}/Table8_adjustedcities_score.dta", replace
 
 	
 /*----------------------------------------------*/
@@ -155,7 +155,7 @@ foreach yvar in $YVAR {
 
 	//For number of hcityx
 	
-		generate id = _n
+		/*generate id = _n
 		sort hcityx order
 		by x: gen count = _n == 1
 		
@@ -164,4 +164,4 @@ foreach yvar in $YVAR {
 	
 		generate id = _n
 		sort temp_city order
-		by x: gen count = _n == 1
+		by x: gen count = _n == 1*/

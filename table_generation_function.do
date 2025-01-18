@@ -22,7 +22,7 @@ end
 
 capture program drop process_data
 program define process_data
-    args data_file force_clean
+    args data_file force_clean corrected
     local cleaned_file = subinstr("`data_file'", ".csv", "_cleaned.dta", .)
 
     if "`force_clean'" != "1" {
@@ -34,7 +34,8 @@ program define process_data
         }
     }
     // import data
-    import delimited "${DATA}/`data_file'", bindquote(strict)
+    import delimited "${DATA}/`data_file'", bindquote(strict) clear
+	gen id = _n
 	
 	display "imported ${DATA}/`data_file'"
 
@@ -62,12 +63,23 @@ program define process_data
     /*---- Getting correct city names -----*/
     /*-------------------------------------*/
 
+    // Keep in empty city name strings
+
+    // Replace empty strings with NA for hcity or hcityx if corrected == "original"
+    if "`corrected'" == "original" {
+        capture confirm variable hcity
+        if !_rc {
+            qui replace hcity = "NA" if hcity == ""
+        }
+        else {
+            capture confirm variable hcityx
+            if !_rc {
+                qui replace hcityx = "NA" if hcityx == ""
+            }
+        }
+    }
+	
     do "${CODE}/data_cleaner.do"
-
-    // In original R analysis, missing values of hcity were treated as their own category, to allow this in Stata, we set missing values to the string "missing"
-    replace hcity = "missing" if hcity == ""
-    replace temp_city = "missing" if temp_city == ""
-
 
     // Save the cleaned data to be reloaded later
     save "${OUTPUT}/`cleaned_file'", replace
@@ -111,18 +123,26 @@ program define run_regressions, rclass
             disp as text "City Fixed Effect is: " as result "`geofe'"
             disp as text "Clustered by: control (a variable representing the trial)"
 
+
             // ESTIMATE MODELS
             reghdfe `dependent_var_`d'' `racial_minority' `CONTROL_VARS' `control_var_`d'' if condition_`d', absorb(`ABS_VARS' `geofe') keepsingle cluster(control)
-            levelsof `geofe' if condition_`d', local(geofe_levels)
-            local num_levels_geofe : word count `geofe_levels'
-            estadd scalar num_cities = `num_levels_geofe'
+
+            // Extract number of levels of city variable
+			matrix hdfe = e(dof_table)
+			local num_levels_geofe = hdfe[rowsof(hdfe),1]
+			qui estadd scalar num_cities  =  `num_levels_geofe'
+
             qui eststo dep_var_`d'_col_`cols'_minority
             local cols_for_depvar_`d'_minority = " `cols_for_depvar_`d'_minority' dep_var_`d'_col_`cols'_minority "
 
+
             reghdfe `dependent_var_`d'' i.aprace `CONTROL_VARS' `control_var_`d'' if condition_`d', absorb(`ABS_VARS' `geofe') keepsingle cluster(control)
-            levelsof `geofe' if condition_`d', local(geofe_levels)
-            local num_levels_geofe : word count `geofe_levels'
-            estadd scalar num_cities = `num_levels_geofe'
+
+            // Extract number of levels of city variable
+			matrix hdfe = e(dof_table)
+			local num_levels_geofe = hdfe[rowsof(hdfe),1]
+			qui estadd scalar num_cities  =  `num_levels_geofe'
+
             qui eststo dep_var_`d'_col_`cols'_categories
             local cols_for_depvar_`d'_categories = " `cols_for_depvar_`d'_categories' dep_var_`d'_col_`cols'_categories "
         }
@@ -144,7 +164,7 @@ program define run_regressions, rclass
         alignment(c) page(dcolumn) nomtitle ///
         cells("b(star fmt(4))" se(par fmt(4)) ci(fmt(4) par)) ///
         starlevels(* 0.10 ** 0.05 *** 0.01) ///
-        stats(N r2_a num_cities, fmt(0 2 0) ///
+        stats(N r2_a num_cities, fmt(0 4 0) ///
         label("Observations" "Adjusted R$^2$" "Number of Cities")) ///
         keep(`racial_minority')
 
@@ -155,7 +175,7 @@ program define run_regressions, rclass
         mgroups("Original Data" "Correct Race Only" "Updated City Name & Correct Race", pattern(1 1 1)) ///
         cells("b(star fmt(4))" se(par fmt(4)) ci(fmt(4) par)) ///
         starlevels(* 0.10 ** 0.05 *** 0.01) ///
-        stats(N r2_a num_cities, fmt(0 2 0) ///
+        stats(N r2_a num_cities, fmt(0 4 0) ///
         labels("Observations" "Adjusted R^2" "Number of Cities")) ///
         keep(`racial_minority')
 
@@ -169,7 +189,7 @@ program define run_regressions, rclass
         alignment(c) page(dcolumn) nomtitle ///
         cells("b(star fmt(4))" se(par fmt(4)) ci(fmt(4) par)) ///
         starlevels(* 0.10 ** 0.05 *** 0.01) ///
-        stats(N r2_a num_cities, fmt(0 2 0) ///
+        stats(N r2_a num_cities, fmt(0 4 0) ///
         label("Observations" "Adjusted R$^2$" "Number of Cities")) ///
         keep(2.apracex 3.apracex 4.apracex 5.apracex)
 
@@ -180,8 +200,223 @@ program define run_regressions, rclass
         mgroups("Original Data" "Correct Race Only" "Updated City Name & Correct Race", pattern(1 1 1)) ///
         cells("b(star fmt(4))" se(par fmt(4)) ci(fmt(4) par)) ///
         starlevels(* 0.10 ** 0.05 *** 0.01) ///
-        stats(N r2_a num_cities, fmt(0 2 0) ///
+        stats(N r2_a num_cities, fmt(0 4 0) ///
         labels("Observations" "Adjusted R^2" "Number of Cities")) ///
         keep(2.apracex 3.apracex 4.apracex 5.apracex)
+    }
+end
+
+
+
+capture program drop correct_table
+program define correct_table, rclass
+    args CONTROL_VARS ABS_VARS dependent_vars control_vars_1 control_vars_2 control_vars_3 control_vars_4 control_vars_5 control_vars_6 table_number analysis_type abs_vars_1 abs_vars_2 abs_vars_3 abs_vars_4 abs_vars_5 abs_vars_6 override
+
+    local all_vars "`CONTROL_VARS' `ABS_VARS'"
+    foreach dv in `dependent_vars' {
+        local all_vars "`all_vars' `dv'"
+    }
+    
+    // Extract all unique control variables
+    local unique_controls "`control_vars_1' `control_vars_2' `control_vars_3' `control_vars_4' `control_vars_5' `control_vars_6'"
+    local all_vars "`all_vars' `unique_controls'"
+
+    clean_vars "`all_vars'"
+
+    // Create empty placeholder to store column names
+    local cols_for_all_regressions = " "
+
+    save "temp_data_table`table_number'_formatted.dta", replace
+
+    local num_regressions : word count `dependent_vars'
+    
+    local cols_for_minority ""
+    local cols_for_categories ""
+
+    // Check for apracex and rename it to aprace if present
+    capture confirm variable apracex
+    if !_rc {
+        rename apracex aprace
+        display "Variable apracex has been renamed to aprace."
+    } 
+    else {
+        // If apracex doesn't exist, check if aprace already exists
+        capture confirm variable aprace
+        if _rc {
+            display "Neither apracex nor aprace exists in the dataset."
+        }
+        else {
+            display "Variable aprace already exists. No renaming needed."
+        }
+    }
+
+    forvalues i = 1/`num_regressions' {
+        local dependent_var : word `i' of `dependent_vars'
+        disp as text "`dependent_var'"
+
+        // Extract the i-th set of control variables
+        local control_vars = "`control_vars_`i''"
+        disp as text "`control_vars'"
+
+        // Extract the i-th set of absorbed variables
+        local abs_vars = "`abs_vars_`i''"
+        disp as text "`abs_vars'"
+
+        disp as text "Analysis type is: " as result "`analysis_type'" 
+
+        // SET RACIAL MINORITY VARIABLE AND CITY FIXED EFFECT BASED ON ANALYSIS TYPE
+        if "`analysis_type'" == "original" {
+            local racial_minority = "ofcolor"
+            local geofe = "hcity"
+        }
+        else if "`analysis_type'" == "corrected" {
+            local racial_minority = "ofcolor othrace"
+            local geofe = "temp_city"
+        }
+
+        // Print the current specification of the model
+        disp as text "Dep. Var. is: " as result "`dependent_var'" 
+        disp as text "Control Vars. are: " as result "`CONTROL_VARS' `control_vars'"
+        disp as text "Absorbed Vars. are: " as result "`ABS_VARS' `abs_vars'"
+        disp as text "City Fixed Effect is: " as result "`geofe'"
+        disp as text "Clustered by: control (a variable representing the trial)"
+
+        // ESTIMATE MODELS
+        if "`override'" != "override" {
+            disp as text "Racial Minority specification is: " as result "`racial_minority'"
+            reghdfe `dependent_var' `racial_minority' `CONTROL_VARS' `control_vars' if condition_`i', absorb(`ABS_VARS' `abs_vars' `geofe') keepsingle cluster(control)
+            
+            // Extract number of levels of city variable
+            matrix hdfe = e(dof_table)
+            local num_levels_geofe = hdfe[rowsof(hdfe),1]
+            qui estadd scalar num_cities = `num_levels_geofe'
+
+            qui eststo regression_`i'_minority
+            local cols_for_minority = "`cols_for_minority' regression_`i'_minority"
+
+            reghdfe `dependent_var' i.aprace `CONTROL_VARS' `control_vars' if condition_`i', absorb(`ABS_VARS' `abs_vars' `geofe') keepsingle cluster(control)
+			
+			if inlist(`i',2,4) {
+					cap drop in_sample
+					generate in_sample = e(sample)
+					export delimited if in_sample==1 using "${OUTPUT}/sampleAnthony_`i'.csv", replace
+			}
+            
+            // Extract number of levels of city variable
+            matrix hdfe = e(dof_table)
+            local num_levels_geofe = hdfe[rowsof(hdfe),1]
+            qui estadd scalar num_cities = `num_levels_geofe'
+
+            qui eststo regression_`i'_categories
+            local cols_for_categories = "`cols_for_categories' regression_`i'_categories"
+        }
+        else {
+            disp as text "Override option selected. Estimating model with control variables as primary variables of interest."
+            reghdfe `dependent_var' `control_vars' `CONTROL_VARS' if condition_`i', absorb(`ABS_VARS' `abs_vars' `geofe') keepsingle cluster(control)
+            
+            // Extract number of levels of city variable
+            matrix hdfe = e(dof_table)
+            local num_levels_geofe = hdfe[rowsof(hdfe),1]
+            qui estadd scalar num_cities = `num_levels_geofe'
+
+            qui eststo regression_`i'_override
+            local cols_for_override = "`cols_for_override' regression_`i'_override"
+        }
+
+        disp as text "*******************************************************"
+    }
+
+    /*-------------------------------------*/
+    /*- Export Results to LaTeX and CSV ---*/
+    /*-------------------------------------*/
+
+    // Dynamically generate the number of mgroups and columns
+    local num_regressions = wordcount("`cols_for_minority'")
+    local mgroups_pattern = ""
+    local mgroups_titles = ""
+    forvalues i = 1/`num_regressions' {
+        local mgroups_pattern = "`mgroups_pattern' 1"
+        local mgroups_titles = `"`mgroups_titles' "Regression `i'""'
+    }
+
+    if "`override'" != "override" {
+        // Determine the keep list based on the analysis type
+        local keep_list_minority = cond("`analysis_type'" == "corrected", "ofcolor othrace", "ofcolor")
+        
+        // Output the Latex table for the racial minority analyses
+        esttab `cols_for_minority' ///
+        using "${OUTPUT}/table`table_number'_minority_`analysis_type'.tex", ///
+        replace booktabs label ///
+        mgroups(`mgroups_titles', pattern(`mgroups_pattern') ///
+        prefix(\multicolumn{@span}{c}{) suffix(}) span erepeat(\cmidrule(lr){@span})) ///
+        title(Multiple Regressions Results - Racial Minority, Clustered at trial) ///
+        alignment(c) page(dcolumn) nomtitle ///
+        cells("b(star fmt(4))" se(par fmt(4)) ci(fmt(4) par)) ///
+        starlevels(* 0.10 ** 0.05 *** 0.01) ///
+        stats(N r2_a num_cities, fmt(0 4 0) ///
+        label("Observations" "Adjusted R$^2$" "Number of Cities")) ///
+        keep(`keep_list_minority')
+
+        // Output the CSV file for the racial minority analyses
+        esttab `cols_for_minority' ///
+        using "${OUTPUT}/table`table_number'_minority_`analysis_type'.csv", ///
+        replace csv label ///
+        mgroups(`mgroups_titles', pattern(`mgroups_pattern')) ///
+        cells("b(star fmt(4))" se(par fmt(4)) ci(fmt(4) par)) ///
+        starlevels(* 0.10 ** 0.05 *** 0.01) ///
+        stats(N r2_a num_cities, fmt(0 4 0) ///
+        labels("Observations" "Adjusted R^2" "Number of Cities")) ///
+        keep(`keep_list_minority')
+
+        // Output the Latex table for the racial categories analyses
+        esttab `cols_for_categories' ///
+        using "${OUTPUT}/table`table_number'_categories_`analysis_type'.tex", ///
+        replace booktabs label ///
+        mgroups(`mgroups_titles', pattern(`mgroups_pattern') ///
+        prefix(\multicolumn{@span}{c}{) suffix(}) span erepeat(\cmidrule(lr){@span})) ///
+        title(Multiple Regressions Results - Racial Categories, Clustered at trial) ///
+        alignment(c) page(dcolumn) nomtitle ///
+        cells("b(star fmt(4))" se(par fmt(4)) ci(fmt(4) par)) ///
+        starlevels(* 0.10 ** 0.05 *** 0.01) ///
+        stats(N r2_a num_cities, fmt(0 4 0) ///
+        label("Observations" "Adjusted R$^2$" "Number of Cities")) ///
+        keep(2.aprace 3.aprace 4.aprace 5.aprace)
+
+        // Output the CSV file for the racial categories analyses
+        esttab `cols_for_categories' ///
+        using "${OUTPUT}/table`table_number'_categories_`analysis_type'.csv", ///
+        replace csv label ///
+        mgroups(`mgroups_titles', pattern(`mgroups_pattern')) ///
+        cells("b(star fmt(4))" se(par fmt(4)) ci(fmt(4) par)) ///
+        starlevels(* 0.10 ** 0.05 *** 0.01) ///
+        stats(N r2_a num_cities, fmt(0 4 0) ///
+        labels("Observations" "Adjusted R^2" "Number of Cities")) ///
+        keep(2.aprace 3.aprace 4.aprace 5.aprace)
+    }
+    else {
+        // Output the Latex table for the override analyses
+        esttab `cols_for_override' ///
+        using "${OUTPUT}/table`table_number'_override_`analysis_type'.tex", ///
+        replace booktabs label ///
+        mgroups(`mgroups_titles', pattern(`mgroups_pattern') ///
+        prefix(\multicolumn{@span}{c}{) suffix(}) span erepeat(\cmidrule(lr){@span})) ///
+        title(Multiple Regressions Results - Override, Clustered at trial) ///
+        alignment(c) page(dcolumn) nomtitle ///
+        cells("b(star fmt(4))" se(par fmt(4)) ci(fmt(4) par)) ///
+        starlevels(* 0.10 ** 0.05 *** 0.01) ///
+        stats(N r2_a num_cities, fmt(0 4 0) ///
+        label("Observations" "Adjusted R$^2$" "Number of Cities")) ///
+        keep(`unique_controls')
+
+        // Output the CSV file for the override analyses
+        esttab `cols_for_override' ///
+        using "${OUTPUT}/table`table_number'_override_`analysis_type'.csv", ///
+        replace csv label ///
+        mgroups(`mgroups_titles', pattern(`mgroups_pattern')) ///
+        cells("b(star fmt(4))" se(par fmt(4)) ci(fmt(4) par)) ///
+        starlevels(* 0.10 ** 0.05 *** 0.01) ///
+        stats(N r2_a num_cities, fmt(0 4 0) ///
+        labels("Observations" "Adjusted R^2" "Number of Cities")) ///
+        keep(`unique_controls')
     }
 end
