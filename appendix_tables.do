@@ -61,7 +61,7 @@ correct_table "`CONTROL_VARS'" "`ABS_VARS'" ///
 
 // TABLE 6
 
-process_data "HUDprocessed_JPE_census_042021.csv" 1
+process_data "HUDprocessed_JPE_census_042021.csv" 0
 
 // Generate condition variables
 forvalues i = 1/5 {
@@ -610,7 +610,7 @@ correct_table "`CONTROL_VARS'" "`ABS_VARS'" ///
     "w2012pc_ad " ///
     "w2012pc_ad logadprice" ///
     "w2012pc_ad logadprice b2012pc_ad a2012pc_ad hisp2012pc_ad" ///
-	" ""
+	" " ///
     " " ///
     "14B" ///
 	"corrected"
