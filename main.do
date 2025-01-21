@@ -32,3 +32,11 @@ clear all
 	do "${CODE}/table10.do"
 	do "${CODE}/table11.do"
 	do "${CODE}/table13.do"
+
+	
+/*meta analysis figure*/
+	do "${CODE}/meta_analysis.do"
+	
+	
+	
+	
