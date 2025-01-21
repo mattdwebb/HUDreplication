@@ -75,7 +75,6 @@ foreach var in $VARS {
 global CLUSTER "control"
 global DEPVAR "ofcolor race*"
 
-
 global CONTVARS " logadprice w2012pc_ad b2012pc_ad a2012pc_ad hisp2012pc_ad  povrate_ad"
 global ABSVARSSAME "control sequencexx monthx market arelate2x sapptamx tsexx thhegaix tpegaix thighedux tcurtenrx algncurx aelng1x dpmtexpx amoversx agex aleasetpx acarownx "
 
