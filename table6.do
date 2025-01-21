@@ -1,11 +1,15 @@
 /* Stata Do File for Table 6 */
 /* Written by: Matthew D. Webb */
 /* Created: July 23, 2024 */
+/* Modified: Sept 27, 2024 */
 
 clear
 
 // import data
-import delimited "${DATA}/HUDprocessed_JPE_census_042021.csv"
+/*set path here*/
+*global PATH "C:\Users\mattw\Dropbox\HuD_Replication\"
+
+import delimited "${DATA}\HUDprocessed_JPE_census_042021.csv"
 
 
 
@@ -66,7 +70,7 @@ foreach var in $VARS {
 
 
 /*corrected city*/
-	qui do "${CODE}/data_cleaner.do"
+	qui do "${CODE}\data_cleaner.do"
 
 * Run the reghdfe regression - col 3?
 *reghdfe w2012pc_rec ofcolor, absorb(control sequencexx monthx hcityx market arelate2x sapptamx tsexx thhegaix tpegaix thighedux tcurtenrx algncurx aelng1x dpmtexpx amoversx agex aleasetpx acarownx) keepsingle cluster(control)
@@ -81,8 +85,16 @@ foreach var in $VARS {
 global CLUSTER "control"
 global DEPVAR "ofcolor race*"
 
-global CONTVARS " b2012pc_ad a2012pc_ad hisp2012pc_ad logadprice povrate_ad"
+/*
+global CONTVARS " b2012pc_ad a2012pc_ad hisp2012pc_ad  povrate_ad"
 global ABSVARSSAME "control sequencexx monthx market arelate2x sapptamx tsexx thhegaix tpegaix thighedux tcurtenrx algncurx aelng1x dpmtexpx amoversx agex aleasetpx acarownx "
+*/
+global CONTVARS " logadprice w2012pc_ad b2012pc_ad a2012pc_ad hisp2012pc_ad  povrate_ad"
+global ABSVARSSAME "control sequencexx monthx market arelate2x sapptamx tsexx thhegaix tpegaix thighedux tcurtenrx algncurx aelng1x dpmtexpx amoversx agex aleasetpx acarownx "
+
+/*
+W5 <- felm(w2012pc_Rec ~  + logAdPrice + w2012pc_Ad + b2012pc_Ad + a2012pc_Ad + hisp2012pc_Ad  + povrate_Ad | CONTROL + SEQUENCE.x.x + month.x + HCITY.x + market + ARELATE2.x + SAPPTAM.x + TSEX.x.x + THHEGAI.x + TPEGAI.x + THIGHEDU.x + TCURTENR.x +  ALGNCUR.x + AELNG1.x + DPMTEXP.x + AMOVERS.x + age.x + ALEASETP.x + ACAROWN.x | 0 | CONTROL, data = recs_trial_final)
+*/
 
 global depvar_1 = "ofcolor"
 global depvar_2 = "racecat*"
