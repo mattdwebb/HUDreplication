@@ -4,9 +4,9 @@
 
 clear
 
-import delimited "${DATA}\Table 8.csv", case(preserve)
+//import delimited "${DATA}/Table 8.csv", case(preserve)
 
-save "${DATA}\Table 8.dta", replace
+//save "${DATA}/Table 8.dta", replace
 
 /*----------------*/
 /* Cleaning dataset */
@@ -15,7 +15,7 @@ save "${DATA}\Table 8.dta", replace
 clear
 
 // import data
-use "${DATA}\Table 8.dta",replace
+use "${DATA}/Table 8.dta",replace
 rename *, lower // Changes variables to lower case
 
 /*generate correct correct ofcolor and aprace variable*/
@@ -46,10 +46,10 @@ rename *, lower // Changes variables to lower case
 tostring zip_ad, replace
 
 // clean city names
-do "${CODE}/temp2_data_cleaner.do"
+do "${CODE}/data_cleaner.do"
 
 
-save "${OUTPUT}\Table8_adjustedcities_score.dta", replace
+save "${OUTPUT}/Table8_adjustedcities_score.dta", replace
 
 	
 /*----------------------------------------------*/

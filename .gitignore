@@ -44,3 +44,7 @@ temp_data_table11_formatted.dta
 temp_data_table7_formatted.dta
 temp_data_table9_formatted.dta
 table_formatting_archive.R
+
+Output/*
+temp_data_*
+Data/table10_2.dta
