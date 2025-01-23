@@ -359,37 +359,8 @@ generate_combined_table(
 )
 
 
-# Call function for Table 7
-generate_combined_table(
-  table_title = "Differences in Results for Racial Composition of Recommended Neighbourhood",
-  subtitle = "Table 7, CT2022",
-  panel_a_title = "White Household Income Share in High Income Neighbourhoods (Column 1)",
-  panel_b_title = "White Household Income Share in Low Income Neighbourhoods (Column 3)",
-  table_number = 7,
-  single_panel = FALSE,
-  set_dashes = TRUE,
-  show_minority_top = TRUE,
-  show_minority_bottom = TRUE
-)
 
-
-### Generate Tables for Corrections Only
-
-# Original Table 5
-generate_corrected_table(
-  table_title = "Discriminatory Steering and Availability of Advertised Properties",
-  subtitle = "Table 5, C\\&T 2022",
-  table_number = 5,
-  panel_title = "Dependent Variable",
-  input_file_categories = "HUDreplication/Output/table5_categories_original.tex",
-  input_file_minority = "HUDreplication/Output/table5_minority_original.tex",
-  col_names = c("(1)", "(2)", "(3)", "(4)"),
-  additional_rows = list( c("ln(price) advertised home", "No", "Yes", "No", "Yes"),
-                          c("Racial composition advertised home", "No", "Yes", "No", "Yes")),
-  set_dashes = FALSE,
-  show_minority = TRUE,
-  corrected = FALSE
-)
+### Generate Full Replication Tables for Appendix B
 
 # Corrected Table 5
 generate_corrected_table(
@@ -441,7 +412,6 @@ generate_corrected_table(
   show_minority = TRUE
 )
 
-
 # Corrected Table 8A1
 generate_corrected_table(
   table_title = "Discriminatory Steering and Neighborhood Effects",
@@ -458,24 +428,6 @@ generate_corrected_table(
   show_minority = TRUE
 )
 
-# Original Table 8A1
-generate_corrected_table(
-  table_title = "Discriminatory Steering and Neighborhood Effects",
-  subtitle = "Table 8A Columns 1 and 2, C\\&T 2022",
-  table_number = 8.11,
-  panel_title = "School Specific Test Scores",
-  input_file_categories = "HUDreplication/Output/table8A1_categories_original.tex",
-  input_file_minority = "HUDreplication/Output/table8A1_minority_original.tex",
-  col_names = c("Elementary School (1)", "Middle School (2)"),
-  additional_rows = list( c("ln(price) advertised home", "Yes", "Yes"),
-                          c("Racial composition advertised home", "Yes", "Yes"),
-                          c("Outcome advertised home", "Yes", "Yes")),
-  set_dashes = FALSE,
-  show_minority = TRUE,
-  corrected = FALSE
-)
-
-
 # Corrected Table 8A2
 generate_corrected_table(
   table_title = "Discriminatory Steering and Neighborhood Effects",
@@ -490,40 +442,6 @@ generate_corrected_table(
                           c("Outcome advertised home", "Yes", "Yes")),
   set_dashes = FALSE,
   show_minority = TRUE
-)
-
-# Original Table 8A2
-generate_corrected_table(
-  table_title = "Discriminatory Steering and Neighborhood Effects",
-  subtitle = "Table 8A Columns 3 and 4, C\\&T 2022",
-  table_number = 8.12,
-  panel_title = "School Specific Test Scores",
-  input_file_categories = "HUDreplication/Output/table8A2_categories_original.tex",
-  input_file_minority = "HUDreplication/Output/table8A2_minority_original.tex",
-  col_names = c("Assaults (3)", "Elementary School (4)"),
-  additional_rows = list( c("ln(price) advertised home", "Yes", "Yes"),
-                          c("Racial composition advertised home", "Yes", "Yes"),
-                          c("Outcome advertised home", "Yes", "Yes")),
-  set_dashes = FALSE,
-  show_minority = TRUE,
-  corrected = FALSE
-)
-
-# Original Table 8B
-generate_corrected_table(
-  table_title = "Discriminatory Steering and Neighborhood Effects",
-  subtitle = "Table 8 Panel B, C\\&T 2022",
-  table_number = 8.2,
-  panel_title = "American Community Survey",
-  input_file_categories = "HUDreplication/Output/table8B_categories_original.tex",
-  input_file_minority = "HUDreplication/Output/table8B_minority_original.tex",
-  col_names = c("Poverty Rate (1)", "High Skill (2)", "College (3)", "Single-Parent Household (4)", "Ownership Rate (5)"),
-  additional_rows = list( c("ln(price) advertised home", "Yes", "Yes", "Yes", "Yes", "Yes"),
-                          c("Racial composition advertised home", "Yes", "Yes", "Yes", "Yes", "Yes"),
-                          c("Outcome advertised home", "Yes", "Yes", "Yes", "Yes", "Yes")),
-  set_dashes = FALSE,
-  show_minority = TRUE,
-  corrected = FALSE
 )
 
 # Corrected Table 8B
@@ -543,23 +461,6 @@ generate_corrected_table(
   corrected = TRUE
 )
 
-# Original Table 9A
-generate_corrected_table(
-  table_title = "Discriminatory Steering and Local Pollution Exposures",
-  subtitle = "Table 9 Panel A, C\\&T 2022",
-  table_number = 9.1,
-  panel_title = "Pollution: Differences for Entire Sample",
-  input_file_categories = "HUDreplication/Output/table9A_categories_original.tex",
-  input_file_minority = "HUDreplication/Output/table9A_minority_original.tex",
-  col_names = c("Superfund", "Toxics", "PM"),
-  additional_rows = list( c("ln(price) advertised home", "Yes", "Yes", "Yes"),
-                          c("Racial composition advertised home", "Yes", "Yes", "Yes"),
-                          c("Outcome advertised home", "Yes", "Yes", "Yes")),
-  set_dashes = FALSE,
-  show_minority = TRUE,
-  corrected = FALSE
-)
-
 # Corrected Table 9A
 generate_corrected_table(
   table_title = "Discriminatory Steering and Local Pollution Exposures",
@@ -575,24 +476,6 @@ generate_corrected_table(
   set_dashes = FALSE,
   show_minority = TRUE,
   corrected = TRUE
-)
-
-
-# Original Table 9B
-generate_corrected_table(
-  table_title = "Discriminatory Steering and Local Pollution Exposures",
-  subtitle = "Table 9 Panel B, C\\&T 2022",
-  table_number = 9.2,
-  panel_title = "Pollution: Differences for Mothers",
-  input_file_categories = "HUDreplication/Output/table9B_categories_original.tex",
-  input_file_minority = "HUDreplication/Output/table9B_minority_original.tex",
-  col_names = c("Superfund", "Toxics", "PM"),
-  additional_rows = list( c("ln(price) advertised home", "Yes", "Yes", "Yes"),
-                          c("Racial composition advertised home", "Yes", "Yes", "Yes"),
-                          c("Outcome advertised home", "Yes", "Yes", "Yes")),
-  set_dashes = FALSE,
-  show_minority = TRUE,
-  corrected = FALSE
 )
 
 # Corrected Table 9B
@@ -612,23 +495,6 @@ generate_corrected_table(
   corrected = TRUE
 )
 
-# Original Table 10A1
-generate_corrected_table(
-  table_title = "Discriminatory Steering and Neighborhood Effects (Mothers)",
-  subtitle = "Table 10A Columns 1 and 2, C\\&T 2022",
-  table_number = 10.11,
-  panel_title = "School Specific Test Scores",
-  input_file_categories = "HUDreplication/Output/table10A1_categories_original.tex",
-  input_file_minority = "HUDreplication/Output/table10A1_minority_original.tex",
-  col_names = c("Elementary School (1)", "Middle School (2)"),
-  additional_rows = list( c("ln(price) advertised home", "Yes", "Yes"),
-                          c("Racial composition advertised home", "Yes", "Yes"),
-                          c("Outcome advertised home", "Yes", "Yes")),
-  set_dashes = FALSE,
-  show_minority = TRUE,
-  corrected = FALSE
-)
-
 # Corrected Table 10A1
 generate_corrected_table(
   table_title = "Discriminatory Steering and Neighborhood Effects (Mothers)",
@@ -645,23 +511,6 @@ generate_corrected_table(
   show_minority = TRUE
 )
 
-# Original Table 10A2
-generate_corrected_table(
-  table_title = "Discriminatory Steering and Neighborhood Effects (Mothers)",
-  subtitle = "Table 10A Columns 3 and 4, C\\&T 2022",
-  table_number = 10.12,
-  panel_title = "School Specific Test Scores",
-  input_file_categories = "HUDreplication/Output/table10A2_categories_original.tex",
-  input_file_minority = "HUDreplication/Output/table10A2_minority_original.tex",
-  col_names = c("Assaults (3)", "Elementary School (4)"),
-  additional_rows = list( c("ln(price) advertised home", "Yes", "Yes"),
-                          c("Racial composition advertised home", "Yes", "Yes"),
-                          c("Outcome advertised home", "Yes", "Yes")),
-  set_dashes = FALSE,
-  show_minority = TRUE,
-  corrected = FALSE
-)
-
 # Corrected Table 10A2
 generate_corrected_table(
   table_title = "Discriminatory Steering and Neighborhood Effects (Mothers)",
@@ -676,24 +525,6 @@ generate_corrected_table(
                           c("Outcome advertised home", "Yes", "Yes")),
   set_dashes = FALSE,
   show_minority = TRUE
-)
-
-
-# Original Table 10B
-generate_corrected_table(
-  table_title = "Discriminatory Steering and Neighborhood Effects (Mothers)",
-  subtitle = "Table 10 Panel B, C\\&T 2022",
-  table_number = 10.2,
-  panel_title = "American Community Survey",
-  input_file_categories = "HUDreplication/Output/table10B_categories_original.tex",
-  input_file_minority = "HUDreplication/Output/table10B_minority_original.tex",
-  col_names = c("Poverty Rate (1)", "High Skill (2)", "College (3)", "Single-Parent Household (4)", "Ownership Rate (5)"),
-  additional_rows = list( c("ln(price) advertised home", "Yes", "Yes", "Yes", "Yes", "Yes"),
-                          c("Racial composisition advertised home", "Yes", "Yes", "Yes", "Yes", "Yes"),
-                          c("Outcome advertised home", "Yes", "Yes", "Yes", "Yes", "Yes")),
-  set_dashes = FALSE,
-  show_minority = TRUE,
-  corrected = FALSE
 )
 
 # Corrected Table 10B
@@ -713,22 +544,6 @@ generate_corrected_table(
   corrected = TRUE
 )
 
-
-# Original Table 11
-generate_corrected_table(
-  table_title = "Discriminatory Steering: Low Poverty Neighbourhoods",
-  subtitle = "Table 11, C\\&T 2022",
-  table_number = 11,
-  panel_title = "Dependent Variable",
-  input_file_categories = "HUDreplication/Output/table11_categories_original.tex",
-  input_file_minority = "HUDreplication/Output/table11_minority_original.tex",
-  col_names = c("Low Poverty (1)", "Low Poverty: Families (2)", "Low Poverty: Moms (3)", "Low Poverty High Dad (4)", "Low Poverty High Dad: Families (5)", "Low Poverty High Dad: Moms (6)"),
-  additional_rows = list(c()),
-  set_dashes = FALSE,
-  show_minority = FALSE,
-  corrected = FALSE
-)
-
 # Corrected Table 11
 generate_corrected_table(
   table_title = "Discriminatory Steering: Low Poverty Neighbourhoods",
@@ -744,21 +559,6 @@ generate_corrected_table(
   corrected = TRUE
 )
 
-# Original Table 12
-generate_corrected_table(
-  table_title = "Discriminatory Steering: Median Income in Neighbourhoods",
-  subtitle = "Table 12, C\\&T 2022",
-  table_number = 12,
-  panel_title = "Dependent Variable: log(Median Income)",
-  input_file_categories = "HUDreplication/Output/table12_categories_original.tex",
-  input_file_minority = "HUDreplication/Output/table12_minority_original.tex",
-  col_names = c("All Testers", "Families", "Moms"),
-  additional_rows = list(c()),
-  set_dashes = FALSE,
-  show_minority = FALSE,
-  corrected = FALSE
-)
-
 # Corrected Table 12
 generate_corrected_table(
   table_title = "Discriminatory Steering: Median Income in Neighbourhoods",
@@ -771,24 +571,6 @@ generate_corrected_table(
   set_dashes = FALSE,
   show_minority = FALSE,
   corrected = TRUE
-)
-
-
-# Original Table 13A1
-generate_corrected_table(
-  table_title = "Discriminatory Steering by Implied Preferences for Neighbourhood Attributes",
-  subtitle = "Table 13A Columns 1 and 2, C\\&T 2022",
-  table_number = 13.11,
-  panel_title = "School Specific Test Scores",
-  input_file_categories = "HUDreplication/Output/table13A1_categories_original.tex",
-  input_file_minority = "HUDreplication/Output/table13A1_minority_original.tex",
-  col_names = c("Elementary School (1)", "Middle School (2)"),
-  additional_rows = list( c("ln(price) advertised home", "Yes", "Yes"),
-                          c("Racial composition advertised home", "Yes", "Yes"),
-                          c("Outcome advertised home", "Yes", "Yes")),
-  set_dashes = FALSE,
-  show_minority = TRUE,
-  corrected = FALSE
 )
 
 # Corrected Table 13A1
@@ -807,23 +589,6 @@ generate_corrected_table(
   show_minority = TRUE
 )
 
-# Original Table 13A2
-generate_corrected_table(
-  table_title = "Discriminatory Steering by Implied Preferences for Neighbourhood Attributes",
-  subtitle = "Table 13A Columns 3 and 4, C\\&T 2022",
-  table_number = 13.12,
-  panel_title = "School Specific Test Scores",
-  input_file_categories = "HUDreplication/Output/table13A2_categories_original.tex",
-  input_file_minority = "HUDreplication/Output/table13A2_minority_original.tex",
-  col_names = c("Assaults (3)", "Elementary School (4)"),
-  additional_rows = list( c("ln(price) advertised home", "Yes", "Yes"),
-                          c("Racial composition advertised home", "Yes", "Yes"),
-                          c("Outcome advertised home", "Yes", "Yes")),
-  set_dashes = FALSE,
-  show_minority = TRUE,
-  corrected = FALSE
-)
-
 # Corrected Table 13A2
 generate_corrected_table(
   table_title = "Discriminatory Steering by Implied Preferences for Neighbourhood Attributes",
@@ -840,22 +605,7 @@ generate_corrected_table(
   show_minority = TRUE
 )
 
-# Original Table 13B
-generate_corrected_table(
-  table_title = "Discriminatory Steering by Implied Preferences for Neighbourhood Attributes",
-  subtitle = "Table 13 Panel B, C\\&T 2022",
-  table_number = 13.2,
-  panel_title = "American Community Survey",
-  input_file_categories = "HUDreplication/Output/table13B_categories_original.tex",
-  input_file_minority = "HUDreplication/Output/table13B_minority_original.tex",
-  col_names = c("Poverty Rate (1)", "High Skill (2)", "College (3)", "Single-Parent Household (4)", "Ownership Rate (5)"),
-  additional_rows = list( c("ln(price) advertised home", "Yes", "Yes", "Yes", "Yes", "Yes"),
-                          c("Racial composition advertised home", "Yes", "Yes", "Yes", "Yes", "Yes"),
-                          c("Outcome advertised home", "Yes", "Yes", "Yes", "Yes", "Yes")),
-  set_dashes = FALSE,
-  show_minority = TRUE,
-  corrected = FALSE
-)
+
 
 # Corrected Table 13B
 generate_corrected_table(
@@ -872,28 +622,6 @@ generate_corrected_table(
   set_dashes = FALSE,
   show_minority = TRUE,
   corrected = TRUE
-)
-
-
-# Original Table 14B
-generate_corrected_table(
-  table_title = "Discriminatory Steering and Later Transactions",
-  subtitle = "Table 14 Panel B, C\\&T 2022",
-  table_number = 14.2,
-  panel_title = "B. Dependent Variable: Logarithm of Price",
-  input_file_categories = "HUDreplication/Output/table14B_categories_original.tex",
-  input_file_minority = "HUDreplication/Output/table14B_minority_original.tex",
-  col_names = c("(1)", "(2)", "(3)", "(4)"),
-  additional_rows = list(
-    c("Share white advertised home", "No", "Yes", "Yes", "Yes"),
-    c("ln(price) advertised home", "No", "No", "Yes", "Yes"),
-    c("Racial composition advertised home", "No", "No", "No", "Yes"),
-    c("Year", "Yes", "Yes", "Yes", "Yes"),
-    c("Month of year", "Yes", "Yes", "Yes", "Yes")
-  ),
-  set_dashes = FALSE,
-  show_minority = TRUE,
-  corrected = FALSE
 )
 
 # Corrected Table 14B

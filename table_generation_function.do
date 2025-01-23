@@ -295,12 +295,6 @@ program define correct_table, rclass
             local cols_for_minority = "`cols_for_minority' regression_`i'_minority"
 
             reghdfe `dependent_var' i.aprace `CONTROL_VARS' `control_vars' if condition_`i', absorb(`ABS_VARS' `abs_vars' `geofe') keepsingle cluster(control)
-			
-			if inlist(`i',2,4) {
-					cap drop in_sample
-					generate in_sample = e(sample)
-					export delimited if in_sample==1 using "${OUTPUT}/sampleAnthony_`i'.csv", replace
-			}
             
             // Extract number of levels of city variable
             matrix hdfe = e(dof_table)

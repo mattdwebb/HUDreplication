@@ -337,7 +337,7 @@ correct_table "`CONTROL_VARS'" "`ABS_VARS'" ///
 
 // TABLE 11
 
-process_data "HUDprocessed_JPE_census_042021.csv" 1 "original"
+process_data "HUDprocessed_JPE_census_042021.csv" 0 
 
 
 clean_vars "povrate_rec povrate_ad nodad_rec nodad_ad"
