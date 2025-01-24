@@ -2,11 +2,6 @@
 /* Written by: Matthew D. Webb */
 /* Updated: July 30th, 2024, by Sunny Karim */
 
-clear
-
-import delimited "${DATA}/Table 8.csv", case(preserve)
-
-save "${DATA}/Table 8.dta", replace
 
 /*----------------*/
 /* Cleaning dataset */
@@ -46,7 +41,7 @@ rename *, lower // Changes variables to lower case
 tostring zip_ad, replace
 
 // clean city names
-do "${CODE}/temp2_data_cleaner.do"
+do "${CODE}/data_cleaner.do"
 
 
 save "${OUTPUT}\Table8_adjustedcities_score.dta", replace
