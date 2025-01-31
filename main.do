@@ -38,3 +38,6 @@ clear all
 
 // generate full replication tables as features in Appendix B
 	do "${CODE}/appendix_tables.do"
+
+// create meta analysis figures
+	do "${CODE}/meta_analysis.do"
