@@ -61,12 +61,13 @@ ad_combos_with_multiple_controls <- ad_combinations %>%
 cat("Found", nrow(control_with_multiple_combos), "CONTROL values with multiple ad variable combinations in HUDprocessed\n")
 cat("Found", nrow(ad_combos_with_multiple_controls), "ad variable combinations spanning multiple CONTROL values in HUDprocessed\n")
 
-# For the CONTROL values that have multiple ad variable combinations, add the ad variable columns back in and print only the first 20 rows
-cat("\nPrinting details of CONTROL values with multiple ad variable combinations in HUDprocessed (with ad variable columns)...\n")
+# For the CONTROL values that have multiple ad variable combinations, add the ad variable columns back in and print only the first 20 unique rows
+cat("\nPrinting details of CONTROL values with multiple ad variable combinations in HUDprocessed (with ad variable columns, unique rows only)...\n")
 if (nrow(control_with_multiple_combos) > 0) {
   control_multi_combos_details <- ad_combinations %>%
     filter(CONTROL %in% control_with_multiple_combos$CONTROL) %>%
     select(CONTROL, all_of(ad_vars), ad_combo_id) %>%
+    distinct() %>%
     arrange(CONTROL, ad_combo_id)
   print(head(control_multi_combos_details, 20))
 } else {

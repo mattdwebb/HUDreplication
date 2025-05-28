@@ -10,3 +10,13 @@ address_cleaning.R
 ~appendix_tables.do.stswp
 Data/.DS_Store
 .DS_Store
+Data/zipinfo.dta
+Data/zipinfo-county.dta
+detailed_analysis.R
+.gitignore
+.gitignore
+final_property_id_strategy.R
+examine_ads_data.R
+examine_ads_simple.R
+ideal-analysis-plan.md
+.gitignore

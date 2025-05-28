@@ -21,7 +21,7 @@ adsprocessed_data <- readRDS(paste0(input_folder, "/adsprocessed_JPE.rds"))
 # Using tigris package to get census geography data
 # Note: Using cache = TRUE to avoid re-downloading data
 
-# Set the year for the data (adjust as needed)
+# Set the year for the data
 census_year <- 2010 
 # Define the states we want to process
 states_to_process <- c(

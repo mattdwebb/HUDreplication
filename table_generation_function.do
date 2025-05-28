@@ -79,7 +79,7 @@ program define process_data
         }
     }
 	
-    //do "${CODE}/data_cleaner.do"
+    do "${CODE}/data_cleaner.do"
     
     // Save the cleaned data to be reloaded later
     save "${OUTPUT}/`cleaned_file'", replace
