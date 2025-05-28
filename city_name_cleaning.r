@@ -15,7 +15,7 @@ input_folder <- paste0(WORKING_DIRECTORY, "/Data/Original")
 
 
 # Load the adsprocessed_JPE data
-adsprocessed_data <- readRDS(paste0(input_folder, "/adsprocessed_JPE.rds"))
+adsprocessed_data <- readRDS(paste0(input_folder, "/adsprocessed_JPE_censor.rds"))
 
 # Load census tracts and places data
 # Using tigris package to get census geography data
