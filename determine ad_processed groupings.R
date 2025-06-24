@@ -46,11 +46,11 @@ filtered_groups_w_cols = filtered_groups %>%
 # across 5814 rows.
 
 instances = filtered_groups_w_cols %>% 
-  summarise(across(-c(TESTERID, CONTROL, blkgrp, HPRICE), ~ sum(. > 1, na.rm = TRUE))) %>% 
+  summarise(across(-c(TESTERID, CONTROL, blkgrp, HPRICE, Longitude, Latitude), ~ sum(. > 1, na.rm = TRUE))) %>% 
   pivot_longer(everything(), names_to = "col", values_to = "times") %>%
   arrange(times) %>%
   filter(col %in% c(
-    
+                  "SAVLBAD",
                   "SEQUENCE.x",
                   "month",
                   "HCITY",
@@ -75,6 +75,7 @@ instances = filtered_groups_w_cols %>%
 unique_data = filtered_data %>% 
   select(
     c("TESTERID",
+      "SAVLBAD"
       "Longitude",
       "Latitude",
       "blkgrp",
