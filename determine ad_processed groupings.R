@@ -11,8 +11,6 @@ library(tidyr)
 setwd("~/GitHub/HUDreplication")
 WORKING_DIRECTORY = getwd()
 
-RELEVANT_COLS = 
-
 # Define the path to the output folder
 output_folder <- paste0(WORKING_DIRECTORY, "/Data/Generated")
 input_folder <- paste0(WORKING_DIRECTORY, "/Data/Original")
@@ -21,7 +19,7 @@ input_folder <- paste0(WORKING_DIRECTORY, "/Data/Original")
 adsprocessed_data <- read_csv(paste0(input_folder, "/adsprocessed_JPE.csv"))
 
 # filter out visits after the first one?
-filtered_data <- adsprocessed_data %>% filter(SEQUENCE.X == 1)
+filtered_data <- adsprocessed_data %>% filter(SEQUENCE.x == 1)
 
 # group by all values and count when values are not the same across grouped rows
 groups = filtered_data %>% 
@@ -73,10 +71,12 @@ instances = filtered_groups_w_cols %>%
                   "ALEASETP",
                   "ACAROWN"))
   
-# unique rows: 5820
+# unique rows: 5832, down from 7026
 unique_data = filtered_data %>% 
   select(
     c("TESTERID",
+      "Longitude",
+      "Latitude",
       "blkgrp",
       "HPRICE",
       "CONTROL",
@@ -98,5 +98,7 @@ unique_data = filtered_data %>%
       "age",
       "ALEASETP",
       "ACAROWN")) %>%
+  rename_with(~c("SEQUENCE", "TSEX"), c("SEQUENCE.x", "TSEX.x")) %>%
   distinct()
 
+haven::write_dta(unique_data, file.path(output_folder, "unique_adprocessed_JPE.dta"))
