@@ -7,11 +7,11 @@ library(haven)
 
 # Set the working directory to the directory location of the github repository 
 # This will be appended to the front of all addresses in the file
-WORKING_DIRECTORY = "cities-from-geoid"
-
+setwd("~/GitHub/HUDreplication")
 # Define the path to the output folder
-output_folder <- paste0(WORKING_DIRECTORY, "/Data/Generated")
-input_folder <- paste0(WORKING_DIRECTORY, "/Data/Original")
+
+output_folder <- paste0(getwd(), "/Data/Generated")
+input_folder <- paste0(getwd(), "/Data/Original")
 
 
 # Load the adsprocessed_JPE data
@@ -50,67 +50,49 @@ states_to_process <- c(
 # Initialize an empty dataframe to store all tract-place mappings
 all_tract_place_mappings <- data.frame()
 
+census_year = 2010
 # Process each state
 for (state_fips in names(states_to_process)) {
-  state_abbr <- states_to_process[state_fips]
-  
-  cat(paste0("\n\nProcessing state: ", state_abbr, " (FIPS: ", state_fips, ")\n"))
-  
-  # Define file paths for saving intermediate results
-  intersection_file <- paste0(output_folder, "/Intersection Files/tract_place_intersection_", state_abbr, ".rds")
-  
-  # Get census tracts for the current state
-  cat("Loading census tracts data for", state_abbr, "...\n")
-  tracts <- tracts(state = state_abbr, cb = TRUE, year = census_year)
-  cat(state_abbr, "census tracts loaded:", nrow(tracts), "tracts\n")
-
-  # Check if the intersection file already exists to avoid reprocessing
+  intersection_file <- paste0(output_folder, 
+                              "/Intersection Files/block_place_intersection_",
+                              state_abbr, 
+                              ".rds")
   if (file.exists(intersection_file)) {
     cat("Loading existing tract-place intersection for", state_abbr, "...\n")
-    tract_place_intersection <- readRDS(intersection_file)
-  } else {
-    # Get places for the current state
-    cat("Loading places data for", state_abbr, "...\n")
-    places <- places(state = state_abbr, cb = TRUE, year = 2020)
-    cat(state_abbr, "places loaded:", nrow(places), "places\n")
-    
-    # Ensure both datasets have the same CRS
-    st_crs(tracts) <- st_crs(places)
-    
-    # Perform spatial intersection
-    cat("Performing spatial intersection between tracts and places for", state_abbr, "...\n")
-    tract_place_intersection <- st_intersection(tracts, places)
-    
-    # Create the directory for intersection files if it doesn't exist
-    intersection_dir <- paste0(output_folder, "/Intersection Files")
-    if (!dir.exists(intersection_dir)) {
-      cat("Creating directory for intersection files:", intersection_dir, "\n")
-      dir.create(intersection_dir, recursive = TRUE)
-    }
-
-    # Save the intersection to avoid recomputing if the process is interrupted
-    saveRDS(tract_place_intersection, file = intersection_file)
-    cat("Saved intersection to", intersection_file, "\n")
+    block_place_intersections <- readRDS(intersection_file)
+  } 
+  else {
+    state_abbr <- states_to_process[state_fips]
+    state_blocks = data.frame()
+    state_places = data.frame()
+    state_blocks = block_groups(state = state_abbr, cb = TRUE, year = census_year)
+    state_places = places(state = state_abbr, cb = TRUE, year = 2020)
+    block_place_intersections <- st_intersection(state_blocks, state_places)
+    saveRDS(block_place_intersections, file = intersection_file)
   }
   
-  # Calculate areas and coverage percentages
-  cat("Calculating coverage percentages for", state_abbr, "...\n")
+  tract_file <- tracts(state = state_abbr, cb = TRUE, year = census_year)
+  tract_file$tract_area <- st_area(tracts)
   
+  # Calculate areas and coverage percentages
   # Make geometries valid
-  tract_place_intersection <- st_make_valid(tract_place_intersection)
+  block_place_intersections <- st_make_valid(block_place_intersections)
   
   # Calculate intersection areas
-  tract_place_intersection$intersection_area <- st_area(tract_place_intersection)
+  block_place_intersections$intersection_area <- st_area(block_place_intersections)
   
   # Calculate tract areas
   tracts$tract_area <- st_area(tracts)
   
   # Join tract areas to intersection data
-  tract_place_intersection <- tract_place_intersection %>%
-    left_join(tracts %>% 
+  block_place_intersections <- block_place_intersections %>%
+    left_join(tract_file %>% 
                 st_drop_geometry() %>% 
                 select(GEO_ID, tract_area), 
               by = "GEO_ID")
+}
+
+ 
   
   # Calculate coverage percentage
   tract_place_intersection$coverage_pct <- as.numeric(tract_place_intersection$intersection_area / tract_place_intersection$tract_area)
@@ -171,7 +153,7 @@ cat("\nExtracting tract GEOID from block GEOID and merging with place informatio
 adsprocessed_data <- adsprocessed_data %>%
   mutate(tract_geoid = substr(GEOID10, 1, nchar(GEOID10)-4)) %>%
   mutate(tract_geoid = sprintf("%011s", tract_geoid))
-  
+
 
 # Merge with tract_place_mapping to get place information
 adsprocessed_data <- adsprocessed_data %>%
@@ -289,7 +271,7 @@ adsprocessed <- readRDS(paste0(input_folder, "/adsprocessed_JPE.rds"))
 
 # Define ad_only_variables with specific variable names
 ad_only_variables <- c("logAdPrice", "stfid_Ad", "w2012pc_Ad", "b2012pc_Ad", 
-                      "a2012pc_Ad", "hisp2012pc_Ad", "oth2012pc_Ad", "CONTROL")
+                       "a2012pc_Ad", "hisp2012pc_Ad", "oth2012pc_Ad", "CONTROL")
 
 # Create an index based on unique combinations of these ad variables
 cat("\nCreating an index based on unique combinations of ad variables...\n")
@@ -363,7 +345,7 @@ cat("Found", nrow(selected_tracts), "matching records\n")
 if(nrow(selected_tracts) > 0) {
   cat("\nSelected tract information:\n")
   print(selected_tracts %>% 
-        as.data.frame())
+          as.data.frame())
 } else {
   cat("No matching records found for the specified GEOIDs\n")
 }
@@ -427,7 +409,7 @@ cat("\nMerging place information from adsprocessed_data into the three datasets.
 
 # First, create a lookup dataframe with ad variables and place information
 cat("Creating lookup dataframe with ad variables and place information...\n")
- place_lookup <- adsprocessed_data_processed %>%
+place_lookup <- adsprocessed_data_processed %>%
   select(all_of(ad_only_variables), blkgrp, place_name, place_geoid) %>%
   mutate(blkgrp = ifelse(blkgrp == "390553122033", "390553122021", blkgrp)) %>%
   distinct()
@@ -493,9 +475,9 @@ merge_place_info <- function(dataset, dataset_name) {
   if(rows_without_place > 0) {
     cat("Sample of rows missing place information:\n")
     print(merged_dataset %>%
-          filter(is.na(place_name)) %>%
-          select(all_of(ad_only_variables), blkgrp) %>%
-          head(30))
+            filter(is.na(place_name)) %>%
+            select(all_of(ad_only_variables), blkgrp) %>%
+            head(30))
   }
   
   return(merged_dataset)
