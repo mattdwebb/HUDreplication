@@ -13,7 +13,7 @@ setwd("~/GitHub/HUDreplication")
 output_folder <- paste0(getwd(), "/Data/Generated")
 input_folder <- paste0(getwd(), "/Data/Original")
 
-
+sf_use_s2(FALSE)
 # Load the adsprocessed_JPE data
 adsprocessed_data <- readRDS(paste0(input_folder, "/adsprocessed_JPE_censor.rds"))
 
@@ -48,11 +48,12 @@ states_to_process <- c(
 )
 
 # Initialize an empty dataframe to store all tract-place mappings
-all_tract_place_mappings <- data.frame()
+all_block_place_mappings <- data.frame()
 
 census_year = 2010
 # Process each state
 for (state_fips in names(states_to_process)) {
+  state_abbr <- states_to_process[state_fips]
   intersection_file <- paste0(output_folder, 
                               "/Intersection Files/block_place_intersection_",
                               state_abbr, 
@@ -72,17 +73,13 @@ for (state_fips in names(states_to_process)) {
   }
   
   tract_file <- tracts(state = state_abbr, cb = TRUE, year = census_year)
-  tract_file$tract_area <- st_area(tracts)
-  
+  tract_file$tract_area <- st_area(tract_file)
   # Calculate areas and coverage percentages
   # Make geometries valid
   block_place_intersections <- st_make_valid(block_place_intersections)
-  
+
   # Calculate intersection areas
   block_place_intersections$intersection_area <- st_area(block_place_intersections)
-  
-  # Calculate tract areas
-  tracts$tract_area <- st_area(tracts)
   
   # Join tract areas to intersection data
   block_place_intersections <- block_place_intersections %>%
@@ -90,74 +87,36 @@ for (state_fips in names(states_to_process)) {
                 st_drop_geometry() %>% 
                 select(GEO_ID, tract_area), 
               by = "GEO_ID")
-}
-
- 
-  
-  # Calculate coverage percentage
-  tract_place_intersection$coverage_pct <- as.numeric(tract_place_intersection$intersection_area / tract_place_intersection$tract_area)
-  
-  # For each tract, find the place with the largest coverage
-  best_matches <- tract_place_intersection %>%
-    group_by(GEO_ID) %>%
-    arrange(desc(coverage_pct)) %>%
-    slice(1) %>%
-    ungroup()
-  
-  # Create clean dataset with tract-to-place mapping
-  state_tract_place_mapping <- best_matches %>%
-    st_drop_geometry() %>%
-    select(tract_geoid = GEO_ID, place_geoid = GEOID, place_name = NAME.1, coverage_pct) %>%
-    mutate(
-      tract_geoid = sub("^.*US", "", tract_geoid),
-      state_fips = state_fips,
-      state_abbr = state_abbr
+  all_block_place_mappings <- rbind(
+    all_block_place_mappings, 
+    block_place_intersections
     )
-  
-  cat("Completed processing for", state_abbr, "\n")
-  cat("Number of tracts matched to places:", nrow(state_tract_place_mapping), "\n")
-  
-  # Append to the combined dataframe
-  all_tract_place_mappings <- rbind(all_tract_place_mappings, state_tract_place_mapping)
-  
-  # Clean up to free memory
-  rm(tract_place_intersection, best_matches, state_tract_place_mapping)
-  if (exists("tracts")) rm(tracts)
-  if (exists("places")) rm(places)
-  gc()
 }
-
+   
 cat("\nSpatial merge completed for all states. Each tract is matched to at most one place (the one with largest coverage).\n")
-cat("Total number of tracts matched to places:", nrow(all_tract_place_mappings), "\n")
-
 intersection_dir <- paste0(output_folder, "/Intersection Files")
 
-# Save the combined tract-place mapping
-saveRDS(all_tract_place_mappings, file = paste0(intersection_dir, "/all_tract_place_mappings.rds"))
+# Save the combined block-place mapping
+saveRDS(all_block_place_mappings, file = paste0(intersection_dir, "/all_block_place_mappings"))
 
-# Load the tract-place mapping, to run the file after it has been generated
-tract_place_mapping <- readRDS(paste0(intersection_dir, "/all_tract_place_mappings.rds"))
-
-# Display the first few rows of the mapping
-cat("\nFirst few rows of the tract-to-place mapping:\n")
-print(head(tract_place_mapping))
-
-
-
-
-# Process all observations in adsprocessed_data
-cat("\nProcessing all observations and merging with place information...\n")
+# Load the block-place mapping, to run the file after it has been generated
+block_place_mappings <- readRDS(paste0(intersection_dir, "/all_block_place_mappings"))
 
 # Extract tract GEOID from block GEOID (first 11 characters)
 cat("\nExtracting tract GEOID from block GEOID and merging with place information...\n")
 adsprocessed_data <- adsprocessed_data %>%
-  mutate(tract_geoid = substr(GEOID10, 1, nchar(GEOID10)-4)) %>%
-  mutate(tract_geoid = sprintf("%011s", tract_geoid))
+  mutate(block_geoid = substr(GEOID10, 1, nchar(GEOID10)-3)) %>%
+  mutate(block_geoid = sprintf("%011s", block_geoid))
 
+block_place_mappings  <- block_place_mappings %>%
+  mutate(block_geoid = paste0(STATE, COUNTY, TRACT, BLKGRP)) %>%
+  group_by(block_geoid) %>%
+  mutate(rank = rank(-intersection_area)) %>%
+  filter(rank == 1)
 
 # Merge with tract_place_mapping to get place information
 adsprocessed_data <- adsprocessed_data %>%
-  left_join(tract_place_mapping, by = c("tract_geoid"))
+  left_join(block_place_mappings, by = c("block_geoid"))
 
 # For blocks without a corresponding place, fill in with county information
 cat("\nFilling in county information for blocks without a corresponding place...\n")
@@ -227,8 +186,6 @@ cat("Saved processed data to RDS:", rds_output_path, "\n")
 csv_output_path <- file.path(output_folder, "adsprocessed_correct_cities.csv")
 write.csv(adsprocessed_data_processed, csv_output_path, row.names = FALSE)
 cat("Saved processed data to CSV format:", csv_output_path, "\n")
-
-
 
 
 # First, identify list columns that will be removed
@@ -313,7 +270,6 @@ cat("Found", nrow(blkgrp_with_multiple_ads), "block groups with multiple ad comb
 cat("Found", nrow(ad_combos_with_multiple_blkgrps), "ad combinations spanning multiple block groups\n")
 
 
-
 # Add indicators back to the original ad_combinations dataframe
 ad_combinations <- ad_combinations %>%
   left_join(blkgrp_with_multiple_ads %>% select(blkgrp, has_multiple_ads), by = "blkgrp") %>%
@@ -349,10 +305,6 @@ if(nrow(selected_tracts) > 0) {
 } else {
   cat("No matching records found for the specified GEOIDs\n")
 }
-
-# Note that both tract_geoids point to the place_name Chardon, so we can use either one without inaccuracy in our generated place names
-
-
 
 # Check if the same ad variables are used across different datasets for identification
 cat("\nChecking consistency of ad variables across datasets...\n")
