@@ -3,15 +3,25 @@
 /* Updated by Shi Chen on Aug 14, 2024 */
 
 clear
-import delimited "${DATA}/adsprocessed_JPE.csv", bindquote(strict)
 
+// CSV has formatting issues
+//import delimited "${DATA}/Generated/adsprocessed_JPE.csv", bindquote(strict)
+
+// USING DTA FORMAT INSTEAD
+use "$DATA/Generated/adsprocessed_correct_cities.dta", clear
+
+// rename existing upper case vars to avoid duplications
+rename BLKGRP BLKGRP_UPPER
+rename STATE STATE_UPPER
+rename TESTERID TESTERID_UPPER
+rename *,lower
 /*-------------------------------------*/
 /*---- Cleaning, labelling variables --*/
 /*-------------------------------------*/
 
 qui gen show = stotunit
 qui gen home_av = savlbad
-qui replace home_av = "." if home_av == "NA" | home_av == "-1"
+qui replace home_av = . if home_av == -1
 
 qui gen market = substr(control,1,2)
 
@@ -28,21 +38,24 @@ qui label variable othrace "Other Race"
 qui label define race 1 "White" 2 "African American" 3 "Hispanic" 4 "Asian" 5 "Other Race"
 qui label values aprace race
 
-global DESVARS "show home_av w2012pc_ad b2012pc_ad a2012pc_ad hisp2012pc_ad logadprice sequencex month arelate2 hhmtype sapptam tsexx thhegai tpegai thighedu tcurtenr algncur aelng1 dpmtexp amovers age aleasetp acarown"
+global DESVARS "show home_av w2012pc_ad b2012pc_ad a2012pc_ad hisp2012pc_ad logadprice sequence_x month arelate2 hhmtype sapptam tsex_x thhegai tpegai thighedu tcurtenr algncur aelng1 dpmtexp amovers age aleasetp acarown"
 
 foreach var in $DESVARS {
-	qui cap replace `var' = "." if `var' == "NA" | `var' == ""
-	qui cap destring `var', replace force
+	cap replace `var' = "." if `var' == "NA" | `var' == ""
+	cap destring `var', replace force
 }
 
 qui replace show = . if show < 0
 qui replace home_av = 0 if home_av > 1 & home_av != .
 	
+
 /*-------------------------------------*/
 /*---- Getting correct city names -----*/
 /*-------------------------------------*/
 
-do "${CODE}/data_cleaner.do"
+// STILL RUN THIS TO CROSS-CHECK HOW MANY UNIQUE VALUES ARE HERE
+// MISSING SUPPORTING FILES IN CURRENT PR ... WAIT FOR LATER
+// do "${CODE}/data_cleaner.do"
 
 /*-------------------------------------*/
 /*---- Regressions --------------------*/
@@ -50,11 +63,12 @@ do "${CODE}/data_cleaner.do"
 
 global CLUSTER "control market"
 global CONTVARS "w2012pc_ad b2012pc_ad a2012pc_ad hisp2012pc_ad logadprice"
-global ABSVARSSAME "control sequencex month market arelate2 hhmtype sapptam tsexx thhegai tpegai thighedu tcurtenr algncur aelng1 dpmtexp amovers age aleasetp acarown"
+global ABSVARSSAME "control sequence_x month market arelate2 hhmtype sapptam tsex_x thhegai tpegai thighedu tcurtenr algncur aelng1 dpmtexp amovers age aleasetp acarown"
 global depvar_1 = "ofcolor"
 global depvar_2 = "i.aprace"
 global tvar_1 = "show"
 global tvar_2 = "home_av"
+
 
 forvalues t = 1/2 {
 	foreach cluster in $CLUSTER {
@@ -71,7 +85,7 @@ forvalues t = 1/2 {
 					local geofe = "hcity"
 				}
 				else {
-					local geofe = "temp_city"
+					local geofe = "county_name"
 				}
 				local tvaruse = "${tvar_`t'}"
 				disp " "

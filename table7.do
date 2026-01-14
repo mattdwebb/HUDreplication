@@ -2,7 +2,12 @@
 clear
 
 
-import delimited "${DATA}/HUDprocessed_JPE_census_042021.csv"
+//import delimited "${DATA}/HUDprocessed_JPE_census_042021.csv"
+
+use "$DATA/Generated/HUDprocessed_census_correct_cities.dta"
+
+rename *,lower
+
 
 /*--------------------------------------*/
 /*cleaning*/
@@ -10,35 +15,35 @@ import delimited "${DATA}/HUDprocessed_JPE_census_042021.csv"
 
 /*generate incorrect ofcolor variable*/
 gen ofcolor = 0
-replace ofcolor = 1 if apracex == 2 | apracex == 3 | apracex == 4
+replace ofcolor = 1 if aprace_x == 2 | aprace_x == 3 | aprace_x == 4
 
 /*generate the market variable*/
 gen market = substr(control,1,2)
 
 /*generate race variables*/
-	gen racecat2 = apracex==2
+	gen racecat2 = aprace_x==2
 	label variable racecat2 "African American"
 
-	gen racecat3 = apracex==3 
+	gen racecat3 = aprace_x==3 
 	label variable racecat3 "Hispanic"
 
-	gen racecat4 = apracex==4 
+	gen racecat4 = aprace_x==4 
 	label variable racecat4 "Asian"
 
-	gen racecat5 = apracex==5 
+	gen racecat5 = aprace_x==5 
 	label variable racecat5 "Other Race"
 
 /*generate incorrect ofcolor variable*/
 	gen newofcolor = 0
-	replace newofcolor = 1 if apracex == 2 | apracex == 3 | apracex == 4 | apracex == 5
+	replace newofcolor = 1 if aprace_x == 2 | aprace_x == 3 | aprace_x == 4 | aprace_x == 5
 	
 	/* treat "other race" as a seperate group */
 	qui gen othrace = 0
-	qui replace othrace = 1 if aprace == 5
+	qui replace othrace = 1 if aprace_x == 5
 	qui label variable othrace "Other Race"
 
 /*destring everything*/
-
+/*
 replace savlbadx = "." if savlbadx == "NA"
 replace sapptamx = "." if sapptamx == "NA"
 replace dpmtexpx = "." if dpmtexpx == "NA"
@@ -46,8 +51,9 @@ replace aleasetpx = "." if aleasetpx  == "NA"
 replace acarownx = "." if acarownx  == "NA"
 
 replace acarownx = "." if acarownx  == "NA"
+*/
 
-global VARS "whitehi_rec ofcolor w2012pc_ad b2012pc_ad a2012pc_ad hisp2012pc_ad logadprice povrate_ad  sequencexx monthx   arelate2x hhmtypex savlbadx stotunit_rec sapptamx tsexxx thhegaix tpegaix thighedux tcurtenrx algncurx aelng1x dpmtexpx amoversx agex aleasetpx acarownx "
+global VARS "whitehi_rec ofcolor w2012pc_ad b2012pc_ad a2012pc_ad hisp2012pc_ad logadprice povrate_ad  sequence_x_x month_x   arelate2_x hhmtype_x savlbad_x stotunit_rec sapptam_x tsex_x_x thhegai_x tpegai_x thighedu_x tcurtenr_x algncur_x aelng1_x dpmtexp_x amovers_x age_x aleasetp_x acarown_x"
 
 
 foreach var in $VARS {
@@ -56,7 +62,7 @@ foreach var in $VARS {
 }
 
 /*corrected city*/
-	do "${CODE}/data_cleaner.do"
+//	do "${CODE}/data_cleaner.do"
 	
 /*--------------------------------------*/
 /*regressions*/
@@ -72,7 +78,7 @@ global CLUSTER "control "
 global DEPVAR "ofcolor race*"
 
 global CONTVARS "w2012pc_ad b2012pc_ad a2012pc_ad hisp2012pc_ad logadprice povrate_ad"
-global ABSVARSSAME "control sequencexx monthx market arelate2x hhmtypex savlbadx stotunit_rec sapptamx tsexxx thhegaix tpegaix thighedux tcurtenrx algncurx aelng1x dpmtexpx amoversx agex aleasetpx acarownx "
+global ABSVARSSAME "control sequence_x_x month_x market arelate2_x hhmtype_x savlbad_x stotunit_rec sapptam_x tsex_x_x thhegai_x tpegai_x thighedu_x tcurtenr_x algncur_x aelng1_x dpmtexp_x amovers_x age_x aleasetp_x acarown_x "
 
 global depvar_1 = "ofcolor"
 global depvar_2 = "racecat*"
@@ -96,10 +102,10 @@ foreach cluster in $CLUSTER {
 				local depvaruse = "${depvar_`d'}"
 			}
 			if inlist(`cols',1,2) {
-				local geofe = "hcity"
+				local geofe = "hcity_x"
 			}
 			else if inlist(`cols',3,3){
-				local geofe = "temp_city"
+				local geofe = "place_name"
 			}
 			
 			disp " "

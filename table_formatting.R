@@ -1,6 +1,18 @@
 # Load necessary libraries
 library(stringr)
 
+# Set output directory for tables
+output_dir <- "cities-from-geoid/Output"
+
+# Create the directory if it doesn't exist
+if (!dir.exists(output_dir)) {
+  dir.create(output_dir, recursive = TRUE)
+  cat("Created output directory:", output_dir, "\n")
+} else {
+  cat("Output directory already exists:", output_dir, "\n")
+}
+
+
 generate_combined_table <- function(table_title, subtitle, panel_a_title, panel_b_title, table_number, single_panel, set_dashes = TRUE, top_rows = list(), bottom_rows = list(), show_minority_top = TRUE, show_minority_bottom = TRUE, two_columns = FALSE) {
   
   # Automatically generate input_files and output_file based on table_number
@@ -181,12 +193,26 @@ generate_corrected_table <- function(table_title, subtitle, table_number, panel_
                                      col_names, set_dashes = TRUE, 
                                      show_minority = TRUE, corrected = TRUE,
                                      additional_rows = list(c())) {
-  
+
   output_file <- if (corrected) {
-    paste0("HUDreplication/Output/corrected_table", table_number, ".tex")
+    paste0(output_dir, "/Corrected Tables/corrected_table", table_number, ".tex")
   } else {
-    paste0("HUDreplication/Output/replicated_table", table_number, ".tex")
+    paste0(output_dir, "/Replicated Tables/replicated_table", table_number, ".tex")
   }
+
+  # Create directories for Corrected and Replicated Tables if they don't exist
+  corrected_dir <- file.path(output_dir, "Corrected Tables")
+  replicated_dir <- file.path(output_dir, "Replicated Tables")
+  
+  if (!dir.exists(corrected_dir)) {
+    dir.create(corrected_dir, recursive = TRUE)
+    cat("Created directory for corrected tables:", corrected_dir, "\n")
+  } 
+  
+  if (!dir.exists(replicated_dir)) {
+    dir.create(replicated_dir, recursive = TRUE)
+    cat("Created directory for replicated tables:", replicated_dir, "\n")
+  } 
 
   # Function to extract relevant data from LaTeX table
   extract_data <- function(file_path) {
@@ -362,14 +388,16 @@ generate_combined_table(
 
 ### Generate Full Replication Tables for Appendix B
 
+
+
 # Corrected Table 5
 generate_corrected_table(
   table_title = "Discriminatory Steering and Availability of Advertised Properties",
   subtitle = "Table 5, C\\&T 2022",
   table_number = 5,
   panel_title = "Dependent Variable",
-  input_file_categories = "HUDreplication/Output/table5_categories_corrected.tex",
-  input_file_minority = "HUDreplication/Output/table5_minority_corrected.tex",
+  input_file_categories = paste0(output_dir, "/table5_categories_corrected.tex"),
+  input_file_minority = paste0(output_dir, "/table5_minority_corrected.tex"),
   col_names = c("(1)", "(2)", "(3)", "(4)"),
   additional_rows = list( c("ln(price) advertised home", "No", "Yes", "No", "Yes"),
                           c("Racial composition advertised home", "No", "Yes", "No", "Yes")),
@@ -384,8 +412,8 @@ generate_corrected_table(
   subtitle = "Table 6, C\\&T 2022",
   table_number = 6,
   panel_title = "Dependent Variable: White Household Share",
-  input_file_categories = "HUDreplication/Output/table6_categories_corrected.tex",
-  input_file_minority = "HUDreplication/Output/table6_minority_corrected.tex",
+  input_file_categories = paste0(output_dir, "/table6_categories_corrected.tex"),
+  input_file_minority = paste0(output_dir, "/table6_minority_corrected.tex"),
   col_names = c("(1)", "(2)", "(3)", "(4)", "(5)"),
   additional_rows = list( c("Share white advertised home", "No", "Yes", "Yes", "Yes", "Yes"),
                           c("ln(price) advertised home", "No", "No", "Yes", "Yes", "Yes"),
@@ -401,8 +429,8 @@ generate_corrected_table(
   subtitle = "Table 7, C\\&T 2022",
   table_number = 7,
   panel_title = "Dependent Variable: White Household Share by Income",
-  input_file_categories = "HUDreplication/Output/table7_categories_corrected.tex",
-  input_file_minority = "HUDreplication/Output/table7_minority_corrected.tex",
+  input_file_categories = paste0(output_dir, "/table7_categories_corrected.tex"),
+  input_file_minority = paste0(output_dir, "/table7_minority_corrected.tex"),
   col_names = c("High Income", "Middle Income", "Low Income"),
   additional_rows = list( c("Share white advertised home", "Yes", "Yes", "Yes"),
                           c("ln(price) advertised home", "Yes", "Yes", "Yes"),
@@ -418,8 +446,8 @@ generate_corrected_table(
   subtitle = "Table 8A Columns 1 and 2, C\\&T 2022",
   table_number = 8.11,
   panel_title = "School Specific Test Scores",
-  input_file_categories = "HUDreplication/Output/table8A1_categories_corrected.tex",
-  input_file_minority = "HUDreplication/Output/table8A1_minority_corrected.tex",
+  input_file_categories = paste0(output_dir, "/table8A1_categories_corrected.tex"),
+  input_file_minority = paste0(output_dir, "/table8A1_minority_corrected.tex"),
   col_names = c("Elementary School (1)", "Middle School (2)"),
   additional_rows = list( c("ln(price) advertised home", "Yes", "Yes"),
                           c("Racial composition advertised home", "Yes", "Yes"),
@@ -434,8 +462,8 @@ generate_corrected_table(
   subtitle = "Table 8A Columns 3 and 4, C\\&T 2022",
   table_number = 8.12,
   panel_title = "School Specific Test Scores",
-  input_file_categories = "HUDreplication/Output/table8A2_categories_corrected.tex",
-  input_file_minority = "HUDreplication/Output/table8A2_minority_corrected.tex",
+  input_file_categories = paste0(output_dir, "/table8A2_categories_corrected.tex"),
+  input_file_minority = paste0(output_dir, "/table8A2_minority_corrected.tex"),
   col_names = c("Assaults (3)", "Elementary School (4)"),
   additional_rows = list( c("ln(price) advertised home", "Yes", "Yes"),
                           c("Racial composition advertised home", "Yes", "Yes"),
@@ -450,8 +478,8 @@ generate_corrected_table(
   subtitle = "Table 8 Panel B, C\\&T 2022",
   table_number = 8.2,
   panel_title = "American Community Survey",
-  input_file_categories = "HUDreplication/Output/table8B_categories_corrected.tex",
-  input_file_minority = "HUDreplication/Output/table8B_minority_corrected.tex",
+  input_file_categories = paste0(output_dir, "/table8B_categories_corrected.tex"),
+  input_file_minority = paste0(output_dir, "/table8B_minority_corrected.tex"),
   col_names = c("Poverty Rate (1)", "High Skill (2)", "College (3)", "Single-Parent Household (4)", "Ownership Rate (5)"),
   additional_rows = list( c("ln(price) advertised home", "Yes", "Yes", "Yes", "Yes", "Yes"),
                           c("Racial composition advertised home", "Yes", "Yes", "Yes", "Yes", "Yes"),
@@ -467,8 +495,8 @@ generate_corrected_table(
   subtitle = "Table 9 Panel A, C\\&T 2022",
   table_number = 9.1,
   panel_title = "Pollution: Differences for Entire Sample",
-  input_file_categories = "HUDreplication/Output/table9A_categories_corrected.tex",
-  input_file_minority = "HUDreplication/Output/table9A_minority_corrected.tex",
+  input_file_categories = paste0(output_dir, "/table9A_categories_corrected.tex"),
+  input_file_minority = paste0(output_dir, "/table9A_minority_corrected.tex"),
   col_names = c("Superfund", "Toxics", "PM"),
   additional_rows = list( c("ln(price) advertised home", "Yes", "Yes", "Yes"),
                           c("Racial composition advertised home", "Yes", "Yes", "Yes"),
@@ -484,8 +512,8 @@ generate_corrected_table(
   subtitle = "Table 9 Panel B, C\\&T 2022",
   table_number = 9.2,
   panel_title = "Pollution: Differences for Mothers",
-  input_file_categories = "HUDreplication/Output/table9B_categories_corrected.tex",
-  input_file_minority = "HUDreplication/Output/table9B_minority_corrected.tex",
+  input_file_categories = paste0(output_dir, "/table9B_categories_corrected.tex"),
+  input_file_minority = paste0(output_dir, "/table9B_minority_corrected.tex"),
   col_names = c("Superfund", "Toxics", "PM"),
   additional_rows = list( c("ln(price) advertised home", "Yes", "Yes", "Yes"),
                           c("Racial composition advertised home", "Yes", "Yes", "Yes"),
@@ -501,8 +529,8 @@ generate_corrected_table(
   subtitle = "Table 10A Columns 1 and 2, C\\&T 2022",
   table_number = 10.11,
   panel_title = "School Specific Test Scores",
-  input_file_categories = "HUDreplication/Output/table10A1_categories_corrected.tex",
-  input_file_minority = "HUDreplication/Output/table10A1_minority_corrected.tex",
+  input_file_categories = paste0(output_dir, "/table10A1_categories_corrected.tex"),
+  input_file_minority = paste0(output_dir, "/table10A1_minority_corrected.tex"),
   col_names = c("Elementary School (1)", "Middle School (2)"),
   additional_rows = list( c("ln(price) advertised home", "Yes", "Yes"),
                           c("Racial composition advertised home", "Yes", "Yes"),
@@ -517,8 +545,8 @@ generate_corrected_table(
   subtitle = "Table 10A Columns 3 and 4, C\\&T 2022",
   table_number = 10.12,
   panel_title = "School Specific Test Scores",
-  input_file_categories = "HUDreplication/Output/table10A2_categories_corrected.tex",
-  input_file_minority = "HUDreplication/Output/table10A2_minority_corrected.tex",
+  input_file_categories = paste0(output_dir, "/table10A2_categories_corrected.tex"),
+  input_file_minority = paste0(output_dir, "/table10A2_minority_corrected.tex"),
   col_names = c("Assaults (3)", "Elementary School (4)"),
   additional_rows = list( c("ln(price) advertised home", "Yes", "Yes"),
                           c("Racial composition advertised home", "Yes", "Yes"),
@@ -533,8 +561,8 @@ generate_corrected_table(
   subtitle = "Table 10 Panel B, C\\&T 2022",
   table_number = 10.2,
   panel_title = "American Community Survey",
-  input_file_categories = "HUDreplication/Output/table10B_categories_corrected.tex",
-  input_file_minority = "HUDreplication/Output/table10B_minority_corrected.tex",
+  input_file_categories = paste0(output_dir, "/table10B_categories_corrected.tex"),
+  input_file_minority = paste0(output_dir, "/table10B_minority_corrected.tex"),
   col_names = c("Poverty Rate (1)", "High Skill (2)", "College (3)", "Single-Parent Household (4)", "Ownership Rate (5)"),
   additional_rows = list( c("ln(price) advertised home", "Yes", "Yes", "Yes", "Yes", "Yes"),
                           c("Racial composition advertised home", "Yes", "Yes", "Yes", "Yes", "Yes"),
@@ -550,8 +578,8 @@ generate_corrected_table(
   subtitle = "Table 11, C\\&T 2022",
   table_number = 11,
   panel_title = "Dependent Variable",
-  input_file_categories = "HUDreplication/Output/table11_categories_corrected.tex",
-  input_file_minority = "HUDreplication/Output/table11_minority_corrected.tex",
+  input_file_categories = paste0(output_dir, "/table11_categories_corrected.tex"),
+  input_file_minority = paste0(output_dir, "/table11_minority_corrected.tex"),
   col_names = c("Low Poverty (1)", "Low Poverty: Families (2)", "Low Poverty: Moms (3)", "Low Poverty High Dad (4)", "Low Poverty High Dad: Families (5)", "Low Poverty High Dad: Moms (6)"),
   additional_rows = list(c()),
   set_dashes = FALSE,
@@ -565,8 +593,8 @@ generate_corrected_table(
   subtitle = "Table 12, C\\&T 2022",
   table_number = 12,
   panel_title = "Dependent Variable: log(Median Income)",
-  input_file_categories = "HUDreplication/Output/table12_categories_corrected.tex",
-  input_file_minority = "HUDreplication/Output/table12_minority_corrected.tex",
+  input_file_categories = paste0(output_dir, "/table12_categories_corrected.tex"),
+  input_file_minority = paste0(output_dir, "/table12_minority_corrected.tex"),
   col_names = c("All Testers", "Families", "Moms"),
   set_dashes = FALSE,
   show_minority = FALSE,
@@ -579,8 +607,8 @@ generate_corrected_table(
   subtitle = "Table 13A Columns 1 and 2, C\\&T 2022",
   table_number = 13.11,
   panel_title = "School Specific Test Scores",
-  input_file_categories = "HUDreplication/Output/table13A1_categories_corrected.tex",
-  input_file_minority = "HUDreplication/Output/table13A1_minority_corrected.tex",
+  input_file_categories = paste0(output_dir, "/table13A1_categories_corrected.tex"),
+  input_file_minority = paste0(output_dir, "/table13A1_minority_corrected.tex"),
   col_names = c("Elementary School (1)", "Middle School (2)"),
   additional_rows = list( c("ln(price) advertised home", "Yes", "Yes"),
                           c("Racial composition advertised home", "Yes", "Yes"),
@@ -595,8 +623,8 @@ generate_corrected_table(
   subtitle = "Table 13A Columns 3 and 4, C\\&T 2022",
   table_number = 13.12,
   panel_title = "School Specific Test Scores",
-  input_file_categories = "HUDreplication/Output/table13A2_categories_corrected.tex",
-  input_file_minority = "HUDreplication/Output/table13A2_minority_corrected.tex",
+  input_file_categories = paste0(output_dir, "/table13A2_categories_corrected.tex"),
+  input_file_minority = paste0(output_dir, "/table13A2_minority_corrected.tex"),
   col_names = c("Assaults (3)", "Elementary School (4)"),
   additional_rows = list( c("ln(price) advertised home", "Yes", "Yes"),
                           c("Racial composition advertised home", "Yes", "Yes"),
@@ -613,8 +641,8 @@ generate_corrected_table(
   subtitle = "Table 13 Panel B, C\\&T 2022",
   table_number = 13.2,
   panel_title = "American Community Survey",
-  input_file_categories = "HUDreplication/Output/table13B_categories_corrected.tex",
-  input_file_minority = "HUDreplication/Output/table13B_minority_corrected.tex",
+  input_file_categories = paste0(output_dir, "/table13B_categories_corrected.tex"),
+  input_file_minority = paste0(output_dir, "/table13B_minority_corrected.tex"),
   col_names = c("Poverty Rate (1)", "High Skill (2)", "College (3)", "Single-Parent Household (4)", "Ownership Rate (5)"),
   additional_rows = list( c("ln(price) advertised home", "Yes", "Yes", "Yes", "Yes", "Yes"),
                           c("Racial composition advertised home", "Yes", "Yes", "Yes", "Yes", "Yes"),
@@ -630,8 +658,8 @@ generate_corrected_table(
   subtitle = "Table 14 Panel B, C\\&T 2022",
   table_number = 14.2,
   panel_title = "B. Dependent Variable: Logarithm of Price",
-  input_file_categories = "HUDreplication/Output/table14B_categories_corrected.tex",
-  input_file_minority = "HUDreplication/Output/table14B_minority_corrected.tex",
+  input_file_categories = paste0(output_dir, "/table14B_categories_corrected.tex"),
+  input_file_minority = paste0(output_dir, "/table14B_minority_corrected.tex"),
   col_names = c("(1)", "(2)", "(3)", "(4)"),
   additional_rows = list(
     c("Share white advertised home", "No", "Yes", "Yes", "Yes"),

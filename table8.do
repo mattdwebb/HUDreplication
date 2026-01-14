@@ -10,21 +10,26 @@
 clear
 
 // import data
-use "${DATA}/Table 8.dta",replace
+use "${DATA}/Generated/HUDprocessed_census_correct_cities.dta",replace
 rename *, lower // Changes variables to lower case
 
 /*generate correct correct ofcolor and aprace variable*/
+
+/*generate incorrect ofcolor variable*/
+gen ofcolor = 0
+replace ofcolor = 1 if aprace_x == 2 | aprace_x == 3 | aprace_x == 4
+
 	gen noc = ofcolor
-	replace noc = 2 if apracex == 5
-	gen nrace = apracex
+	replace noc = 2 if aprace_x == 5
+	gen nrace = aprace_x
 
 /*generate the market variable*/
-	drop market
+	cap drop market
 	gen market = substr(control,1,2)
 
 /*Label Race variable*/
 
-	recode apracex (1=1 "White") (2=2 "African American") (3=3 "Hispanic") (4=4 "Asian") (5=5 "Other Race Categories"), gen(race)
+	recode aprace_x (1=1 "White") (2=2 "African American") (3=3 "Hispanic") (4=4 "Asian") (5=5 "Other Race Categories"), gen(race)
 
 /*Rename variables*/
 
@@ -36,15 +41,15 @@ rename *, lower // Changes variables to lower case
 	
 	rename ofcolor oc
 	drop race
-	rename apracex race
+	rename aprace_x race
 	
 tostring zip_ad, replace
 
 // clean city names
-do "${CODE}/data_cleaner.do"
+// do "${CODE}/data_cleaner.do"
 
 
-save "${OUTPUT}\Table8_adjustedcities_score.dta", replace
+// save "${OUTPUT}\Table8_adjustedcities_score.dta", replace
 
 	
 /*----------------------------------------------*/
@@ -57,7 +62,7 @@ global CLUSTER "control market"
 global DVAR "oc noc race nrace"
 
 global CONTVARS "w2012pc_ad b2012pc_ad a2012pc_ad hisp2012pc_ad logadprice"
-global ABSVARSSAME "control sequencex monthx market arelate2x sapptamx tsexxx thhegaix tpegaix thighedux tcurtenrx algncurx aelng1x dpmtexpx amoversx agex aleasetpx acarownx"
+global ABSVARSSAME "control sequence_x month_x market arelate2_x sapptam_x tsex_x_x thhegai_x tpegai_x thighedu_x tcurtenr_x algncur_x aelng1_x dpmtexp_x amovers_x age_x aleasetp_x acarown_x"
 
 global YVARS "ranking pov"  /*--stems */ 
 
@@ -66,7 +71,7 @@ foreach yvar in $YVARS {
 	foreach cluster in $CLUSTER {
 		foreach dvar in $DVAR {
 	
-		qui reghdfe `yvar' i.`dvar' `yvar'_ad ${CONTVARS}, absorb(${ABSVARSSAME} hcity) keepsingle cluster(`cluster')
+		qui reghdfe `yvar' i.`dvar' `yvar'_ad ${CONTVARS}, absorb(${ABSVARSSAME} hcity_x) keepsingle cluster(`cluster')
 
 		// Extract number of levels of city variable
         	matrix hdfe = e(dof_table)
@@ -93,7 +98,7 @@ foreach yvar in $YVARS {
 	foreach cluster in $CLUSTER {
 		foreach dvar in $DVAR {
 		
-		qui reghdfe `yvar' i.`dvar' `yvar'_ad ${CONTVARS}, absorb(${ABSVARSSAME} temp_city) keepsingle cluster(`cluster')
+		qui reghdfe `yvar' i.`dvar' `yvar'_ad ${CONTVARS}, absorb(${ABSVARSSAME} place_name) keepsingle cluster(`cluster')
 
 		// Extract number of levels of city variable
         	matrix hdfe = e(dof_table)

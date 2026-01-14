@@ -34,7 +34,7 @@ program define process_data
         }
     }
     // import data
-    import delimited "${DATA}/`data_file'", bindquote(strict) clear
+    import delimited "${DATA}/Generated/`data_file'", bindquote(strict) clear
 	gen id = _n
 	
 	display "imported ${DATA}/`data_file'"
@@ -80,7 +80,7 @@ program define process_data
     }
 	
     do "${CODE}/data_cleaner.do"
-
+    
     // Save the cleaned data to be reloaded later
     save "${OUTPUT}/`cleaned_file'", replace
 end
@@ -271,7 +271,7 @@ program define correct_table, rclass
         }
         else if "`analysis_type'" == "corrected" {
             local racial_minority = "ofcolor othrace"
-            local geofe = "temp_city"
+            local geofe = "place_name"
         }
 
         // Print the current specification of the model

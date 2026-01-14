@@ -3,7 +3,7 @@ clear all
 // Set paths, open log and install packages
 
 	/* Set path to the parent folder of the local location of the git repository */
-	global PATH "/PATH/TO/PARENT/OF/REPOSITORY/HERE"
+	global PATH "/Users/shichen/Desktop"
 
 	global CODE "${PATH}/HUDreplication" //set the file path to the main code directory
 	global DATA "${CODE}/Data" // set the file path to the data subdirectory
