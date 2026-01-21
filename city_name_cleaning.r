@@ -468,3 +468,55 @@ write.csv(hud_testscores_with_place, file.path(output_folder, "HUDprocessed_test
 
 cat("Merged datasets saved to CSV format\n")
 
+hud_census_with_place_stata <- hud_census_with_place %>%
+  # Remove trailing periods
+  rename_all(~ gsub("\\.$", "", .)) %>%
+  # Replace dots and other illegal characters with underscores
+  rename_all(~ gsub("\\.", "_", .)) %>%
+  rename_all(~ gsub("\\-", "_", .)) %>%
+  # Replace any other special characters that might cause issues
+  rename_all(~ gsub("[^a-zA-Z0-9_]", "_", .)) %>%
+  # Truncate to 32 chars
+  rename_all(~ ifelse(nchar(.) > 32, substr(., 1, 32), .)) %>%
+  # Drop any columns that include lists
+  select_if(~ !is.list(.))
+
+dta_output_path <- file.path(output_folder, "HUDprocessed_census_correct_cities.dta")
+haven::write_dta(hud_census_with_place_stata, dta_output_path)
+
+hud_names_with_place_stata <- hud_names_with_place %>%
+  # Remove trailing periods
+  rename_all(~ gsub("\\.$", "", .)) %>%
+  # Replace dots and other illegal characters with underscores
+  rename_all(~ gsub("\\.", "_", .)) %>%
+  rename_all(~ gsub("\\-", "_", .)) %>%
+  # Replace any other special characters that might cause issues
+  rename_all(~ gsub("[^a-zA-Z0-9_]", "_", .)) %>%
+  # Truncate to 32 chars
+  rename_all(~ ifelse(nchar(.) > 32, substr(., 1, 32), .)) %>%
+  # Drop any columns that include lists
+  select_if(~ !is.list(.))
+
+dta_output_path <- file.path(output_folder, "HUDprocessed_names_correct_cities.dta")
+haven::write_dta(hud_names_with_place_stata, dta_output_path)
+
+hud_testscores_with_place_stata <- hud_testscores_with_place %>%
+  # Remove trailing periods
+  rename_all(~ gsub("\\.$", "", .)) %>%
+  # Replace dots and other illegal characters with underscores
+  rename_all(~ gsub("\\.", "_", .)) %>%
+  rename_all(~ gsub("\\-", "_", .)) %>%
+  # Replace any other special characters that might cause issues
+  rename_all(~ gsub("[^a-zA-Z0-9_]", "_", .)) %>%
+  # Truncate to 32 chars
+  rename_all(~ ifelse(nchar(.) > 32, substr(., 1, 32), .)) %>%
+  # Drop any columns that include lists
+  select_if(~ !is.list(.))
+
+dta_output_path <- file.path(output_folder, "HUDprocessed_testscores_correct_cities.dta")
+haven::write_dta(hud_testscores_with_place_stata, dta_output_path)
+
+cat("Saved processed data to Stata format:", dta_output_path, "\n")
+
+
+
