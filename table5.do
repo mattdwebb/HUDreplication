@@ -5,10 +5,10 @@
 clear
 
 // CSV has formatting issues
-//import delimited "${DATA}/Generated/adsprocessed_JPE.csv", bindquote(strict)
+//import delimited "${DATA}/adsprocessed_correct_cities.csv", bindquote(strict)
 
 // USING DTA FORMAT INSTEAD
-use "$DATA/Generated/adsprocessed_correct_cities.dta", clear
+use "$DATA/adsprocessed_correct_cities.dta", clear
 
 // rename existing upper case vars to avoid duplications
 rename BLKGRP BLKGRP_UPPER
@@ -55,7 +55,7 @@ qui replace home_av = 0 if home_av > 1 & home_av != .
 
 // STILL RUN THIS TO CROSS-CHECK HOW MANY UNIQUE VALUES ARE HERE
 // MISSING SUPPORTING FILES IN CURRENT PR ... WAIT FOR LATER
-// do "${CODE}/data_cleaner.do"
+do "${CODE}/data_cleaner.do"
 
 /*-------------------------------------*/
 /*---- Regressions --------------------*/
@@ -74,8 +74,8 @@ forvalues t = 1/2 {
 	foreach cluster in $CLUSTER {
 		forvalues d = 1/2 {
 			local ct_`t'_`d'_`cluster' = " "
-			forvalues cols = 1/3 {
-				if inlist(`cols',2,3) & `d'==1 {
+			forvalues cols = 1/4 {
+				if inlist(`cols',2,3,4) & `d'==1 {
 					local depvaruse = "ofcolor othrace"
 				}
 				else {
@@ -84,8 +84,11 @@ forvalues t = 1/2 {
 				if inlist(`cols',1,2) {
 					local geofe = "hcity"
 				}
-				else {
-					local geofe = "county_name"
+				if inlist(`cols',3) {
+					local geofe = "temp_city"
+				}
+				if inlist(`cols',4) {
+					local geofe = "place_name"
 				}
 				local tvaruse = "${tvar_`t'}"
 				disp " "
@@ -122,7 +125,7 @@ forvalues t = 1/2 {
 			using "${OUTPUT}/table5_`t'_`d'_`cluster'.tex", ///
 			cells(b(fmt(a4) star) se(fmt(a4) par) ci(fmt(a4) par)) collabels(none) ///
 			replace booktabs label ///
-			mgroups("Original Data" "Correct Race Only" "Updated City Name \& Correct Race",pattern(1 1 1) ///
+			mgroups("Original Data" "Correct Race Only" "Updated City Name \& Correct Race" "PLACE Name \& Correct Race",pattern(1 1 1 1) ///
 			prefix(\multicolumn{@span}{c}{) suffix(}) span erepeat(\cmidrule(lr){@span})) ///
 			title(Differences in `tvar', Clustered at `cluster') ///
 			alignment(c) page(dcolumn) nomtitle ///

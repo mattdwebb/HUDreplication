@@ -4,7 +4,7 @@ clear
 
 //import delimited "${DATA}/HUDprocessed_JPE_census_042021.csv"
 
-use "$DATA/Generated/HUDprocessed_census_correct_cities.dta"
+use "$DATA/HUDprocessed_census_correct_cities.dta"
 
 rename *,lower
 
@@ -62,7 +62,8 @@ foreach var in $VARS {
 }
 
 /*corrected city*/
-//	do "${CODE}/data_cleaner.do"
+gen hcity = hcity_x
+do "${CODE}/data_cleaner.do"
 	
 /*--------------------------------------*/
 /*regressions*/
@@ -93,9 +94,9 @@ foreach cluster in $CLUSTER {
 		/*string for esttab tables*/
 		local coltab_`d'_`cluster' = " "
 		
-		forvalues cols = 1/3 {
+		forvalues cols = 1/4 {
 			
-			if inlist(`cols',2,3) &  `d'==1 {
+			if inlist(`cols',2,3,4) &  `d'==1 {
 				local depvaruse = "newofcolor othrace"
 			}
 			else{
@@ -104,7 +105,10 @@ foreach cluster in $CLUSTER {
 			if inlist(`cols',1,2) {
 				local geofe = "hcity_x"
 			}
-			else if inlist(`cols',3,3){
+			if inlist(`cols',3){
+				local geofe = "temp_city"
+			}
+			if inlist(`cols',4){
 				local geofe = "place_name"
 			}
 			
@@ -150,7 +154,7 @@ foreach cluster in $CLUSTER {
 		using "${OUTPUT}/table7_d`d'_clust_`cluster'.tex", ///
 		replace booktabs label ///
 		cells(b(fmt(a4) star) se(fmt(a4) par) ci(fmt(a4) par)) collabels(none) ///
-		mgroups("Original Data" "Updated City Name Only"  "Updated City Name \& Correct Race" ,pattern(1 1 1) ///
+		mgroups("Original Data" "Updated City Name Only"  "Updated City Name \& Correct Race"  "PLACE Name \& Correct Race",pattern(1 1 1 1) ///
 		prefix(\multicolumn{@span}{c}{) suffix(}) span erepeat(\cmidrule(lr){@span})) ///
 		title( Discriminatory Steering and Neighborhood Racial Composition by Income (Panel `d')) ///
 		alignment(c) page(dcolumn) nomtitle ///

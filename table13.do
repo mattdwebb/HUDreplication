@@ -3,7 +3,7 @@
 /* Updated on Aug 14, 2024 */
 
 clear
-import delimited "${DATA}/HUDprocessed_JPE_census_042021.csv", bindquote(strict)
+import delimited "${DATA}/HUDprocessed_census_correct_cities.csv", bindquote(strict)
 
 /*-------------------------------------*/
 /*---- Cleaning, labelling variables --*/
@@ -61,8 +61,8 @@ forvalues t = 1/2 {
 		foreach cluster in $CLUSTER {
 			forvalues d = 1/2 {
 				local ct_`t'_`d'_`cluster' = " "
-				forvalues cols = 1/4 {
-					if inlist(`cols',3,4) & `d'==1 {
+				forvalues cols = 1/5 {
+					if inlist(`cols',3,4,5) & `d'==1 {
 						local depvaruse = "ofcolor othrace"
 					}
 					else {
@@ -71,8 +71,11 @@ forvalues t = 1/2 {
 					if inlist(`cols',1,2,3) {
 						local geofe = "hcity"
 					}
-					else {
+					if inlist(`cols',4) {
 						local geofe = "temp_city"
+					}
+					if inlist(`cols',5) {
+						local geofe = "place_name"
 					}
 					local tvaruse = "${tvar_`t'}"
 					disp " "
@@ -113,7 +116,7 @@ forvalues t = 1/2 {
 			using "${OUTPUT}/table13_`t'_`d'_`cluster'.tex", ///
 			cells(b(fmt(a4) star) se(fmt(a4) par) ci(fmt(a4) par)) collabels(none) ///
 			replace booktabs label ///
-			mgroups("Original Results" "Original Data" "Correct Race" "Updated City Name \& Correct Race",pattern(1 1 1 1) ///
+			mgroups("Original Results" "Original Data" "Correct Race" "Updated City Name \& Correct Race" "PLACE Name \& Correct Race",pattern(1 1 1 1 1) ///
 			prefix(\multicolumn{@span}{c}{) suffix(}) span erepeat(\cmidrule(lr){@span})) ///
 			title(Neighbourhood Attributes as `tvar', Clustered at `cluster') ///
 			alignment(c) page(dcolumn) nomtitle ///

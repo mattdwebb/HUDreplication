@@ -10,7 +10,7 @@
 clear
 
 // import data
-use "${DATA}/Generated/HUDprocessed_census_correct_cities.dta",replace
+use "${DATA}/HUDprocessed_census_correct_cities.dta",replace
 rename *, lower // Changes variables to lower case
 
 /*generate correct correct ofcolor and aprace variable*/
@@ -46,7 +46,8 @@ replace ofcolor = 1 if aprace_x == 2 | aprace_x == 3 | aprace_x == 4
 tostring zip_ad, replace
 
 // clean city names
-// do "${CODE}/data_cleaner.do"
+gen hcity = hcity_x
+do "${CODE}/data_cleaner.do"
 
 
 // save "${OUTPUT}\Table8_adjustedcities_score.dta", replace
@@ -98,7 +99,7 @@ foreach yvar in $YVARS {
 	foreach cluster in $CLUSTER {
 		foreach dvar in $DVAR {
 		
-		qui reghdfe `yvar' i.`dvar' `yvar'_ad ${CONTVARS}, absorb(${ABSVARSSAME} place_name) keepsingle cluster(`cluster')
+		qui reghdfe `yvar' i.`dvar' `yvar'_ad ${CONTVARS}, absorb(${ABSVARSSAME} temp_city) keepsingle cluster(`cluster')
 
 		// Extract number of levels of city variable
         	matrix hdfe = e(dof_table)
@@ -107,6 +108,27 @@ foreach yvar in $YVARS {
 
 
 		qui eststo `yvar'_`dvar'_`cluster'_ca
+		qui estadd local ln_price "Yes", replace
+		qui estadd local race_compo "Yes", replace
+		qui estadd local ad_home "Yes", replace
+		}
+	}
+}
+
+
+foreach yvar in $YVARS {
+	foreach cluster in $CLUSTER {
+		foreach dvar in $DVAR {
+		
+		qui reghdfe `yvar' i.`dvar' `yvar'_ad ${CONTVARS}, absorb(${ABSVARSSAME} place_name) keepsingle cluster(`cluster')
+
+		// Extract number of levels of city variable
+        	matrix hdfe = e(dof_table)
+        	local num_levels_geofe = hdfe[rowsof(hdfe),1]
+        	qui estadd scalar num_cities = `num_levels_geofe'
+
+
+		qui eststo `yvar'_`dvar'_`cluster'_new
 		qui estadd local ln_price "Yes", replace
 		qui estadd local race_compo "Yes", replace
 		qui estadd local ad_home "Yes", replace
@@ -130,10 +152,10 @@ global YVAR "ranking pov"
 foreach yvar in $YVAR {
 	foreach cluster in $CLUSTER {
 	
-	esttab `yvar'_oc_`cluster' `yvar'_noc_`cluster' `yvar'_noc_`cluster'_ca using "${OUTPUT}/row1_`cluster'_`yvar'.tex" ///
+	esttab `yvar'_oc_`cluster' `yvar'_noc_`cluster' `yvar'_noc_`cluster'_ca `yvar'_noc_`cluster'_new using "${OUTPUT}/row1_`cluster'_`yvar'.tex" ///
 	, b(%8.3f) se(%8.3f) ///
 	replace booktabs label ///
-		mgroups("Original Data" "Correct Race Only" "Updated City Name and Correct Race",pattern(1 1 1) ///
+		mgroups("Original Data" "Correct Race Only" "Updated City Name and Correct Race" "PLACE Name and Correct Race",pattern(1 1 1 1) ///
 		prefix(\multicolumn{@span}{c}{) suffix(}) span erepeat(\cmidrule(lr){@span})) ///
 		title(School Quality and Neighbourhood Safety: Housing Search Platform (Elementary School) (Panel A)) ///
 		alignment(c) page(dcolumn) nomtitle ///
@@ -150,10 +172,10 @@ foreach yvar in $YVAR {
 foreach yvar in $YVAR {
 	foreach cluster in $CLUSTER {
 	
-	esttab `yvar'_race_`cluster' `yvar'_nrace_`cluster' `yvar'_nrace_`cluster'_ca  using "${OUTPUT}/row2_`cluster'_`yvar'.tex" ///
+	esttab `yvar'_race_`cluster' `yvar'_nrace_`cluster' `yvar'_nrace_`cluster'_ca `yvar'_nrace_`cluster'_new using "${OUTPUT}/row2_`cluster'_`yvar'.tex" ///
 	, b(%8.3f) se(%8.3f) ///
 	replace booktabs label ///
-		mgroups("Original Data" "Correct Race Only" "Updated City Name and Correct Race",pattern(1 1 1) ///
+		mgroups("Original Data" "Correct Race Only" "Updated City Name and Correct Race" "PLACE Name and Correct Race",pattern(1 1 1 1) ///
 		prefix(\multicolumn{@span}{c}{) suffix(}) span erepeat(\cmidrule(lr){@span})) ///
 		title(American Community Survey: Poverty Rate (Panel B)) ///
 		alignment(c) page(dcolumn) nomtitle ///
