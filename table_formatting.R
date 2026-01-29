@@ -1,203 +1,13 @@
-# Load necessary libraries
-library(stringr)
-
-# Set output directory for tables
-output_dir <- "cities-from-geoid/Output"
-
-# Create the directory if it doesn't exist
-if (!dir.exists(output_dir)) {
-  dir.create(output_dir, recursive = TRUE)
-  cat("Created output directory:", output_dir, "\n")
-} else {
-  cat("Output directory already exists:", output_dir, "\n")
-}
-
-
-generate_combined_table <- function(table_title, subtitle, panel_a_title, panel_b_title, table_number, single_panel, set_dashes = TRUE, top_rows = list(), bottom_rows = list(), show_minority_top = TRUE, show_minority_bottom = TRUE, two_columns = FALSE) {
-  
-  # Automatically generate input_files and output_file based on table_number
-  input_files <- list(
-    data1_minority = paste0("HUDreplication/Output/table", table_number, "_dep_var_1_minority.tex"),
-    data1_categories = paste0("HUDreplication/Output/table", table_number, "_dep_var_1_categories.tex"),
-    data2_minority = paste0("HUDreplication/Output/table", table_number, "_dep_var_2_minority.tex"),
-    data2_categories = paste0("HUDreplication/Output/table", table_number, "_dep_var_2_categories.tex")
-  )
-  output_file <- paste0("HUDreplication/Output/combined_table", table_number, ".tex")
-
-  # Function to extract relevant data from LaTeX table
-  extract_data <- function(file_path, two_columns) {
-    lines <- readLines(file_path)
-    start <- grep("\\\\midrule", lines)[1] + 1
-    end <- grep("\\\\midrule", lines)[2] - 1
-    data_lines <- lines[start:end]
-    
-    if (two_columns) {
-      data_lines <- lapply(data_lines, function(line) {
-        parts <- unlist(strsplit(line, "&"))
-        if (length(parts) > 2) {
-          new_line <- paste(parts[c(1, 2, 4)], collapse = "&")
-          return(as.character(new_line))  # Ensure the result is a character string
-        }
-        return(as.character(line))  # Ensure the result is a character string
-      })
-    }
-    
-    # Add [1ex] at the end of every three rows
-    for (i in seq_along(data_lines)) {
-      if (i %% 3 == 0) {
-        data_lines[i] <- paste0(data_lines[i], " [1ex]")
-      }
-    }
-    
-    return(as.character(data_lines))  # Ensure the result is a character vector
-  }
-
-  # Function to replace estimates, standard errors, and confidence intervals with dashes in column 2
-  replace_with_dashes <- function(data_lines) {
-    for (i in seq_along(data_lines)) {
-      if (grepl("&", data_lines[i])) {
-        parts <- unlist(strsplit(data_lines[i], "&"))
-        if (length(parts) >= 3) {
-          parts[3] <- "     -     "
-          data_lines[i] <- paste(parts, collapse = "&")
-          }
-        }
-      }
-    return(data_lines)
-  }
-
-  # Read and extract data from the LaTeX tables
-  if (show_minority_top) {
-    data1_minority <- extract_data(input_files$data1_minority, two_columns)
-  }
-  data1_categories <- extract_data(input_files$data1_categories, two_columns)
-  if (show_minority_bottom) {
-    data2_minority <- extract_data(input_files$data2_minority, two_columns)
-  }
-  data2_categories <- extract_data(input_files$data2_categories, two_columns)
-
-  # Apply dashes to category rows if set_dashes is TRUE
-  if (set_dashes) {
-    data1_categories <- replace_with_dashes(data1_categories)
-    data2_categories <- replace_with_dashes(data2_categories)
-  }
-
-  # Extract adjusted R^2 values
-  extract_adj_r2 <- function(file_path) {
-    lines <- readLines(file_path)
-    adj_r2_line <- grep("Adjusted R\\$\\^2\\$", lines, value = TRUE)
-    return(adj_r2_line)
-  }
-
-  if (show_minority_top) {
-    adj_r2_1 <- str_extract_all(extract_adj_r2(input_files$data1_minority), "-?\\d+\\.\\d+")[[1]]
-  }
-  adj_r2_2 <- str_extract_all(extract_adj_r2(input_files$data1_categories), "-?\\d+\\.\\d+")[[1]]
-  if (show_minority_bottom) {
-    adj_r2_3 <- str_extract_all(extract_adj_r2(input_files$data2_minority), "-?\\d+\\.\\d+")[[1]]
-  }
-  adj_r2_4 <- str_extract_all(extract_adj_r2(input_files$data2_categories), "-?\\d+\\.\\d+")[[1]]
-
-  # Extract observations only from categories tables
-  extract_obs <- function(file_path) {
-    lines <- readLines(file_path)
-    obs_line <- grep("Observations", lines, value = TRUE)
-    return(obs_line)
-  }
-
-  obs_2 <- str_extract_all(extract_obs(input_files$data1_categories), "\\d+")[[1]]
-  obs_4 <- str_extract_all(extract_obs(input_files$data2_categories), "\\d+")[[1]]
-
-  # Extract number of cities only from categories tables
-  extract_num_cities <- function(file_path) {
-    lines <- readLines(file_path)
-    num_cities_line <- grep("Number of Cities", lines, value = TRUE)
-    return(num_cities_line)
-  }
-
-  num_cities_2 <- str_extract_all(extract_num_cities(input_files$data1_categories), "\\d+")[[1]]
-  num_cities_4 <- str_extract_all(extract_num_cities(input_files$data2_categories), "\\d+")[[1]]
-
-  # Combine the extracted data into a single LaTeX table
-  combined_table <- c(
-    "\\documentclass{article}",
-    "\\usepackage{pdflscape}",
-    "\\usepackage{booktabs}",
-    "\\begin{document}",
-    "\\begin{table}[p]",
-    "\\centering",
-    "\\def\\sym#1{\\ifmmode^{#1}\\else\\(^{#1}\\)\\fi}",
-    paste0("\\caption{", table_title, "\\\\[0.5em]\\textit{", subtitle, "}}"),
-    paste0("\\label{tab:table", table_number, "}"),
-    "\\resizebox{\\textwidth}{!}{",
-    paste0("\\begin{tabular}{l*", if (two_columns) "2" else "3", "{c}}"),
-    "\\toprule",
-    if (!single_panel) paste0("&\\multicolumn{", if (two_columns) "2" else "3", "}{c}{", panel_a_title, "}\\\\"),
-    if (!single_panel) paste0("\\cmidrule{2-", if (two_columns) "3" else "4", "}"),
-    if (two_columns) paste0("&\\multicolumn{1}{c}{Original Data}&\\multicolumn{1}{c}{Updated City Name}\\\\") else paste0("&\\multicolumn{1}{c}{Original Data}&\\multicolumn{1}{c}{Correct Race Only}&\\multicolumn{1}{c}{\\parbox[t]{7em}{\\centering Updated City Name \\& Correct Race}}\\\\"),
-    if (two_columns) paste0("\\cmidrule(lr){2-2}\\cmidrule(lr){3-3}") else paste0("\\cmidrule(lr){2-2}\\cmidrule(lr){3-3}\\cmidrule(lr){4-4}"),
-    if (two_columns) paste0("&\\multicolumn{1}{c}{(1)}         &\\multicolumn{1}{c}{(2)}         \\\\") else paste0("&\\multicolumn{1}{c}{(1)}         &\\multicolumn{1}{c}{(2)}         &\\multicolumn{1}{c}{(3)}         \\\\"),
-    "\\midrule",
-    if (show_minority_top) data1_minority,
-    if (show_minority_top) "\\midrule",  # Add horizontal rule between minority rows and category rows if shown
-    data1_categories,
-    "\\midrule",
-    if (two_columns) paste0("Observations      &      ", obs_2[1], "         &      ", obs_2[3], "         \\\\"),
-    if (two_columns && show_minority_top) paste0("Adjusted R$^2$ (Minority)      &      ", adj_r2_1[1], "         &      ", adj_r2_1[3], "         \\\\"),
-    if (two_columns) paste0("Adjusted R$^2$ (Category)      &      ", adj_r2_2[1], "         &      ", adj_r2_2[3], "         \\\\"),
-    if (two_columns) paste0("Number of Cities      &      ", num_cities_2[1], "         &      ", num_cities_2[3], "         \\\\"),
-    if (!two_columns) paste0("Observations      &      ", obs_2[1], "         &      ", obs_2[2], "         &      ", obs_2[3], "         \\\\"),
-    if (!two_columns && show_minority_top) paste0("Adjusted R$^2$ (Minority)      &      ", adj_r2_1[1], "         &      ", adj_r2_1[2], "         &      ", adj_r2_1[3], "         \\\\"),
-    if (!two_columns) paste0("Adjusted R$^2$ (Category)      &      ", adj_r2_2[1], "         &      -      &      ", adj_r2_2[3], "         \\\\"),
-    if (!two_columns) paste0("Number of Cities      &      ", num_cities_2[1], "         &      ", num_cities_2[2], "         &      ", num_cities_2[3], "         \\\\"),
-    if (!single_panel) "\\addlinespace",
-    if (!single_panel) "\\midrule",
-    if (!single_panel) "\\addlinespace",
-    if (!single_panel) paste0("&\\multicolumn{", if (two_columns) "2" else "3", "}{c}{", panel_b_title, "}\\\\"),
-    if (!single_panel) paste0("\\cmidrule{2-", if (two_columns) "3" else "4", "}"),
-    if (!single_panel && two_columns) paste0("&\\multicolumn{1}{c}{Original Data}&\\multicolumn{1}{c}{Updated City Name}\\\\"),
-    if (!single_panel && two_columns) paste0("\\cmidrule(lr){2-2}\\cmidrule(lr){3-3}"),
-    if (!single_panel && two_columns) paste0("&\\multicolumn{1}{c}{(1)}         &\\multicolumn{1}{c}{(2)}         \\\\"),
-    if (!single_panel && !two_columns) paste0("&\\multicolumn{1}{c}{Original Data}&\\multicolumn{1}{c}{Correct Race Only}&\\multicolumn{1}{c}{\\parbox[t]{7em}{\\centering Updated City Name \\& Correct Race}}\\\\"),
-    if (!single_panel && !two_columns) paste0("\\cmidrule(lr){2-2}\\cmidrule(lr){3-3}\\cmidrule(lr){4-4}"),
-    if (!single_panel && !two_columns) paste0("&\\multicolumn{1}{c}{(1)}         &\\multicolumn{1}{c}{(2)}         &\\multicolumn{1}{c}{(3)}         \\\\"),
-    if (!single_panel) "\\midrule",
-    if (!single_panel && show_minority_bottom) data2_minority,
-    if (!single_panel && show_minority_bottom) "\\midrule",  # Add horizontal rule between minority rows and category rows if shown
-    if (!single_panel) data2_categories,
-    if (!single_panel) "\\midrule",
-    if (!single_panel && two_columns) paste0("Observations      &      ", obs_4[1], "         &      ", obs_4[3], "         \\\\"),
-    if (!single_panel && two_columns && show_minority_bottom) paste0("Adjusted R$^2$ (Minority)      &      ", adj_r2_3[1], "         &      ", adj_r2_3[3], "         \\\\"),
-    if (!single_panel && two_columns) paste0("Adjusted R$^2$ (Category)      &      ", adj_r2_4[1], "         &      ", adj_r2_4[3], "         \\\\"),
-    if (!single_panel && two_columns) paste0("Number of Cities      &      ", num_cities_4[1], "         &      ", num_cities_4[3], "         \\\\"),
-    if (!single_panel && !two_columns) paste0("Observations      &      ", obs_4[1], "         &      ", obs_4[2], "         &      ", obs_4[3], "         \\\\"),
-    if (!single_panel && !two_columns && show_minority_bottom) paste0("Adjusted R$^2$ (Minority)      &      ", adj_r2_3[1], "         &      ", adj_r2_3[2], "         &      ", adj_r2_3[3], "         \\\\"),
-    if (!single_panel && !two_columns) paste0("Adjusted R$^2$ (Category)      &      ", adj_r2_4[1], "         &      -      &      ", adj_r2_4[3], "         \\\\"),
-    if (!single_panel && !two_columns) paste0("Number of Cities      &      ", num_cities_4[1], "         &      ", num_cities_4[2], "         &      ", num_cities_4[3], "         \\\\"),
-    "\\bottomrule",
-    paste0("\\multicolumn{", if (two_columns) "3" else "4", "}{l}{\\footnotesize Cluster-robust standard errors in parentheses. Clustered at the trial level. 95\\% confidence intervals in square brackets.}\\\\"),
-    paste0("\\multicolumn{", if (two_columns) "3" else "4", "}{l}{\\footnotesize \\sym{*} \\(p<0.10\\), \\sym{**} \\(p<0.05\\), \\sym{***} \\(p<0.01\\)}\\\\"),
-    "\\end{tabular}",
-    "}",
-    "\\end{table}",
-    "\\end{document}"
-  )
-
-  # Write the combined table to a new LaTeX file
-  writeLines(combined_table, output_file)
-}
-
-
 generate_corrected_table <- function(table_title, subtitle, table_number, panel_title,
-                                     input_file_categories, input_file_minority, 
-                                     col_names, set_dashes = TRUE, 
-                                     show_minority = TRUE, corrected = TRUE,
-                                     additional_rows = list(c())) {
+                   input_file_categories, input_file_minority, 
+                   col_names, set_dashes = TRUE, 
+                   show_minority = TRUE, corrected = TRUE,
+                   additional_rows = list(c())) {
 
   output_file <- if (corrected) {
-    paste0(output_dir, "/Corrected Tables/corrected_table", table_number, ".tex")
+  paste0(output_dir, "/Corrected Tables/corrected_table", table_number, ".tex")
   } else {
-    paste0(output_dir, "/Replicated Tables/replicated_table", table_number, ".tex")
+  paste0(output_dir, "/Replicated Tables/replicated_table", table_number, ".tex")
   }
 
   # Create directories for Corrected and Replicated Tables if they don't exist
@@ -205,67 +15,67 @@ generate_corrected_table <- function(table_title, subtitle, table_number, panel_
   replicated_dir <- file.path(output_dir, "Replicated Tables")
   
   if (!dir.exists(corrected_dir)) {
-    dir.create(corrected_dir, recursive = TRUE)
-    cat("Created directory for corrected tables:", corrected_dir, "\n")
+  dir.create(corrected_dir, recursive = TRUE)
+  cat("Created directory for corrected tables:", corrected_dir, "\n")
   } 
   
   if (!dir.exists(replicated_dir)) {
-    dir.create(replicated_dir, recursive = TRUE)
-    cat("Created directory for replicated tables:", replicated_dir, "\n")
+  dir.create(replicated_dir, recursive = TRUE)
+  cat("Created directory for replicated tables:", replicated_dir, "\n")
   } 
 
   # Function to extract relevant data from LaTeX table
   extract_data <- function(file_path) {
-    lines <- readLines(file_path)
-    start <- grep("\\\\midrule", lines)[1] + 1
-    end <- grep("\\\\midrule", lines)[2] - 1
-    data_lines <- lines[start:end]
-    
-    # Add [1ex] at the end of every three rows
-    for (i in seq_along(data_lines)) {
-      if (i %% 3 == 0) {
-        data_lines[i] <- paste0(data_lines[i], " [1ex]")
-      }
+  lines <- readLines(file_path)
+  start <- grep("\\\\midrule", lines)[1] + 1
+  end <- grep("\\\\midrule", lines)[2] - 1
+  data_lines <- lines[start:end]
+  
+  # Add [1ex] at the end of every three rows
+  for (i in seq_along(data_lines)) {
+    if (i %% 3 == 0) {
+    data_lines[i] <- paste0(data_lines[i], " [1ex]")
     }
-    
-    return(as.character(data_lines))
+  }
+  
+  return(as.character(data_lines))
   }
 
   # Function to replace estimates, standard errors, and confidence intervals with dashes
   replace_with_dashes <- function(data_lines) {
-    for (i in seq_along(data_lines)) {
-      if (grepl("&", data_lines[i])) {
-        parts <- unlist(strsplit(data_lines[i], "&"))
-        for (j in 3:length(parts)) {
-          parts[j] <- "     -     "
-        }
-        data_lines[i] <- paste(parts, collapse = "&")
-      }
+  for (i in seq_along(data_lines)) {
+    if (grepl("&", data_lines[i])) {
+    parts <- unlist(strsplit(data_lines[i], "&"))
+    for (j in 3:length(parts)) {
+      parts[j] <- "     -     "
     }
-    return(data_lines)
+    data_lines[i] <- paste(parts, collapse = "&")
+    }
+  }
+  return(data_lines)
   }
 
   # Read and extract data from the LaTeX tables
   data_categories <- extract_data(input_file_categories)
   if (show_minority) {
-    data_minority <- extract_data(input_file_minority)
+  data_minority <- extract_data(input_file_minority)
   }
 
   # Apply dashes to category rows if set_dashes is TRUE
   if (set_dashes) {
-    data_categories <- replace_with_dashes(data_categories)
+  data_categories <- replace_with_dashes(data_categories)
   }
 
   # Extract adjusted R^2 values, observations, and number of cities
   extract_info <- function(file_path, pattern) {
-    lines <- readLines(file_path)
-    info_line <- grep(pattern, lines, value = TRUE)
-    return(str_extract_all(info_line, "(?<!\\$)-?\\d+\\.?\\d*(?!\\$)")[[1]])
+  lines <- readLines(file_path)
+  info_line <- grep(pattern, lines, value = TRUE)
+  return(str_extract_all(info_line, "(?<!\\$)-?\\d+\\.?\\d*(?!\\$)")[[1]])
   }
 
   adj_r2_categories <- extract_info(input_file_categories, "Adjusted R\\$\\^2\\$")
   if (show_minority) {
-    adj_r2_minority <- extract_info(input_file_minority, "Adjusted R\\$\\^2\\$")
+  adj_r2_minority <- extract_info(input_file_minority, "Adjusted R\\$\\^2\\$")
   }
   obs <- extract_info(input_file_categories, "Observations")
   num_cities <- extract_info(input_file_categories, "Number of Cities")
@@ -273,115 +83,554 @@ generate_corrected_table <- function(table_title, subtitle, table_number, panel_
   # Determine number of columns
   num_columns <- length(col_names)
 
-  # Combine the extracted data into a single LaTeX table
+  # Combine the extracted data into a standalone LaTeX table (no document wrapper)
   combined_table <- c(
-    "\\documentclass{article}",
-    "\\usepackage{pdflscape}",
-    "\\usepackage{booktabs}",
-    "\\begin{document}",
-    "\\begin{table}[p]",
-    "\\centering",
-    "\\def\\sym#1{\\ifmmode^{#1}\\else\\(^{#1}\\)\\fi}",
-    paste0("\\caption{", table_title, "\\\\[0.5em]\\textit{", subtitle, "}}"),
-    paste0("\\label{tab:table", table_number, "}"),
-    "\\resizebox{\\textwidth}{!}{",
-    paste0("\\begin{tabular}{l*{", num_columns, "}{c}}"),
-    "\\toprule",
-    paste0("& \\multicolumn{", num_columns, "}{c}{", panel_title, "} \\\\"),
-    paste0("\\cmidrule(lr){2-", num_columns + 1, "}"),
-    paste0("&", paste(sapply(1:num_columns, function(i) paste0("\\multicolumn{1}{c}{", col_names[i], "}")), collapse = "&"), "\\\\"),
-    "\\midrule",
-    if (show_minority) data_minority,
-    if (show_minority) "\\midrule",
-    data_categories,
-    "\\midrule",
-    sapply(additional_rows, function(row) paste0(row[1], "      &", paste(row[-1], collapse = "&"), "\\\\")),
-    paste0("Observations      &", paste(obs, collapse = "&"), "\\\\"),
-    if (show_minority) paste0("Adjusted R$^2$ (Minority)      &", paste(adj_r2_minority, collapse = "&"), "\\\\"),
-    paste0("Adjusted R$^2$ (Category)      &", paste(adj_r2_categories, collapse = "&"), "\\\\"),
-    paste0("Number of Cities      &", paste(num_cities, collapse = "&"), "\\\\"),
-    "\\bottomrule",
-    paste0("\\multicolumn{", num_columns + 1, "}{l}{\\footnotesize Cluster-robust standard errors in parentheses. Clustered at the trial level. 95\\% confidence intervals in square brackets.}\\\\"),
-    paste0("\\multicolumn{", num_columns + 1, "}{l}{\\footnotesize \\sym{*} \\(p<0.10\\), \\sym{**} \\(p<0.05\\), \\sym{***} \\(p<0.01\\)}\\\\"),
-    "\\end{tabular}",
-    "}",
-    "\\end{table}",
-    "\\end{document}"
+  "\\begin{table}[p]",
+  "\\centering",
+  "\\def\\sym#1{\\ifmmode^{#1}\\else\\(^{#1}\\)\\fi}",
+  paste0("\\caption{", table_title, "\\\\[0.5em]\\textit{", subtitle, "}}"),
+  paste0("\\label{tab:table", table_number, "}"),
+  "\\resizebox{\\textwidth}{!}{",
+  paste0("\\begin{tabular}{l*{", num_columns, "}{c}}"),
+  "\\toprule",
+  paste0("& \\multicolumn{", num_columns, "}{c}{", panel_title, "} \\\\"),
+  paste0("\\cmidrule(lr){2-", num_columns + 1, "}"),
+  paste0("&", paste(sapply(1:num_columns, function(i) paste0("\\multicolumn{1}{c}{", col_names[i], "}")), collapse = "&"), "\\\\"),
+  "\\midrule",
+  if (show_minority) data_minority,
+  if (show_minority) "\\midrule",
+  data_categories,
+  "\\midrule",
+  sapply(additional_rows, function(row) paste0(row[1], "      &", paste(row[-1], collapse = "&"), "\\\\")),
+  paste0("Observations      &", paste(obs, collapse = "&"), "\\\\"),
+  if (show_minority) paste0("Adjusted R$^2$ (Minority)      &", paste(adj_r2_minority, collapse = "&"), "\\\\"),
+  paste0("Adjusted R$^2$ (Category)      &", paste(adj_r2_categories, collapse = "&"), "\\\\"),
+  paste0("Number of Cities      &", paste(num_cities, collapse = "&"), "\\\\"),
+  "\\bottomrule",
+  paste0("\\multicolumn{", num_columns + 1, "}{l}{\\footnotesize Cluster-robust standard errors in parentheses. Clustered at the trial level. 95\\% confidence intervals in square brackets.}\\\\"),
+  paste0("\\multicolumn{", num_columns + 1, "}{l}{\\footnotesize \\sym{*} \\(p<0.10\\), \\sym{**} \\(p<0.05\\), \\sym{***} \\(p<0.01\\)}\\\\"),
+  "\\end{tabular}",
+  "}",
+  "\\end{table}"
   )
-  
 
   # Write the combined table to a new LaTeX file
   writeLines(combined_table, output_file)
 }
 
+generate_combined_table <- function(table_title, subtitle, table_number,
+                   panel_a_title = "", panel_b_title = "",
+                   input_file_categories_top = NULL, input_file_minority_top = NULL,
+                   input_file_categories_bottom = NULL, input_file_minority_bottom = NULL,
+                   single_panel = FALSE,
+                   col_group_labels = NULL, col_numbers = NULL,
+                   keep_columns = NULL, set_dashes = TRUE, dash_columns = NULL,
+                   show_minority_top = TRUE, show_minority_bottom = TRUE,
+                   additional_rows_top = list(c()), additional_rows_bottom = list(c()),
+                   add_ex_spacing = TRUE, resize_width = "\\textwidth",
+                   output_filename = NULL) {
 
-### Generate Tables Showing Original and Corrections
+  comparison_dir <- file.path(output_dir, "Comparison Tables")
+  if (!dir.exists(comparison_dir)) {
+    dir.create(comparison_dir, recursive = TRUE)
+    cat("Created directory for comparison tables:", comparison_dir, "\n")
+  }
 
-# Call function for Table 7
+  if (is.null(output_filename)) {
+    output_filename <- paste0("table", table_number, ".tex")
+  }
+  output_file <- file.path(comparison_dir, output_filename)
+
+  # Default input file paths from comparison_tables.do outputs
+  if (is.null(input_file_categories_top)) {
+    input_file_categories_top <- paste0(output_dir, "/table", table_number, "_dep_var_1_categories.tex")
+  }
+  if (is.null(input_file_minority_top)) {
+    input_file_minority_top <- paste0(output_dir, "/table", table_number, "_dep_var_1_minority.tex")
+  }
+  if (!single_panel) {
+    if (is.null(input_file_categories_bottom)) {
+      input_file_categories_bottom <- paste0(output_dir, "/table", table_number, "_dep_var_2_categories.tex")
+    }
+    if (is.null(input_file_minority_bottom)) {
+      input_file_minority_bottom <- paste0(output_dir, "/table", table_number, "_dep_var_2_minority.tex")
+    }
+  }
+
+  # Helpers
+  extract_data <- function(file_path) {
+    lines <- readLines(file_path)
+    mid_idx <- grep("\\\\midrule", lines)
+    if (length(mid_idx) < 2) return(character())
+    data_lines <- lines[(mid_idx[1] + 1):(mid_idx[2] - 1)]
+    data_lines
+  }
+
+  extract_info <- function(file_path, pattern) {
+    lines <- readLines(file_path)
+    info_line <- grep(pattern, lines, value = TRUE)
+    if (length(info_line) == 0) return(character())
+    matches <- regmatches(info_line, gregexpr("(?<!\\$)-?\\d+\\.?\\d*(?!\\$)", info_line, perl = TRUE))
+    unlist(matches)
+  }
+
+  normalize_label <- function(label) {
+    label_trim <- trimws(label)
+    if (label_trim == "") return(label)
+    if (label_trim == "ofcolor") return("Racial Minority")
+    if (label_trim == "othrace") return("Other Race")
+    if (grepl("^(2|2\\.)", label_trim) || grepl("aprace\\s*[=\\.]*\\s*2", label_trim) || grepl("apracex\\s*[=\\.]*\\s*2", label_trim)) return("African American")
+    if (grepl("^(3|3\\.)", label_trim) || grepl("aprace\\s*[=\\.]*\\s*3", label_trim) || grepl("apracex\\s*[=\\.]*\\s*3", label_trim)) return("Hispanic")
+    if (grepl("^(4|4\\.)", label_trim) || grepl("aprace\\s*[=\\.]*\\s*4", label_trim) || grepl("apracex\\s*[=\\.]*\\s*4", label_trim)) return("Asian")
+    if (grepl("^(5|5\\.)", label_trim) || grepl("aprace\\s*[=\\.]*\\s*5", label_trim) || grepl("apracex\\s*[=\\.]*\\s*5", label_trim)) return("Other Race")
+    label_trim
+  }
+
+  format_lines <- function(lines, keep_cols, dash_cols = NULL, add_spacing = TRUE) {
+    out <- character()
+    for (i in seq_along(lines)) {
+      line <- lines[i]
+      if (!grepl("&", line, fixed = TRUE)) {
+        out <- c(out, line)
+        next
+      }
+      parts <- strsplit(line, "&", fixed = TRUE)[[1]]
+      label <- parts[1]
+      cols <- parts[-1]
+      cols <- gsub("\\\\\\\\", "", cols)
+      cols <- gsub("\\[1ex\\]", "", cols)
+
+      label_trim <- trimws(label)
+      if (label_trim != "") {
+        prefix <- sub("^(\\s*).*", "\\1", label)
+        label <- paste0(prefix, normalize_label(label_trim))
+      }
+
+      if (!is.null(dash_cols) && length(dash_cols) > 0) {
+        for (col in dash_cols) {
+          if (col <= length(cols)) cols[col] <- "     -     "
+        }
+      }
+
+      if (!is.null(keep_cols) && length(keep_cols) > 0) {
+        cols <- cols[keep_cols]
+      }
+
+      cols[length(cols)] <- paste0(cols[length(cols)], " \\\\")
+      line_out <- paste(c(label, cols), collapse = "&")
+      if (add_spacing && (i %% 3 == 0)) {
+        line_out <- paste0(line_out, " [1ex]")
+      }
+      out <- c(out, line_out)
+    }
+    out
+  }
+
+  # Determine which columns to keep
+  if (is.null(keep_columns)) {
+    keep_columns <- c(1, 2, 3)
+  }
+  num_columns <- length(keep_columns)
+
+  # Default column headers
+  if (is.null(col_group_labels)) {
+    if (num_columns == 2) {
+      col_group_labels <- c("Original Data", "Updated City Name")
+    } else {
+      col_group_labels <- c("Original Data", "Correct Race Only", "Updated City Name \\& Correct Race")
+    }
+  }
+  if (is.null(col_numbers)) {
+    col_numbers <- paste0("(", seq_len(num_columns), ")")
+  }
+
+  if (is.null(dash_columns) && set_dashes && num_columns == 3) {
+    dash_columns <- 2
+  }
+  if (!set_dashes) {
+    dash_columns <- NULL
+  }
+
+  build_panel <- function(panel_title, input_file_minority, input_file_categories,
+                          show_minority, additional_rows) {
+    data_categories <- extract_data(input_file_categories)
+    data_categories <- format_lines(data_categories, keep_columns, dash_columns, add_ex_spacing)
+
+    if (show_minority) {
+      data_minority <- extract_data(input_file_minority)
+      data_minority <- format_lines(data_minority, keep_columns, NULL, add_ex_spacing)
+    }
+
+    obs <- extract_info(input_file_categories, "Observations")
+    adj_r2_categories <- extract_info(input_file_categories, "Adjusted R\\$\\^2\\$")
+    num_cities <- extract_info(input_file_categories, "Number of Cities")
+
+    if (show_minority) {
+      adj_r2_minority <- extract_info(input_file_minority, "Adjusted R\\$\\^2\\$")
+    }
+
+    if (length(keep_columns) > 0) {
+      obs <- obs[keep_columns]
+      adj_r2_categories <- adj_r2_categories[keep_columns]
+      num_cities <- num_cities[keep_columns]
+      if (show_minority) adj_r2_minority <- adj_r2_minority[keep_columns]
+    }
+
+    header_lines <- c()
+    if (panel_title != "") {
+      header_lines <- c(header_lines,
+                        paste0("&\\multicolumn{", num_columns, "}{c}{", panel_title, "} \\\\"),
+                        paste0("\\cmidrule(lr){2-", num_columns + 1, "}"))
+    }
+    header_lines <- c(header_lines,
+                      paste0("&", paste(sapply(col_group_labels, function(x) paste0("\\multicolumn{1}{c}{", x, "}")), collapse = "&"), "\\\\"),
+                      paste0("\\cmidrule(lr){2-2}", paste(sapply(3:(num_columns + 1), function(i) paste0("\\cmidrule(lr){", i, "-", i, "}")), collapse = "")),
+                      paste0("&", paste(sapply(col_numbers, function(x) paste0("\\multicolumn{1}{c}{", x, "}")), collapse = "&"), "\\\\"),
+                      "\\midrule")
+
+    panel_lines <- header_lines
+    if (show_minority) {
+      panel_lines <- c(panel_lines, data_minority, "\\midrule")
+    }
+    panel_lines <- c(panel_lines, data_categories, "\\midrule")
+
+    # Add any extra rows (e.g., controls)
+    if (length(additional_rows) > 0 && length(additional_rows[[1]]) > 0) {
+      for (row in additional_rows) {
+        row_label <- row[1]
+        row_vals <- row[-1]
+        if (length(keep_columns) > 0 && length(row_vals) >= max(keep_columns)) {
+          row_vals <- row_vals[keep_columns]
+        }
+        panel_lines <- c(panel_lines, paste0(row_label, "      &", paste(row_vals, collapse = "&"), "\\\\"))
+      }
+    }
+
+    panel_lines <- c(panel_lines,
+                     paste0("Observations      &", paste(obs, collapse = "&"), "\\\\"))
+    if (show_minority) {
+      panel_lines <- c(panel_lines,
+                       paste0("Adjusted R$^2$ (Minority)      &", paste(adj_r2_minority, collapse = "&"), "\\\\"))
+    }
+    panel_lines <- c(panel_lines,
+                     paste0("Adjusted R$^2$ (Category)      &", paste(adj_r2_categories, collapse = "&"), "\\\\"),
+                     paste0("Number of Cities      &", paste(num_cities, collapse = "&"), "\\\\"))
+
+    panel_lines
+  }
+
+  panel_a <- build_panel(panel_a_title, input_file_minority_top, input_file_categories_top,
+                         show_minority_top, additional_rows_top)
+  if (!single_panel) {
+    panel_b <- build_panel(panel_b_title, input_file_minority_bottom, input_file_categories_bottom,
+                           show_minority_bottom, additional_rows_bottom)
+  }
+
+  table_lines <- c(
+    "\\begin{table}[p]",
+    "\\centering",
+    "\\def\\sym#1{\\ifmmode^{#1}\\else\\(^{#1}\\)\\fi}",
+    paste0("\\caption{", table_title, " \\\\ \\small{", subtitle, "}}"),
+    paste0("\\label{tab:table", table_number, "}"),
+    paste0("\\resizebox{", resize_width, "}{!}{"),
+    paste0("\\begin{tabular}{l*{", num_columns, "}{c}}"),
+    "\\toprule",
+    panel_a
+  )
+
+  if (!single_panel) {
+    table_lines <- c(table_lines, "\\midrule", panel_b)
+  }
+
+  table_lines <- c(table_lines,
+                   "\\bottomrule",
+                   paste0("\\multicolumn{", num_columns + 1, "}{l}{\\footnotesize Cluster-robust standard errors in parentheses. Clustered at the trial level. 95\\% confidence intervals in square brackets.}\\\\"),
+                   paste0("\\multicolumn{", num_columns + 1, "}{l}{\\footnotesize \\sym{*} \\(p<0.10\\), \\sym{**} \\(p<0.05\\), \\sym{***} \\(p<0.01\\). \\cisentence }\\\\"),
+                   "\\end{tabular}",
+                   "}",
+                   "\\end{table}")
+
+  writeLines(table_lines, output_file)
+}
+
+
+# ### Generate Tables Showing Original and Corrections
+
+# # Call function for Table 7
+# generate_combined_table(
+#   table_title = "Differences in Results for Racial Composition of Recommended Neighbourhood",
+#   subtitle = "Table 7, CT2022",
+#   panel_a_title = "White Household Income Share in High Income Neighbourhoods (Column 1)",
+#   panel_b_title = "White Household Income Share in Low Income Neighbourhoods (Column 3)",
+#   table_number = 7,
+#   single_panel = FALSE,
+#   set_dashes = TRUE,
+#   show_minority_top = TRUE,
+#   show_minority_bottom = TRUE
+# )
+
+# # Call function for Table 9
+# generate_combined_table(
+#   table_title = "Differences in Results for Local Pollution Exposure",
+#   subtitle = "Table 9, CT2022",
+#   panel_a_title = "Differences in Superfund Proximity, Whole Sample (Panel A, Column 1)",
+#   panel_b_title = "Differences in Superfund Proximity, Mothers Only (Panel B, Column 1)",
+#   table_number = 9,
+#   single_panel = FALSE,
+#   set_dashes = TRUE,
+#   show_minority_top = TRUE,
+#   show_minority_bottom = TRUE
+# )
+
+# # Call function for Table 11
+# generate_combined_table(
+#   table_title = "Differences in Results for Low-Poverty Neighbourhood Recommendations",
+#   subtitle = "Table 11 Column 1, CT2022",
+#   panel_a_title = "",
+#   panel_b_title = "",
+#   table_number = 11,
+#   single_panel = TRUE,
+#   set_dashes = FALSE,
+#   show_minority_top = FALSE,
+#   show_minority_bottom = FALSE,
+#   two_columns = TRUE
+# )
+
+# # Call function for Table 12
+# generate_combined_table(
+#   table_title = "Differences in Results for Median Income",
+#   subtitle = "Table 12 Column 1, CT 2022",
+#   panel_a_title = "",
+#   panel_b_title = "",
+#   table_number = 12,
+#   single_panel = TRUE,
+#   set_dashes = FALSE,
+#   show_minority_top = FALSE,
+#   show_minority_bottom = FALSE,
+#   two_columns = TRUE
+# )
+
+# # Call the function for Table 14
+# generate_combined_table(
+#   table_title = "Differences in Results for Recommended Home's Log Sale Price",
+#   subtitle = " Table 14 Panel B Column 5, CT2022",
+#   panel_a_title = "",
+#   panel_b_title = "",
+#   table_number = 14,
+#   single_panel = TRUE,
+#   show_minority_top = TRUE,
+#   show_minority_bottom = TRUE,
+#   two_columns = FALSE
+# )
+
+### Generate Tables from comparison_tables.do outputs (approximate examples)
+
 generate_combined_table(
-  table_title = "Differences in Results for Racial Composition of Recommended Neighbourhood",
-  subtitle = "Table 7, CT2022",
-  panel_a_title = "White Household Income Share in High Income Neighbourhoods (Column 1)",
-  panel_b_title = "White Household Income Share in Low Income Neighbourhoods (Column 3)",
-  table_number = 7,
+  table_title = "Differences in Recommendations and Availability of Advertised Properties",
+  subtitle = "C\\&T Table 5, Columns 2 and 4",
+  table_number = 5,
+  panel_a_title = "Differences in Number of Recommendations (Panel A)",
+  panel_b_title = "Differences in Home Availability (Panel B)",
   single_panel = FALSE,
   set_dashes = TRUE,
-  show_minority_top = TRUE,
-  show_minority_bottom = TRUE
-)
-
-# Call function for Table 9
-generate_combined_table(
-  table_title = "Differences in Results for Local Pollution Exposure",
-  subtitle = "Table 9, CT2022",
-  panel_a_title = "Differences in Superfund Proximity, Whole Sample (Panel A, Column 1)",
-  panel_b_title = "Differences in Superfund Proximity, Mothers Only (Panel B, Column 1)",
-  table_number = 9,
-  single_panel = FALSE,
-  set_dashes = TRUE,
-  show_minority_top = TRUE,
-  show_minority_bottom = TRUE
-)
-
-# Call function for Table 11
-generate_combined_table(
-  table_title = "Differences in Results for Low-Poverty Neighbourhood Recommendations",
-  subtitle = "Table 11 Column 1, CT2022",
-  panel_a_title = "",
-  panel_b_title = "",
-  table_number = 11,
-  single_panel = TRUE,
-  set_dashes = FALSE,
-  show_minority_top = FALSE,
-  show_minority_bottom = FALSE,
-  two_columns = TRUE
-)
-
-# Call function for Table 12
-generate_combined_table(
-  table_title = "Differences in Results for Median Income",
-  subtitle = "Table 12 Column 1, CT 2022",
-  panel_a_title = "",
-  panel_b_title = "",
-  table_number = 12,
-  single_panel = TRUE,
-  set_dashes = FALSE,
-  show_minority_top = FALSE,
-  show_minority_bottom = FALSE,
-  two_columns = TRUE
-)
-
-# Call the function for Table 14
-generate_combined_table(
-  table_title = "Differences in Results for Recommended Home's Log Sale Price",
-  subtitle = " Table 14 Panel B Column 5, CT2022",
-  panel_a_title = "",
-  panel_b_title = "",
-  table_number = 14,
-  single_panel = TRUE,
   show_minority_top = TRUE,
   show_minority_bottom = TRUE,
-  two_columns = FALSE
+  additional_rows_top = list(
+    c("ln(price), advertised home", "Yes", "Yes", "Yes"),
+    c("Racial composition, advertised home", "Yes", "Yes", "Yes")
+  ),
+  additional_rows_bottom = list(
+    c("ln(price), advertised home", "Yes", "Yes", "Yes"),
+    c("Racial composition, advertised home", "Yes", "Yes", "Yes")
+  ),
+  resize_width = "0.75\\columnwidth",
+  output_filename = "table5.tex"
+)
+
+generate_combined_table(
+  table_title = "Discriminatory Steering and Neighborhood Racial Composition",
+  subtitle = "C\\&T Table 6, Column 5",
+  table_number = 6,
+  panel_a_title = "",
+  single_panel = TRUE,
+  set_dashes = TRUE,
+  show_minority_top = TRUE,
+  additional_rows_top = list(
+    c("Share white, advertised home", "Yes", "Yes", "Yes"),
+    c("ln(price), advertised home", "Yes", "Yes", "Yes"),
+    c("Racial composition, advertised home", "Yes", "Yes", "Yes"),
+    c("Poverty share advertised home", "Yes", "Yes", "Yes")
+  ),
+  resize_width = "0.9\\columnwidth",
+  output_filename = "table6.tex"
+)
+
+generate_combined_table(
+  table_title = "Discriminatory Steering and Neighborhood Racial Composition by Income",
+  subtitle = "C\\&T Table 7, Column 1, Panel 1",
+  table_number = 7,
+  panel_a_title = "",
+  single_panel = TRUE,
+  set_dashes = TRUE,
+  show_minority_top = TRUE,
+  additional_rows_top = list(
+    c("Share White Advert Home", "Yes", "Yes", "Yes"),
+    c("ln(price), advertised home", "Yes", "Yes", "Yes"),
+    c("Racial composition, advertised home", "Yes", "Yes", "Yes"),
+    c("Poverty Share Advert Home", "Yes", "Yes", "Yes")
+  ),
+  resize_width = "0.9\\columnwidth",
+  output_filename = "table7_control(1).tex"
+)
+
+generate_combined_table(
+  table_title = "Discrimination Steering and Neighborhood Effects",
+  subtitle = "C\\&T Table 8",
+  table_number = 8,
+  panel_a_title = "School Quality and Neighbourhood Safety: Elementary School Rating (Panel A, Column 4)",
+  panel_b_title = "American Community Survey: Poverty Rate (Panel B, Column 1)",
+  single_panel = FALSE,
+  set_dashes = TRUE,
+  show_minority_top = TRUE,
+  show_minority_bottom = TRUE,
+  additional_rows_top = list(
+    c("ln(price) advertised home", "Yes", "Yes", "Yes"),
+    c("Racial composition, advertised home", "Yes", "Yes", "Yes"),
+    c("Outcome, advertised home", "Yes", "Yes", "Yes")
+  ),
+  additional_rows_bottom = list(
+    c("ln(price) advertised home", "Yes", "Yes", "Yes"),
+    c("Racial composition, advertised home", "Yes", "Yes", "Yes"),
+    c("Outcome, advertised home", "Yes", "Yes", "Yes")
+  ),
+  resize_width = "0.8\\columnwidth",
+  output_filename = "table8_trial.tex"
+)
+
+generate_combined_table(
+  table_title = "Differences in Results for Local Pollution Exposure",
+  subtitle = "C\\&T Table 9",
+  table_number = 9,
+  panel_a_title = "Differences in Superfund Proximity, Whole Sample (Panel A, Column 1)",
+  panel_b_title = "Differences in Superfund Proximity, Mothers Only (Panel B, Column 1)",
+  single_panel = FALSE,
+  set_dashes = TRUE,
+  show_minority_top = TRUE,
+  show_minority_bottom = TRUE,
+  resize_width = "0.75\\columnwidth",
+  output_filename = "table9.tex"
+)
+
+generate_combined_table(
+  table_title = "Discriminatory Steering and Neighbourhood Effects (Mothers)",
+  subtitle = "C\\&T Table 10, Columns 1 and 4, Panel A",
+  table_number = "10A",
+  panel_a_title = "School Quality and Neighbourhood Safety: Elementary School Scores (Panel A Column 1)",
+  panel_b_title = "School Quality and Neighbourhood Safety: Middle School Scores (Panel A Column 2)",
+  input_file_categories_top = paste0(output_dir, "/table10A_dep_var_1_categories.tex"),
+  input_file_minority_top = paste0(output_dir, "/table10A_dep_var_1_minority.tex"),
+  input_file_categories_bottom = paste0(output_dir, "/table10A_dep_var_2_categories.tex"),
+  input_file_minority_bottom = paste0(output_dir, "/table10A_dep_var_2_minority.tex"),
+  single_panel = FALSE,
+  set_dashes = TRUE,
+  show_minority_top = TRUE,
+  show_minority_bottom = TRUE,
+  additional_rows_top = list(
+    c("ln(price) advertised home", "Yes", "Yes", "Yes"),
+    c("Racial composition, advertised home", "Yes", "Yes", "Yes"),
+    c("Outcome, advertised home", "Yes", "Yes", "Yes")
+  ),
+  additional_rows_bottom = list(
+    c("ln(price) advertised home", "Yes", "Yes", "Yes"),
+    c("Racial composition, advertised home", "Yes", "Yes", "Yes"),
+    c("Outcome, advertised home", "Yes", "Yes", "Yes")
+  ),
+  resize_width = "0.9\\columnwidth",
+  output_filename = "Table10A_trial.tex"
+)
+
+generate_combined_table(
+  table_title = "Discriminatory Steering and Neighbourhood Effects (Mothers)",
+  subtitle = "C\\&T Table 10, Columns 2 and 4, Panel B",
+  table_number = "10B",
+  panel_a_title = "American Community Survey: High Skill (Panel B Column 2)",
+  panel_b_title = "American Community Survey: Single Parent Household (Panel B Column 4)",
+  input_file_categories_top = paste0(output_dir, "/table10B_dep_var_1_categories.tex"),
+  input_file_minority_top = paste0(output_dir, "/table10B_dep_var_1_minority.tex"),
+  input_file_categories_bottom = paste0(output_dir, "/table10B_dep_var_2_categories.tex"),
+  input_file_minority_bottom = paste0(output_dir, "/table10B_dep_var_2_minority.tex"),
+  single_panel = FALSE,
+  set_dashes = TRUE,
+  show_minority_top = TRUE,
+  show_minority_bottom = TRUE,
+  additional_rows_top = list(
+    c("ln(price) advertised home", "Yes", "Yes", "Yes"),
+    c("Racial composition, advertised home", "Yes", "Yes", "Yes"),
+    c("Outcome, advertised home", "Yes", "Yes", "Yes")
+  ),
+  additional_rows_bottom = list(
+    c("ln(price) advertised home", "Yes", "Yes", "Yes"),
+    c("Racial composition, advertised home", "Yes", "Yes", "Yes"),
+    c("Outcome, advertised home", "Yes", "Yes", "Yes")
+  ),
+  resize_width = "0.90\\columnwidth",
+  output_filename = "Table10B_trial.tex"
+)
+
+generate_combined_table(
+  table_title = "Differences in Results for Low-Poverty Neighbourhood Recommendations",
+  subtitle = "C\\&T Table 11 Column 1",
+  table_number = 11,
+  panel_a_title = "",
+  single_panel = TRUE,
+  keep_columns = c(1, 3),
+  col_group_labels = c("Original Data", "Updated City Name"),
+  col_numbers = c("(1)", "(2)"),
+  set_dashes = FALSE,
+  show_minority_top = FALSE,
+  resize_width = "\\textwidth",
+  output_filename = "table11.tex"
+)
+
+generate_combined_table(
+  table_title = "Differences in Results for Median Income",
+  subtitle = "C\\&T Table 12 Column 1",
+  table_number = 12,
+  panel_a_title = "",
+  single_panel = TRUE,
+  keep_columns = c(1, 3),
+  col_group_labels = c("Original Data", "Updated City Name"),
+  col_numbers = c("(1)", "(2)"),
+  set_dashes = FALSE,
+  show_minority_top = FALSE,
+  resize_width = "\\textwidth",
+  output_filename = "table12.tex"
+)
+
+generate_combined_table(
+  table_title = "Discriminatory Steering by Implied Preferences for Neighbourhood Attributes",
+  subtitle = "C\\&T Table 13",
+  table_number = 13,
+  panel_a_title = "Housing Search Platform: Elementary School Quality (Panel A, Column 4)",
+  panel_b_title = "American Community Survey: High Skill Neighbourhood (Panel B, Column 2)",
+  single_panel = FALSE,
+  set_dashes = TRUE,
+  show_minority_top = TRUE,
+  show_minority_bottom = TRUE,
+  resize_width = "0.75\\columnwidth",
+  output_filename = "table13.tex"
+)
+
+generate_combined_table(
+  table_title = "Differences in Results for Recommended Home's Log Sale Price",
+  subtitle = "C\\&T Table 14 Panel B, Column 5",
+  table_number = 14,
+  panel_a_title = "",
+  single_panel = TRUE,
+  set_dashes = TRUE,
+  show_minority_top = TRUE,
+  resize_width = "\\textwidth",
+  output_filename = "table14.tex"
 )
 
 

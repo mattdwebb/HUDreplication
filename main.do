@@ -24,17 +24,20 @@ clear all
 	
 	set more off
 
-// Run files for generating tables 5 through 14
-	do "${CODE}/table5.do"
-	do "${CODE}/table6.do"
-	do "${CODE}/table7.do"
-	do "${CODE}/table8.do"
-	do "${CODE}/table9.do"
-	do "${CODE}/table10.do"
-	do "${CODE}/table11.do"
-	do "${CODE}/table12.do"
-	do "${CODE}/table13.do"
-	do "${CODE}/table14.do"
+// Run unified comparison tables driver
+	do "${CODE}/comparison_tables.do"
+
+// Run files for generating tables 5 through 14 (legacy; kept for reference)
+//	do "${CODE}/table5.do"
+//	do "${CODE}/table6.do"
+//	do "${CODE}/table7.do"
+//	do "${CODE}/table8.do"
+//	do "${CODE}/table9.do"
+//	do "${CODE}/table10.do"
+//	do "${CODE}/table11.do"
+//	do "${CODE}/table12.do"
+//	do "${CODE}/table13.do"
+//	do "${CODE}/table14.do"
 
 // generate full replication tables as features in Appendix B
 	do "${CODE}/appendix_tables.do"

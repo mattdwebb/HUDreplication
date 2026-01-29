@@ -93,6 +93,26 @@ program define run_regressions, rclass
 
     clean_vars "`all_vars'"
 
+    // Normalize race variable name to aprace (avoid ambiguous abbreviations)
+    local allvars ""
+    capture qui ds
+    if !_rc local allvars "`r(varlist)'"
+    local has_aprace = strpos(" `allvars' ", " aprace ") > 0
+    local has_apracex = strpos(" `allvars' ", " apracex ") > 0
+    if `has_apracex' {
+        if `has_aprace' {
+            drop apracex
+            display "Variable apracex dropped (aprace already exists)."
+        }
+        else {
+            rename apracex aprace
+            display "Variable apracex has been renamed to aprace."
+        }
+    }
+    else if !`has_aprace' {
+        display "Neither apracex nor aprace exists in the dataset."
+    }
+
     // Create empty placeholders to store column names
     local cols_for_depvar_1_minority = " "
     local cols_for_depvar_1_categories = " "
@@ -191,7 +211,7 @@ program define run_regressions, rclass
         starlevels(* 0.10 ** 0.05 *** 0.01) ///
         stats(N r2_a num_cities, fmt(0 4 0) ///
         label("Observations" "Adjusted R$^2$" "Number of Cities")) ///
-        keep(2.apracex 3.apracex 4.apracex 5.apracex)
+        keep(2.aprace 3.aprace 4.aprace 5.aprace)
 
         // Output the CSV file for the racial categories analyses
         esttab `cols_for_depvar_`d'_categories' ///
@@ -202,7 +222,7 @@ program define run_regressions, rclass
         starlevels(* 0.10 ** 0.05 *** 0.01) ///
         stats(N r2_a num_cities, fmt(0 4 0) ///
         labels("Observations" "Adjusted R^2" "Number of Cities")) ///
-        keep(2.apracex 3.apracex 4.apracex 5.apracex)
+        keep(2.aprace 3.aprace 4.aprace 5.aprace)
     }
 end
 
@@ -233,21 +253,24 @@ program define correct_table, rclass
     local cols_for_minority ""
     local cols_for_categories ""
 
-    // Check for apracex and rename it to aprace if present
-    capture confirm variable apracex
-    if !_rc {
-        rename apracex aprace
-        display "Variable apracex has been renamed to aprace."
-    } 
-    else {
-        // If apracex doesn't exist, check if aprace already exists
-        capture confirm variable aprace
-        if _rc {
-            display "Neither apracex nor aprace exists in the dataset."
+    // Normalize aprace/apracex to a single aprace variable (avoid ambiguous abbreviations)
+    local allvars ""
+    capture qui ds
+    if !_rc local allvars "`r(varlist)'"
+    local has_aprace = strpos(" `allvars' ", " aprace ") > 0
+    local has_apracex = strpos(" `allvars' ", " apracex ") > 0
+    if `has_apracex' {
+        if `has_aprace' {
+            drop apracex
+            display "Variable apracex dropped (aprace already exists)."
         }
         else {
-            display "Variable aprace already exists. No renaming needed."
+            rename apracex aprace
+            display "Variable apracex has been renamed to aprace."
         }
+    }
+    else if !`has_aprace' {
+        display "Neither apracex nor aprace exists in the dataset."
     }
 
     forvalues i = 1/`num_regressions' {

@@ -2,6 +2,7 @@ Output/*
 Data/Original/*
 Data/Generated/*
 Data/Archive
+Data/HuD_Replication
 !Data/Generated/adsprocessed_JPE.csv
 
 
@@ -20,3 +21,9 @@ examine_ads_data.R
 examine_ads_simple.R
 ideal-analysis-plan.md
 .gitignore
+AGENTS.md
+Examples
+
+.codex
+methodology.tex
+methodology.pdf

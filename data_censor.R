@@ -2,11 +2,11 @@ library(dplyr)
 
 # Set the working directory to the directory location of the github repository 
 # This will be appended to the front of all addresses in the file
-WORKING_DIRECTORY = "cities-from-geoid"
+WORKING_DIRECTORY = ""
 
 # Define the path to the output folder
-output_folder <- paste0(WORKING_DIRECTORY, "/Data/Generated")
-input_folder <- paste0(WORKING_DIRECTORY, "/Data/Original")
+output_folder <- paste0(WORKING_DIRECTORY, "Data/Generated")
+input_folder <- paste0(WORKING_DIRECTORY, "Data/Original")
 
 # Load the adsprocessed_JPE data
 adsprocessed_data <- readRDS(paste0(input_folder, "/adsprocessed_JPE.rds"))
@@ -28,7 +28,7 @@ cols_between <- all_columns[(taddr_index + 1):(release_index - 1)]
 # Define variables to keep between TADDR and RELEASE
 vars_to_keep_full <- c(
     "TesterID", "APRACE", "TRACESPY", "TASIANG", "TNATORIG", "THISPUBG",
-    "TASIANS", "TTRIBE", "TSEX", "TDOB", "TCORGIN", "TCORGI2", "TTIMEUS",
+    "TASIANS", "TTRIBE", "TSEX.x", "TDOB", "TCORGIN", "TCORGI2", "TTIMEUS",
     "TTMUSMO", "TTMUSYR", "TMALIVE", "TLIVMON", "TLIVYR", "TENGFL",
     "TENGAGE", "TPROFO", "TPROFOS", "TLANGHOM", "TCUREMP", "TPREVE",
     "TSTUDNT", "THIGHEDU", "TDEGREE", "TPEGAI", "THHEGAI", "TTIMECUR",
@@ -36,7 +36,7 @@ vars_to_keep_full <- c(
     "THMHNTS", "TIFWRE", "TIFWRED", "TIFWREP", "TVIEWRE", "TVIEWRES",
     "TEXPERNC", "TNOTESTS", "TTESTTP1", "TTESTTP2", "TTESTTP3", "TTESTTP4",
     "TTESTTP5", "TTESTTP6", "TTESTTP7", "TTSTTYPS", "TRESERV", "THIPROF",
-    "TDRIVER", "TOWNCAR", "TCOMPUTE", "TCOMPUTS", "TCOMPACC", "TCOMPACS"
+    "TDRIVER", "TOWNCAR", "TCOMPUTE", "TCOMPUTS", "TCOMPACC", "TCOMPACS", "age"
 )
 
 # Keep only variables that actually exist in the dataset

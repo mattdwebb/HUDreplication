@@ -1,23 +1,135 @@
+# Match block groups to place/county names and de-duplicate adsprocessed/HUD datasets
+# before saving corrected outputs.
+
 # Load necessary libraries
 library(readr)
 library(dplyr)
 library(tigris)
 library(sf)
 library(haven)
+library(stringr)
+
+# Important! Set sf to not use the spherical s2 geometry, opting instead for planar geometry to reduce computation time with negligible accuracy changes.
+sf_use_s2(FALSE)
 
 # Set the working directory to the directory location of the github repository 
 # This will be appended to the front of all addresses in the file
-WORKING_DIRECTORY = "cities-from-geoid"
+WORKING_DIRECTORY = ""
 
 # Define the path to the output folder
-output_folder <- paste0(WORKING_DIRECTORY, "/Data/Generated")
-input_folder <- paste0(WORKING_DIRECTORY, "/Data/Original")
+output_folder <- paste0(WORKING_DIRECTORY, "Data/Generated")
+input_folder <- paste0(WORKING_DIRECTORY, "Data/Original")
 
+# Helper functions for de-duplication
+normalize_text <- function(x) {
+  x <- iconv(x, to = "UTF-8", sub = "")
+  x <- tolower(x)
+  x <- str_replace_all(x, "[^a-z0-9 ]", " ")
+  str_squish(x)
+}
+
+dedup_log <- data.frame(
+  step = character(),
+  before = integer(),
+  after = integer(),
+  dropped = integer(),
+  stringsAsFactors = FALSE
+)
+
+log_dedup <- function(label, before, after) {
+  dedup_log <<- rbind(
+    dedup_log,
+    data.frame(
+      step = label,
+      before = before,
+      after = after,
+      dropped = before - after,
+      stringsAsFactors = FALSE
+    )
+  )
+}
+
+build_address_key <- function(df) {
+  addr_raw <- if ("HSITEAD" %in% names(df)) df$HSITEAD else NA
+  addr_alt <- if ("Address" %in% names(df)) df$Address else NA
+  addr_raw <- ifelse(!is.na(addr_raw) & addr_raw != "", addr_raw, addr_alt)
+  
+  unit_raw <- if ("HUNITNO" %in% names(df)) df$HUNITNO else ""
+  
+  city_raw <- if ("HCITY" %in% names(df)) df$HCITY else NA
+  city_alt <- if ("City" %in% names(df)) df$City else NA
+  city_raw <- ifelse(!is.na(city_raw) & city_raw != "", city_raw, city_alt)
+  
+  state_raw <- if ("HSTATE" %in% names(df)) df$HSTATE else NA
+  state_alt <- if ("State" %in% names(df)) df$State else NA
+  state_raw <- ifelse(!is.na(state_raw) & state_raw != "", state_raw, state_alt)
+  
+  zip_raw <- if ("HZIP" %in% names(df)) df$HZIP else NA
+  zip_alt <- if ("Zip_Code" %in% names(df)) df$Zip_Code else NA
+  zip_raw <- ifelse(!is.na(zip_raw) & zip_raw != "", zip_raw, zip_alt)
+  
+  paste(
+    normalize_text(addr_raw),
+    normalize_text(unit_raw),
+    normalize_text(city_raw),
+    normalize_text(state_raw),
+    normalize_text(zip_raw)
+  )
+}
+
+dedup_exact_ignore <- function(df, ignore_cols, label) {
+  before <- nrow(df)
+  if (length(ignore_cols) > 0) {
+    df <- df %>% distinct(across(-all_of(ignore_cols)), .keep_all = TRUE)
+  } else {
+    df <- df %>% distinct()
+  }
+  after <- nrow(df)
+  cat(label, "- exact de-dup (ignoring", paste(ignore_cols, collapse = ", "), "):", before, "->", after, "\n")
+  log_dedup(label, before, after)
+  df
+}
+
+dedup_by_key <- function(df, key_cols, label) {
+  if (length(key_cols) == 0) return(df)
+  before <- nrow(df)
+  df <- df %>% distinct(across(all_of(key_cols)), .keep_all = TRUE)
+  after <- nrow(df)
+  cat(label, "- key de-dup on", paste(key_cols, collapse = ", "), ":", before, "->", after, "\n")
+  log_dedup(label, before, after)
+  df
+}
+
+log_control_ad_variation <- function(df, label) {
+  if (!("CONTROL" %in% names(df))) return(invisible(NULL))
+  addr_key <- build_address_key(df)
+  tmp <- df %>%
+    mutate(addr_key = addr_key) %>%
+    group_by(CONTROL) %>%
+    summarize(distinct_ads = n_distinct(addr_key, na.rm = TRUE), .groups = "drop")
+  count_multi <- sum(tmp$distinct_ads > 1, na.rm = TRUE)
+  cat(label, "- controls with >1 distinct ad address:", count_multi, "of", nrow(tmp), "\n")
+}
 
 # Load the adsprocessed_JPE data
 adsprocessed_data <- readRDS(paste0(input_folder, "/adsprocessed_JPE_censor.rds"))
 
-# Load census tracts and places data
+# De-duplicate adsprocessed data
+ads_index_cols <- intersect(c("X.x", "X.y", "X.x.1", "X.y.1", "SEQRH"), names(adsprocessed_data))
+adsprocessed_data <- dedup_exact_ignore(adsprocessed_data, ads_index_cols, "adsprocessed")
+
+# De-duplicate near-duplicates by normalized address within CONTROL
+adsprocessed_data <- adsprocessed_data %>%
+  mutate(
+    addr_key = build_address_key(.),
+    addr_key_dedup = ifelse(is.na(addr_key) | addr_key == "", paste0("missing_", row_number()), addr_key)
+  )
+adsprocessed_key <- intersect(c("CONTROL", "TESTERID", "addr_key_dedup"), names(adsprocessed_data))
+adsprocessed_data <- dedup_by_key(adsprocessed_data, adsprocessed_key, "adsprocessed address key")
+adsprocessed_data <- adsprocessed_data %>% select(-addr_key, -addr_key_dedup)
+log_control_ad_variation(adsprocessed_data, "adsprocessed")
+
+# Load census block groups and places data
 # Using tigris package to get census geography data
 # Note: Using cache = TRUE to avoid re-downloading data
 
@@ -47,8 +159,8 @@ states_to_process <- c(
   "53" = "WA"  # Washington
 )
 
-# Initialize an empty dataframe to store all tract-place mappings
-all_tract_place_mappings <- data.frame()
+# Initialize an empty dataframe to store all block group-place mappings
+all_block_group_place_mappings <- data.frame()
 
 # Process each state
 for (state_fips in names(states_to_process)) {
@@ -57,17 +169,17 @@ for (state_fips in names(states_to_process)) {
   cat(paste0("\n\nProcessing state: ", state_abbr, " (FIPS: ", state_fips, ")\n"))
   
   # Define file paths for saving intermediate results
-  intersection_file <- paste0(output_folder, "/Intersection Files/tract_place_intersection_", state_abbr, ".rds")
+  intersection_file <- paste0(output_folder, "/Intersection Files/block_group_place_intersection_", state_abbr, ".rds")
   
-  # Get census tracts for the current state
-  cat("Loading census tracts data for", state_abbr, "...\n")
-  tracts <- tracts(state = state_abbr, cb = TRUE, year = census_year)
-  cat(state_abbr, "census tracts loaded:", nrow(tracts), "tracts\n")
+  # Get census block groups for the current state
+  cat("Loading census block groups data for", state_abbr, "...\n")
+  block_groups_sf <- block_groups(state = state_abbr, cb = TRUE, year = census_year)
+  cat(state_abbr, "census block groups loaded:", nrow(block_groups_sf), "block groups\n")
 
   # Check if the intersection file already exists to avoid reprocessing
   if (file.exists(intersection_file)) {
-    cat("Loading existing tract-place intersection for", state_abbr, "...\n")
-    tract_place_intersection <- readRDS(intersection_file)
+    cat("Loading existing block group-place intersection for", state_abbr, "...\n")
+    block_group_place_intersection <- readRDS(intersection_file)
   } else {
     # Get places for the current state
     cat("Loading places data for", state_abbr, "...\n")
@@ -75,11 +187,11 @@ for (state_fips in names(states_to_process)) {
     cat(state_abbr, "places loaded:", nrow(places), "places\n")
     
     # Ensure both datasets have the same CRS
-    st_crs(tracts) <- st_crs(places)
+    st_crs(block_groups_sf) <- st_crs(places)
     
     # Perform spatial intersection
-    cat("Performing spatial intersection between tracts and places for", state_abbr, "...\n")
-    tract_place_intersection <- st_intersection(tracts, places)
+    cat("Performing spatial intersection between block groups and places for", state_abbr, "...\n")
+    block_group_place_intersection <- st_intersection(block_groups_sf, places)
     
     # Create the directory for intersection files if it doesn't exist
     intersection_dir <- paste0(output_folder, "/Intersection Files")
@@ -89,7 +201,7 @@ for (state_fips in names(states_to_process)) {
     }
 
     # Save the intersection to avoid recomputing if the process is interrupted
-    saveRDS(tract_place_intersection, file = intersection_file)
+    saveRDS(block_group_place_intersection, file = intersection_file)
     cat("Saved intersection to", intersection_file, "\n")
   }
   
@@ -97,68 +209,68 @@ for (state_fips in names(states_to_process)) {
   cat("Calculating coverage percentages for", state_abbr, "...\n")
   
   # Make geometries valid
-  tract_place_intersection <- st_make_valid(tract_place_intersection)
+  block_group_place_intersection <- st_make_valid(block_group_place_intersection)
   
   # Calculate intersection areas
-  tract_place_intersection$intersection_area <- st_area(tract_place_intersection)
+  block_group_place_intersection$intersection_area <- st_area(block_group_place_intersection)
   
-  # Calculate tract areas
-  tracts$tract_area <- st_area(tracts)
+  # Calculate block group areas
+  block_groups_sf$block_group_area <- st_area(block_groups_sf)
   
-  # Join tract areas to intersection data
-  tract_place_intersection <- tract_place_intersection %>%
-    left_join(tracts %>% 
+  # Join block group areas to intersection data
+  block_group_place_intersection <- block_group_place_intersection %>%
+    left_join(block_groups_sf %>% 
                 st_drop_geometry() %>% 
-                select(GEO_ID, tract_area), 
+                select(GEO_ID, block_group_area), 
               by = "GEO_ID")
   
   # Calculate coverage percentage
-  tract_place_intersection$coverage_pct <- as.numeric(tract_place_intersection$intersection_area / tract_place_intersection$tract_area)
+  block_group_place_intersection$coverage_pct <- as.numeric(block_group_place_intersection$intersection_area / block_group_place_intersection$block_group_area)
   
-  # For each tract, find the place with the largest coverage
-  best_matches <- tract_place_intersection %>%
+  # For each block group, find the place with the largest coverage
+  best_matches <- block_group_place_intersection %>%
     group_by(GEO_ID) %>%
     arrange(desc(coverage_pct)) %>%
     slice(1) %>%
     ungroup()
   
-  # Create clean dataset with tract-to-place mapping
-  state_tract_place_mapping <- best_matches %>%
+  # Create clean dataset with block-group-to-place mapping
+  state_block_group_place_mapping <- best_matches %>%
     st_drop_geometry() %>%
-    select(tract_geoid = GEO_ID, place_geoid = GEOID, place_name = NAME.1, coverage_pct) %>%
+    select(block_group_geoid = GEO_ID, place_geoid = GEOID, place_name = NAME.1, coverage_pct) %>%
     mutate(
-      tract_geoid = sub("^.*US", "", tract_geoid),
+      block_group_geoid = sub("^.*US", "", block_group_geoid),
       state_fips = state_fips,
       state_abbr = state_abbr
     )
   
   cat("Completed processing for", state_abbr, "\n")
-  cat("Number of tracts matched to places:", nrow(state_tract_place_mapping), "\n")
+  cat("Number of block groups matched to places:", nrow(state_block_group_place_mapping), "\n")
   
   # Append to the combined dataframe
-  all_tract_place_mappings <- rbind(all_tract_place_mappings, state_tract_place_mapping)
+  all_block_group_place_mappings <- rbind(all_block_group_place_mappings, state_block_group_place_mapping)
   
   # Clean up to free memory
-  rm(tract_place_intersection, best_matches, state_tract_place_mapping)
-  if (exists("tracts")) rm(tracts)
+  rm(block_group_place_intersection, best_matches, state_block_group_place_mapping)
+  if (exists("block_groups_sf")) rm(block_groups_sf)
   if (exists("places")) rm(places)
   gc()
 }
 
-cat("\nSpatial merge completed for all states. Each tract is matched to at most one place (the one with largest coverage).\n")
-cat("Total number of tracts matched to places:", nrow(all_tract_place_mappings), "\n")
+cat("\nSpatial merge completed for all states. Each block group is matched to at most one place (the one with largest coverage).\n")
+cat("Total number of block groups matched to places:", nrow(all_block_group_place_mappings), "\n")
 
 intersection_dir <- paste0(output_folder, "/Intersection Files")
 
-# Save the combined tract-place mapping
-saveRDS(all_tract_place_mappings, file = paste0(intersection_dir, "/all_tract_place_mappings.rds"))
+# Save the combined block-group-place mapping
+saveRDS(all_block_group_place_mappings, file = paste0(intersection_dir, "/all_block_group_place_mappings.rds"))
 
-# Load the tract-place mapping, to run the file after it has been generated
-tract_place_mapping <- readRDS(paste0(intersection_dir, "/all_tract_place_mappings.rds"))
+# Load the block-group-place mapping, to run the file after it has been generated
+block_group_place_mapping <- readRDS(paste0(intersection_dir, "/all_block_group_place_mappings.rds"))
 
 # Display the first few rows of the mapping
-cat("\nFirst few rows of the tract-to-place mapping:\n")
-print(head(tract_place_mapping))
+cat("\nFirst few rows of the block-group-to-place mapping:\n")
+print(head(block_group_place_mapping))
 
 
 
@@ -166,16 +278,16 @@ print(head(tract_place_mapping))
 # Process all observations in adsprocessed_data
 cat("\nProcessing all observations and merging with place information...\n")
 
-# Extract tract GEOID from block GEOID (first 11 characters)
-cat("\nExtracting tract GEOID from block GEOID and merging with place information...\n")
+# Extract block group GEOID from block GEOID (drop block suffix)
+cat("\nExtracting block group GEOID from block GEOID and merging with place information...\n")
 adsprocessed_data <- adsprocessed_data %>%
-  mutate(tract_geoid = substr(GEOID10, 1, nchar(GEOID10)-4)) %>%
-  mutate(tract_geoid = sprintf("%011s", tract_geoid))
+  mutate(block_group_geoid = substr(GEOID10, 1, nchar(GEOID10)-3)) %>%
+  mutate(block_group_geoid = sprintf("%012s", block_group_geoid))
   
 
-# Merge with tract_place_mapping to get place information
+# Merge with block_group_place_mapping to get place information
 adsprocessed_data <- adsprocessed_data %>%
-  left_join(tract_place_mapping, by = c("tract_geoid"))
+  left_join(block_group_place_mapping, by = "block_group_geoid")
 
 # For blocks without a corresponding place, fill in with county information
 cat("\nFilling in county information for blocks without a corresponding place...\n")
@@ -221,13 +333,13 @@ adsprocessed_data_processed <- adsprocessed_data %>%
   left_join(county_lookup, by = "county_geoid") %>%
   mutate(
     # If place_geoid is NA, use county_geoid instead
-    place_geoid = ifelse(is.na(place_geoid), county_geoid, place_geoid),
+    place_geoid = ifelse(is.na(place_geoid) | coverage_pct <= 0.01, county_geoid, place_geoid),
     # If place_name is NA, use county_name instead
-    place_name = ifelse(is.na(place_name), county_name, place_name)
+    place_name = ifelse(is.na(place_name) | coverage_pct <= 0.01, county_name, place_name)
   )
 
 test <- adsprocessed_data_processed %>% 
-  select(HCITY, GEOID10, CONTROL, STATEFP10, COUNTYFP10, tract_geoid, place_geoid, place_name, coverage_pct) %>%
+  select(HCITY, GEOID10, CONTROL, STATEFP10, COUNTYFP10, block_group_geoid, place_geoid, place_name, coverage_pct) %>%
   filter(is.na(place_geoid))
 
 
@@ -271,6 +383,11 @@ adsprocessed_data_stata <- adsprocessed_data_processed %>%
   rename_all(~ ifelse(nchar(.) > 32, substr(., 1, 32), .)) %>%
   # Drop any columns that include lists
   select_if(~ !is.list(.))
+
+# Drop duplicate TesterID if present (TESTERID is the canonical string version)
+if ("TesterID" %in% names(adsprocessed_data_stata)) {
+  adsprocessed_data_stata <- adsprocessed_data_stata %>% select(-TesterID)
+}
 
 # Save the processed data to Stata .dta format
 dta_output_path <- file.path(output_folder, "adsprocessed_correct_cities.dta")
@@ -354,21 +471,21 @@ cat("\nAd combinations spanning multiple block groups:\n")
 print(head(ad_combos_spanning_multiple_blkgrps, 20))
 
 # For the two blkgrp values that have the same ad characteristics, we show that they will be assigned the same city in the end
-cat("\nSubsetting to specific tract_geoid values (39055312203 and 39055312202)...\n")
-selected_tracts <- tract_place_mapping %>%
-  filter(tract_geoid %in% c("39055312203", "39055312202"))
+cat("\nSubsetting to specific block_group_geoid values (39055312203 and 39055312202)...\n")
+selected_block_groups <- block_group_place_mapping %>%
+  filter(block_group_geoid %in% c("39055312203", "39055312202"))
 
 # Display the results
-cat("Found", nrow(selected_tracts), "matching records\n")
-if(nrow(selected_tracts) > 0) {
-  cat("\nSelected tract information:\n")
-  print(selected_tracts %>% 
+cat("Found", nrow(selected_block_groups), "matching records\n")
+if(nrow(selected_block_groups) > 0) {
+  cat("\nSelected block group information:\n")
+  print(selected_block_groups %>% 
         as.data.frame())
 } else {
   cat("No matching records found for the specified GEOIDs\n")
 }
 
-# Note that both tract_geoids point to the place_name Chardon, so we can use either one without inaccuracy in our generated place names
+# Note that both block_group_geoids point to the place_name Chardon, so we can use either one without inaccuracy in our generated place names
 
 
 
@@ -406,29 +523,47 @@ compare_ad_variables <- function(data, dataset_name) {
 }
 
 
+# HUD de-duplication helper
+dedup_hud_dataset <- function(df, dataset_name) {
+  index_cols <- intersect(c("X.x", "X.y", "X.x.1", "X.y.1", "SEQRH"), names(df))
+  df <- dedup_exact_ignore(df, index_cols, paste(dataset_name, "exact"))
+  
+  ad_cols <- grep("_Ad$", names(df), value = TRUE)
+  rec_cols <- grep("_Rec$", names(df), value = TRUE)
+  ad_price_cols <- intersect(c("AdPrice", "logAdPrice"), names(df))
+  rec_price_cols <- intersect(c("RecPrice", "logRecPrice"), names(df))
+  combined_key <- unique(c("CONTROL", "TESTERID", ad_cols, ad_price_cols, rec_cols, rec_price_cols))
+  df <- dedup_by_key(df, combined_key, paste(dataset_name, "ad+rec"))
+  
+  df
+}
+
 # Load and check HUD_processed_JPE_census_042021.rds
 cat("\nChecking HUD_processed_JPE_census_042021.rds...\n")
 hud_census <- readRDS(paste0(input_folder, "/HUDprocessed_JPE_census_042021.rds"))
+hud_census <- dedup_hud_dataset(hud_census, "HUDprocessed_JPE_census_042021.rds")
 hud_census_results <- compare_ad_variables(hud_census, "HUDprocessed_JPE_census_042021.rds")
 
 # Load and check HUD_processed_JPE_names_042021.rds
 cat("\nChecking HUD_processed_JPE_names_042021.rds...\n")
 hud_names <- readRDS(paste0(input_folder, "/HUDprocessed_JPE_names_042021.rds"))
+hud_names <- dedup_hud_dataset(hud_names, "HUDprocessed_JPE_names_042021.rds")
 hud_names_results <- compare_ad_variables(hud_names, "HUDprocessed_JPE_names_042021.rds")
 
 # Load and check HUD_processed_JPE_testscores_042021.rds
 cat("\nChecking HUD_processed_JPE_testscores_042021.rds...\n")
 hud_testscores <- readRDS(paste0(input_folder, "/HUDprocessed_JPE_testscores_042021.rds"))
+hud_testscores <- dedup_hud_dataset(hud_testscores, "HUDprocessed_JPE_testscores_042021.rds")
 hud_testscores_results <- compare_ad_variables(hud_testscores, "HUDprocessed_JPE_testscores_042021.rds")
 
 
 # Merge place information from adsprocessed_data into the three datasets
 cat("\nMerging place information from adsprocessed_data into the three datasets...\n")
 
-# First, create a lookup dataframe with ad variables and place information
-cat("Creating lookup dataframe with ad variables and place information...\n")
+# First, create a lookup dataframe with ad variables, place info, and county info
+cat("Creating lookup dataframe with ad variables, place info, and county info...\n")
  place_lookup <- adsprocessed_data_processed %>%
-  select(all_of(ad_only_variables), blkgrp, place_name, place_geoid) %>%
+  select(all_of(ad_only_variables), blkgrp, place_name, place_geoid, county_name, county_geoid) %>%
   mutate(blkgrp = ifelse(blkgrp == "390553122033", "390553122021", blkgrp)) %>%
   distinct()
 
@@ -570,3 +705,8 @@ haven::write_dta(hud_names_stata, file.path(output_folder, "HUDprocessed_names_c
 haven::write_dta(hud_testscores_stata, file.path(output_folder, "HUDprocessed_testscores_correct_cities.dta"))
 
 cat("Merged datasets saved to Stata format\n")
+
+# Save de-duplication log
+cat("\nDe-duplication summary:\n")
+print(dedup_log)
+write.csv(dedup_log, file.path(output_folder, "dedup_log.csv"), row.names = FALSE)
