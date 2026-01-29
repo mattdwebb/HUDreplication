@@ -510,12 +510,7 @@ run_regressions ///
 /* Table 13: Differences in outcomes */
 /*-------------------------------------*/
 
-use "${DATA}/Generated/HUDprocessed_census_correct_cities.dta", clear
-rename *, lower
-ensure_market
-ensure_race_vars
-ensure_zip_city_vars
-do "${CODE}/data_cleaner.do"
+load_cleaned_data "HUDprocessed_census_correct_cities.dta" "HUDprocessed_census_correct_cities"
 
 clean_vars "elementary_school_score_ad elementary_school_score_rec skill_ad skill_rec"
 gen dif_esadrace = elementary_school_score_rec - elementary_school_score_ad

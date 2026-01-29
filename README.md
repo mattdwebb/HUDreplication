@@ -8,14 +8,10 @@ Copy adsprocessed_JPE_censor.rds, HUDprocessed_JPE_census_042021.rds, HUDprocess
 
 Copy zipinfo-county.dta and zipinfo.dta to the Data folder. 
 
-To Clean the Data, and Check Structure:
+To Clean the Data:
 
-1. Clean Tester-input Address Names (to be used for verifying structure of the data, not in the final analysis) by running address_cleaning.py 
-    - Can take up to an hour
-    - Requires an Anthropic API key to send queries to Claude 3.7, saved in api_keys.py, which must be created. Template given in api_keys_TEMPLATE.py to fill in your own api key.
-
-2. Generate Correct City/County Names and de-duplicate records by matching block group ids for the address in the initial ad to the list of incorporated and unincorporated cities (or in US census terminology, 'places') in the 2020 US Census. Run place_county_matching_and_dedup.R. 
-    - Can take up to a couple hours due to the "spatial merge" requiring calculating intersections of thousands of shape files of census tracts and city boundaries
+Generate Correct City/County Names and de-duplicate records by matching block group ids for the address in the initial ad to the list of incorporated and unincorporated cities (or in US census terminology, 'places') in the 2020 US Census. Run place_county_matching_and_dedup.R. 
+    - Can take some time due to the "spatial merge" requiring calculating intersections of thousands of shape files of census tracts and city boundaries, but usually no more than 10 minutes on the testing machine.
 
 
 To Run the Analysis and Replicate All Tables:
