@@ -24,7 +24,7 @@ end
 
 // TABLE 5
 
-process_data "adsprocessed_correct_cities.csv" 0
+process_data "adsprocessed_correct_cities.csv" 0 "" "hcity"
 
 qui gen show = stotunit
 qui cap destring show, replace force
@@ -61,7 +61,7 @@ correct_table "`CONTROL_VARS'" "`ABS_VARS'" ///
 
 // TABLE 6
 
-process_data  "HUDprocessed_census_correct_cities.csv" 0
+process_data "HUDprocessed_census_correct_cities.csv" 0 "" "hcity_ad"
 
 // Generate condition variables
 forvalues i = 1/5 {
@@ -90,7 +90,7 @@ correct_table "`CONTROL_VARS'" "`ABS_VARS'" ///
 
 // TABLE 7
 
-process_data  "HUDprocessed_census_correct_cities.csv" 0
+process_data "HUDprocessed_census_correct_cities.csv" 0 "" "hcity_ad"
 
 // Generate condition variables
 forvalues i = 1/3 {
@@ -117,7 +117,7 @@ correct_table "`CONTROL_VARS'" "`ABS_VARS'" ///
 
 // TABLE 8A - pt. 1
 
-process_data  "HUDprocessed_testscores_correct_cities.csv" 0
+process_data "HUDprocessed_testscores_correct_cities.csv" 0 "" "hcity_ad"
 
 // Generate condition variables
 forvalues i = 1/2 {
@@ -143,7 +143,7 @@ correct_table "`CONTROL_VARS'" "`ABS_VARS'" ///
 	"corrected"
 
 // TABLE 8A - pt. 2
-process_data  "HUDprocessed_census_correct_cities.csv" 0
+process_data "HUDprocessed_census_correct_cities.csv" 0 "" "hcity_ad"
 
 
 // Generate condition variables
@@ -171,7 +171,7 @@ correct_table "`CONTROL_VARS'" "`ABS_VARS'" ///
 
 // TABLE 8B
 
-process_data  "HUDprocessed_census_correct_cities.csv" 0
+process_data "HUDprocessed_census_correct_cities.csv" 0 "" "hcity_ad"
 
 // Generate condition variables
 forvalues i = 1/5 {
@@ -198,7 +198,7 @@ correct_table "`CONTROL_VARS'" "`ABS_VARS'" ///
 
 // TABLE 9A
 
-process_data  "HUDprocessed_census_correct_cities.csv" 0
+process_data "HUDprocessed_census_correct_cities.csv" 0 "" "hcity_ad"
 
 // Generate condition variables, whole dataset
 forvalues i = 1/3 {
@@ -224,7 +224,7 @@ correct_table "`CONTROL_VARS'" "`ABS_VARS'" ///
 
 // TABLE 9B
 
-process_data  "HUDprocessed_census_correct_cities.csv" 0
+process_data "HUDprocessed_census_correct_cities.csv" 0 "" "hcity_ad"
 
 // Generate condition variables, selecting only for mothers
 forvalues i = 1/3 {
@@ -253,7 +253,7 @@ correct_table "`CONTROL_VARS'" "`ABS_VARS'" ///
 
 // TABLE 10A - pt. 1
 
-process_data  "HUDprocessed_testscores_correct_cities.csv" 0
+process_data "HUDprocessed_testscores_correct_cities.csv" 0 "" "hcity_ad"
 
 // Generate condition variables
 forvalues i = 1/2 {
@@ -281,7 +281,7 @@ correct_table "`CONTROL_VARS'" "`ABS_VARS'" ///
 
 // TABLE 10A - pt. 2
 
-process_data  "HUDprocessed_census_correct_cities.csv" 0
+process_data "HUDprocessed_census_correct_cities.csv" 0 "" "hcity_ad"
 
 
 // Generate condition variables
@@ -310,7 +310,7 @@ correct_table "`CONTROL_VARS'" "`ABS_VARS'" ///
 
 // TABLE 10B
 
-process_data  "HUDprocessed_census_correct_cities.csv" 0
+process_data "HUDprocessed_census_correct_cities.csv" 0 "" "hcity_ad"
 
 // Generate condition variables
 forvalues i = 1/5 {
@@ -338,7 +338,7 @@ correct_table "`CONTROL_VARS'" "`ABS_VARS'" ///
 
 // TABLE 11
 
-process_data  "HUDprocessed_census_correct_cities.csv" 0
+process_data "HUDprocessed_census_correct_cities.csv" 0 "" "hcity_ad"
 
 clean_vars "povrate_rec povrate_ad nodad_rec nodad_ad"
 
@@ -379,7 +379,7 @@ correct_table "`CONTROL_VARS'" "`ABS_VARS'" ///
 
 // TABLE 12
 
-process_data  "HUDprocessed_census_correct_cities.csv" 0
+process_data "HUDprocessed_census_correct_cities.csv" 0 "" "hcity_ad"
 
 clean_vars "medincome_rec"
 qui gen lnmincome_rec = log(medincome_rec)
@@ -408,7 +408,7 @@ correct_table "`CONTROL_VARS'" "`ABS_VARS'" ///
 
 // TABLE 13 - pt. 1
 
-process_data  "HUDprocessed_testscores_correct_cities.csv" 0
+process_data "HUDprocessed_testscores_correct_cities.csv" 0 "" "hcity_ad"
 
 clean_vars "mn_avg_ol_elem_rec mn_avg_ol_elem_ad mn_avg_ol_middle_rec mn_avg_ol_middle_ad"
 
@@ -441,7 +441,7 @@ correct_table "`CONTROL_VARS'" "`ABS_VARS'" ///
 
 // TABLE 13 - pt. 2
 
-process_data  "HUDprocessed_census_correct_cities.csv" 0
+process_data "HUDprocessed_census_correct_cities.csv" 0 "" "hcity_ad"
 
 clean_vars "assault_rec assault_ad elementary_school_score_rec elementary_school_score_ad"
 
@@ -474,7 +474,7 @@ correct_table "`CONTROL_VARS'" "`ABS_VARS'" ///
 
 // TABLE 13B
 
-process_data  "HUDprocessed_census_correct_cities.csv" 0
+process_data "HUDprocessed_census_correct_cities.csv" 0 "" "hcity_ad"
 
 clean_vars "povrate_rec povrate_ad skill_rec skill_ad college_rec college_ad singlefamily_rec singlefamily_ad ownerocc_rec ownerocc_ad sfcount_rec sfcount_ad rsei_rec rsei_ad pm25_rec pm25_ad"
 
@@ -510,7 +510,7 @@ correct_table "`CONTROL_VARS'" "`ABS_VARS'" ///
 
 // TABLE 14A
 
-process_data  "HUDprocessed_names_correct_cities.csv" 0
+process_data "HUDprocessed_names_correct_cities.csv" 0 "" "hcity_ad"
 
 
 // construct indicators for race groups
@@ -572,7 +572,7 @@ correct_table "`CONTROL_VARS'" "`ABS_VARS'" ///
 
 // TABLE 14B
 
-process_data  "HUDprocessed_names_correct_cities.csv" 0
+process_data "HUDprocessed_names_correct_cities.csv" 0 "" "hcity_ad"
 
 // Convert RecordingDate_Rec to month and year
 gen recordingdate_rec_date = date(recordingdate_rec, "YMD")

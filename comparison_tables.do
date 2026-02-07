@@ -38,19 +38,40 @@ end
 
 capture program drop ensure_zip_city_vars
 program define ensure_zip_city_vars
+    capture confirm variable hcity_ad
+    if _rc {
+        capture confirm variable hcityad
+        if !_rc gen hcity_ad = hcityad
+    }
     capture confirm variable hcity
     if _rc {
-        capture confirm variable hcity_x
-        if !_rc gen hcity = hcity_x
+        capture confirm variable hcity_ad
+        if !_rc gen hcity = hcity_ad
         else {
             capture confirm variable hcity_rec
             if !_rc gen hcity = hcity_rec
+            else {
+                capture confirm variable hcity_x
+                if !_rc gen hcity = hcity_x
+            }
         }
+    }
+    else {
+        capture confirm variable hcity_ad
+        if !_rc replace hcity = hcity_ad if hcity_ad != ""
     }
     capture confirm variable hzip
     if _rc {
-        capture confirm variable hzip_rec
-        if !_rc gen hzip = hzip_rec
+        capture confirm variable hzip_ad
+        if !_rc gen hzip = hzip_ad
+        else {
+            capture confirm variable zip_ad
+            if !_rc gen hzip = zip_ad
+            else {
+                capture confirm variable hzip_rec
+                if !_rc gen hzip = hzip_rec
+            }
+        }
     }
     capture confirm string variable hcity
     if _rc {

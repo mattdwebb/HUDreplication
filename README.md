@@ -10,7 +10,7 @@ Copy zipinfo-county.dta and zipinfo.dta to the Data folder.
 
 To Clean the Data:
 
-Generate Correct City/County Names and de-duplicate records by matching block group ids for the address in the initial ad to the list of incorporated and unincorporated cities (or in US census terminology, 'places') in the 2020 US Census. Run place_county_matching_and_dedup.R. 
+Generate Correct City/County Names and de-duplicate records by matching block group ids for the address in the initial ad to the list of incorporated and unincorporated cities (or in US census terminology, 'places') in the 2020 US Census. Run preprocess_place_city_dedup.R. 
     - Can take some time due to the "spatial merge" requiring calculating intersections of thousands of shape files of census tracts and city boundaries, but usually no more than 10 minutes on the testing machine.
 
 

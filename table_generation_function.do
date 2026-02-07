@@ -19,11 +19,37 @@ program define clean_vars
 	}
 end
 
+capture program drop set_hcity_source
+program define set_hcity_source
+    args source_var
+    local source = lower("`source_var'")
+    if "`source'" == "hcityad" local source "hcity_ad"
+
+    capture confirm variable `source'
+    if _rc {
+        display as error "Requested hcity source variable not found: `source'"
+        error 111
+    }
+
+    capture confirm string variable `source'
+    if _rc {
+        capture tostring `source', replace
+    }
+
+    capture drop hcity
+    gen hcity = `source'
+end
+
 
 capture program drop process_data
 program define process_data
-    args data_file force_clean corrected
+    // hcity_source should be passed explicitly per file (e.g., hcity_ad for HUD corrected files)
+    args data_file force_clean corrected hcity_source
     local cleaned_file = subinstr("`data_file'", ".csv", "_cleaned.dta", .)
+
+    if "`hcity_source'" == "" {
+        local hcity_source "hcity"
+    }
 
     if "`force_clean'" != "1" {
         capture confirm file "${OUTPUT}/`cleaned_file'"
@@ -62,6 +88,32 @@ program define process_data
     /*-------------------------------------*/
     /*---- Getting correct city names -----*/
     /*-------------------------------------*/
+
+    // Standardize alias before explicit source selection
+    if lower("`hcity_source'") == "hcity_ad" {
+        capture confirm variable hcity_ad
+        if _rc {
+            capture confirm variable hcityad
+            if !_rc gen hcity_ad = hcityad
+        }
+    }
+
+    display "Using hcity source variable: `hcity_source'"
+    set_hcity_source "`hcity_source'"
+
+    capture confirm variable hzip
+    if _rc {
+        capture confirm variable hzip_ad
+        if !_rc gen hzip = hzip_ad
+        else {
+            capture confirm variable zip_ad
+            if !_rc gen hzip = zip_ad
+            else {
+                capture confirm variable hzip_rec
+                if !_rc gen hzip = hzip_rec
+            }
+        }
+    }
 
     // Keep in empty city name strings
 

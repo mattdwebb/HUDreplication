@@ -1,0 +1,70 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{setspace}
+
+\title{Documentation of HCITY Source Issue in HUD Files}
+\author{}
+\date{\today}
+
+\begin{document}
+\maketitle
+\onehalfspacing
+
+\section{Purpose}
+This note documents evidence that the \texttt{HCITY.x} field in the HUD analysis files is not ad-side city, and instead aligns with recommended-property city values. It also documents the ad-side city recovery procedure from \texttt{adsprocessed\_JPE.rds}.
+
+\section{Data and Matching Design}
+The diagnostics use:
+\begin{itemize}
+\item \texttt{Data/Original/HUDprocessed\_JPE\_census\_042021.rds}
+\item \texttt{Data/Original/HUDprocessed\_JPE\_names\_042021.rds}
+\item \texttt{Data/Original/HUDprocessed\_JPE\_testscores\_042021.rds}
+\item \texttt{Data/Original/adsprocessed\_JPE.rds}
+\item \texttt{Data/Original/recsprocessed\_JPE.rds}
+\end{itemize}
+
+Ad-side city (\texttt{HCITY\_Ad}) is recovered by joining HUD rows to ads rows on:
+\[
+\{\texttt{CONTROL, TESTERID, logAdPrice, stfid\_Ad, w2012pc\_Ad, b2012pc\_Ad, a2012pc\_Ad, hisp2012pc\_Ad, oth2012pc\_Ad}\}.
+\]
+
+Rec-side cross-check values from \texttt{recsprocessed} are joined on:
+\[
+\{\texttt{CONTROL, TESTERID, logRecPrice, w2012pc\_Rec, b2012pc\_Rec, a2012pc\_Rec, hisp2012pc\_Rec, oth2012pc\_Rec}\}.
+\]
+
+\section{Main Findings}
+\input{Output/hcity_diagnostics_main.tex}
+
+The first table shows:
+\begin{itemize}
+\item \texttt{HCITY.x} equals \texttt{HCITY\_Rec} on all comparable rows.
+\item \texttt{HCITY\_Rec} differs from recovered \texttt{HCITY\_Ad} on a large share of comparable rows.
+\end{itemize}
+
+\input{Output/hcity_within_control.tex}
+
+Within-control variation in \texttt{HCITY.x} is substantial. Because each trial (\texttt{CONTROL}) corresponds to one advertised property, this variation is inconsistent with \texttt{HCITY.x} being ad-side city.
+
+\input{Output/hcity_recs_crosscheck.tex}
+
+The recsprocessed cross-check confirms that HUD \texttt{HCITY.x} matches rec-side city values.
+
+\section{Interpretation}
+Taken together, these diagnostics indicate a source-labeling failure: HUD \texttt{HCITY.x} is functioning as a rec-side city field, not an ad-side city field.
+
+The replication pipeline now includes a separate \texttt{HCITY\_Ad} field merged from ads data, enabling analysis with either city definition:
+\begin{itemize}
+\item ad-side city fixed effects (\texttt{HCITY\_Ad})
+\item rec-side city fixed effects (\texttt{HCITY.x}/\texttt{HCITY\_Rec})
+\end{itemize}
+
+\section{Reproducibility}
+To regenerate the diagnostics tables used here:
+\begin{verbatim}
+Rscript document_hcity_source_issue.R
+\end{verbatim}
+
+\end{document}

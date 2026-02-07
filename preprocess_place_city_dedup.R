@@ -28,6 +28,13 @@ normalize_text <- function(x) {
   str_squish(x)
 }
 
+normalize_city_for_join <- function(x) {
+  x <- as.character(x)
+  x <- str_squish(str_to_upper(x))
+  x[x == ""] <- NA_character_
+  x
+}
+
 dedup_log <- data.frame(
   step = character(),
   before = integer(),
@@ -170,17 +177,19 @@ for (state_fips in names(states_to_process)) {
   
   # Define file paths for saving intermediate results
   intersection_file <- paste0(output_folder, "/Intersection Files/block_group_place_intersection_", state_abbr, ".rds")
-  
-  # Get census block groups for the current state
-  cat("Loading census block groups data for", state_abbr, "...\n")
-  block_groups_sf <- block_groups(state = state_abbr, cb = TRUE, year = census_year)
-  cat(state_abbr, "census block groups loaded:", nrow(block_groups_sf), "block groups\n")
 
   # Check if the intersection file already exists to avoid reprocessing
+  used_cached_intersection <- FALSE
   if (file.exists(intersection_file)) {
     cat("Loading existing block group-place intersection for", state_abbr, "...\n")
     block_group_place_intersection <- readRDS(intersection_file)
+    used_cached_intersection <- TRUE
   } else {
+    # Get census block groups for the current state
+    cat("Loading census block groups data for", state_abbr, "...\n")
+    block_groups_sf <- block_groups(state = state_abbr, cb = TRUE, year = census_year)
+    cat(state_abbr, "census block groups loaded:", nrow(block_groups_sf), "block groups\n")
+
     # Get places for the current state
     cat("Loading places data for", state_abbr, "...\n")
     places <- places(state = state_abbr, cb = TRUE, year = 2020)
@@ -214,15 +223,23 @@ for (state_fips in names(states_to_process)) {
   # Calculate intersection areas
   block_group_place_intersection$intersection_area <- st_area(block_group_place_intersection)
   
-  # Calculate block group areas
-  block_groups_sf$block_group_area <- st_area(block_groups_sf)
-  
-  # Join block group areas to intersection data
-  block_group_place_intersection <- block_group_place_intersection %>%
-    left_join(block_groups_sf %>% 
-                st_drop_geometry() %>% 
-                select(GEO_ID, block_group_area), 
-              by = "GEO_ID")
+  if (used_cached_intersection) {
+    # When reusing cached intersections, derive relative coverage from intersections alone.
+    block_group_place_intersection <- block_group_place_intersection %>%
+      group_by(GEO_ID) %>%
+      mutate(block_group_area = sum(intersection_area, na.rm = TRUE)) %>%
+      ungroup()
+  } else {
+    # Calculate block group areas
+    block_groups_sf$block_group_area <- st_area(block_groups_sf)
+    
+    # Join block group areas to intersection data
+    block_group_place_intersection <- block_group_place_intersection %>%
+      left_join(block_groups_sf %>% 
+                  st_drop_geometry() %>% 
+                  select(GEO_ID, block_group_area), 
+                by = "GEO_ID")
+  }
   
   # Calculate coverage percentage
   block_group_place_intersection$coverage_pct <- as.numeric(block_group_place_intersection$intersection_area / block_group_place_intersection$block_group_area)
@@ -296,37 +313,14 @@ cat("\nFilling in county information for blocks without a corresponding place...
 adsprocessed_data <- adsprocessed_data %>%
   mutate(county_geoid = substr(GEOID10, 1, 5))
 
-# Get county names from tigris for all states
-# Create an empty dataframe to store county information
-county_lookup <- data.frame()
-
-# Use the states_to_process list instead of extracting from data
-# states_to_process contains state abbreviations as strings
-
-# Loop through each state to get county information
-for (state_abbr in states_to_process) {
-  # Get state FIPS code from the state abbreviation
-  state_info <- tigris::fips_codes %>%
-    filter(state == state_abbr) %>%
-    distinct(state, state_code) %>%
-    slice(1)
-  
-  if (nrow(state_info) > 0) {
-    # Get counties for this state
-    counties_state <- tigris::counties(state = state_abbr, cb = TRUE, year = census_year)
-    
-    # Create county lookup for this state
-    state_county_lookup <- counties_state %>%
-      st_drop_geometry() %>%
-      select(county_geoid = GEO_ID, county_name = NAME) %>%
-      mutate(
-        county_geoid = sub("^.*US", "", county_geoid),
-        county_name = paste(county_name, " County"))
-    
-    # Append to the combined dataframe
-    county_lookup <- rbind(county_lookup, state_county_lookup)
-  }
-}
+# Build county lookup from built-in FIPS codes (offline-safe)
+county_lookup <- tigris::fips_codes %>%
+  filter(state %in% unname(states_to_process)) %>%
+  transmute(
+    county_geoid = paste0(state_code, county_code),
+    county_name = paste(county, " County")
+  ) %>%
+  distinct(county_geoid, .keep_all = TRUE)
 
 # Join county names to the data
 adsprocessed_data_processed <- adsprocessed_data %>%
@@ -407,6 +401,7 @@ adsprocessed <- readRDS(paste0(input_folder, "/adsprocessed_JPE.rds"))
 # Define ad_only_variables with specific variable names
 ad_only_variables <- c("logAdPrice", "stfid_Ad", "w2012pc_Ad", "b2012pc_Ad", 
                       "a2012pc_Ad", "hisp2012pc_Ad", "oth2012pc_Ad", "CONTROL")
+ad_city_join_keys <- c(ad_only_variables, "TESTERID")
 
 # Create an index based on unique combinations of these ad variables
 cat("\nCreating an index based on unique combinations of ad variables...\n")
@@ -492,6 +487,35 @@ if(nrow(selected_block_groups) > 0) {
 # Check if the same ad variables are used across different datasets for identification
 cat("\nChecking consistency of ad variables across datasets...\n")
 
+# Build an ad-city lookup keyed to ad characteristics + tester for later HUD merge
+cat("\nBuilding HCITY_Ad lookup using ad variables + TESTERID...\n")
+ad_city_lookup <- adsprocessed %>%
+  mutate(
+    TESTERID = as.character(TESTERID),
+    hcity_ad_raw = str_squish(as.character(HCITY)),
+    hcity_ad_raw = ifelse(hcity_ad_raw == "", NA_character_, hcity_ad_raw),
+    hcity_ad_norm = normalize_city_for_join(HCITY)
+  ) %>%
+  group_by(across(all_of(ad_city_join_keys))) %>%
+  summarize(
+    HCITY_Ad = {
+      valid_idx <- which(!is.na(hcity_ad_norm))
+      valid_norm <- hcity_ad_norm[valid_idx]
+      valid_raw <- hcity_ad_raw[valid_idx]
+      if (length(valid_norm) == 0) NA_character_
+      else if (dplyr::n_distinct(valid_norm) == 1) valid_raw[[1]]
+      else NA_character_
+    },
+    HCITY_Ad_ambiguous = {
+      valid <- hcity_ad_norm[!is.na(hcity_ad_norm)]
+      length(valid) > 0 && dplyr::n_distinct(valid) > 1
+    },
+    .groups = "drop"
+  )
+
+cat("HCITY_Ad lookup rows:", nrow(ad_city_lookup), "\n")
+cat("HCITY_Ad lookup keys with ambiguous cities:", sum(ad_city_lookup$HCITY_Ad_ambiguous), "\n")
+
 # Function to compare ad variables in a dataset with the reference list
 compare_ad_variables <- function(data, dataset_name) {
   # Get all column names from the dataset
@@ -565,7 +589,8 @@ cat("Creating lookup dataframe with ad variables, place info, and county info...
  place_lookup <- adsprocessed_data_processed %>%
   select(all_of(ad_only_variables), blkgrp, place_name, place_geoid, county_name, county_geoid) %>%
   mutate(blkgrp = ifelse(blkgrp == "390553122033", "390553122021", blkgrp)) %>%
-  distinct()
+  distinct() %>%
+  distinct(across(all_of(ad_only_variables)), .keep_all = TRUE)
 
 # Check the lookup dataframe
 cat("Lookup dataframe created with", nrow(place_lookup), "rows\n")
@@ -636,10 +661,54 @@ merge_place_info <- function(dataset, dataset_name) {
   return(merged_dataset)
 }
 
+# Function to merge ad city information into a dataset
+merge_ad_city <- function(dataset, dataset_name) {
+  cat("\nMerging HCITY_Ad into", dataset_name, "...\n")
+
+  missing_join_cols <- setdiff(ad_city_join_keys, names(dataset))
+  if (length(missing_join_cols) > 0) {
+    cat("WARNING:", dataset_name, "is missing required join columns:",
+        paste(missing_join_cols, collapse = ", "), "\n")
+    dataset$HCITY_Ad <- NA_character_
+    return(dataset)
+  }
+
+  rows_before <- nrow(dataset)
+
+  merged_dataset <- dataset %>%
+    mutate(TESTERID = as.character(TESTERID)) %>%
+    left_join(ad_city_lookup, by = ad_city_join_keys)
+
+  rows_after <- nrow(merged_dataset)
+  rows_with_hcity_ad <- merged_dataset %>%
+    filter(!is.na(HCITY_Ad) & HCITY_Ad != "") %>%
+    nrow()
+  rows_ambiguous <- merged_dataset %>%
+    filter(HCITY_Ad_ambiguous %in% TRUE) %>%
+    nrow()
+
+  cat("Rows before merge:", rows_before, "\n")
+  cat("Rows after merge:", rows_after, "\n")
+  cat("Rows with HCITY_Ad:", rows_with_hcity_ad,
+      "(", round(rows_with_hcity_ad / rows_after * 100, 2), "%)\n")
+  cat("Rows tied to ambiguous ad-city lookup keys:", rows_ambiguous,
+      "(", round(rows_ambiguous / rows_after * 100, 2), "%)\n")
+
+  merged_dataset <- merged_dataset %>%
+    select(-HCITY_Ad_ambiguous)
+
+  return(merged_dataset)
+}
+
 # Merge place information into each dataset
 hud_census_with_place <- merge_place_info(hud_census, "HUDprocessed_JPE_census_042021.rds")
 hud_names_with_place <- merge_place_info(hud_names, "HUDprocessed_JPE_names_042021.rds")
 hud_testscores_with_place <- merge_place_info(hud_testscores, "HUDprocessed_JPE_testscores_042021.rds")
+
+# Merge ad city into each dataset
+hud_census_with_place <- merge_ad_city(hud_census_with_place, "HUDprocessed_JPE_census_042021.rds")
+hud_names_with_place <- merge_ad_city(hud_names_with_place, "HUDprocessed_JPE_names_042021.rds")
+hud_testscores_with_place <- merge_ad_city(hud_testscores_with_place, "HUDprocessed_JPE_testscores_042021.rds")
 
 # Save the merged datasets
 cat("\nSaving merged datasets...\n")
