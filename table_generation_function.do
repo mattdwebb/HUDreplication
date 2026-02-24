@@ -613,6 +613,13 @@ program define run_regressions_col23_only, rclass
         display "Neither apracex nor aprace exists in the dataset."
     }
 
+	if `table_number' > 5 {
+		keep if hcityx ! = "" & hcity_ad != ""
+	}
+	else {
+		keep if hcity != "" & place_name != "" & county_name != ""
+	}
+	
     save "temp_data_table`table_number'_formatted.dta", replace
 
     forvalues d = 1/2 {
@@ -692,6 +699,13 @@ program define run_regressions_col456_only, rclass
         display "Neither apracex nor aprace exists in the dataset."
     }
 
+	if `table_number' > 5 {
+		keep if hcityx ! = "" & hcity_ad != ""
+	}
+	else {
+		keep if hcity != "" & place_name != "" & county_name != ""
+	}
+	
     save "temp_data_table`table_number'_formatted.dta", replace
 
     forvalues d = 1/2 {
@@ -779,6 +793,25 @@ program define run_regressions_export_tables, rclass
         label("Observations" "Adjusted R$^2$" "Number of Cities")) ///
         keep(`racial_minority')
 		
+		
+		// Output the LaTeX table for the racial minority analyses
+		esttab ///
+		dep_var_`d'_col_1_minority ///
+		dep_var_`d'_col_2_minority ///
+		dep_var_`d'_col_3_minority ///
+		dep_var_`d'_col_4_minority ///
+		dep_var_`d'_col_5_minority ///
+		dep_var_`d'_col_6_minority ///
+        using "${OUTPUT}/table`table_number'_dep_var_`d'_minority.csv", ///
+        replace csv label ///
+        mgroups("Original Data" "Correct Race Only" "Updated City Name \& Correct Race" "Proper City Name \& Correct Race" "Place Name \& Correct Race" "County Name \& Correct Race",pattern(1 1 1 1 1 1)) ///
+        cells("b(star fmt(4))" se(par fmt(4)) ci(fmt(4) par)) ///
+        starlevels(* 0.10 ** 0.05 *** 0.01) ///
+        stats(N r2_a num_cities, fmt(0 4 0) ///
+        labels("Observations" "Adjusted R^2" "Number of Cities")) ///
+        keep(`racial_minority')
+		
+		
         // Output the Latex table for the racial categories analyses
         esttab ///
 		dep_var_`d'_col_1_categories ///
@@ -799,6 +832,23 @@ program define run_regressions_export_tables, rclass
         label("Observations" "Adjusted R$^2$" "Number of Cities")) ///
         keep(2.aprace 3.aprace 4.aprace 5.aprace)
 
+		
+		// Ouput the CSV table for the racial categories analyses
+		esttab ///
+		dep_var_`d'_col_1_categories ///
+		dep_var_`d'_col_2_categories ///
+		dep_var_`d'_col_3_categories ///
+		dep_var_`d'_col_4_categories ///
+		dep_var_`d'_col_5_categories ///
+		dep_var_`d'_col_6_categories ///
+        using "${OUTPUT}/table`table_number'_dep_var_`d'_categories.csv", ///
+        replace csv label ///
+        mgroups("Original Data" "Correct Race Only" "Updated City Name \& Correct Race" "Proper City Name \& Correct Race" "Place Name \& Correct Race" "County Name \& Correct Race",pattern(1 1 1 1 1 1)) ///
+        cells("b(star fmt(4))" se(par fmt(4)) ci(fmt(4) par)) ///
+        starlevels(* 0.10 ** 0.05 *** 0.01) ///
+        stats(N r2_a num_cities, fmt(0 4 0) ///
+        labels("Observations" "Adjusted R^2" "Number of Cities")) ///
+        keep(2.aprace 3.aprace 4.aprace 5.aprace)
     }
 end
 
