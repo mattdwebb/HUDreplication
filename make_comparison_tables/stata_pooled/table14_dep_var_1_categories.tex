@@ -1,0 +1,37 @@
+% 10 Mar 2026 11:33:47
+\documentclass{article}
+\usepackage{dcolumn}
+\usepackage{booktabs}
+\begin{document}
+
+\begin{table}[htbp]\centering
+\def\sym#1{\ifmmode^{#1}\else\(^{#1}\)\fi}
+\caption{Neighbourhood Attributes as salespriceamount\_rec\_log, Clustered at trial}
+\begin{tabular}{l*{6}{c}}
+\toprule
+                    &\multicolumn{1}{c}{Original Data}&\multicolumn{1}{c}{Correct Race Only}&\multicolumn{1}{c}{Updated City Name \& Correct Race}&\multicolumn{1}{c}{Proper City Name \& Correct Race}&\multicolumn{1}{c}{Place Name \& Correct Race}&\multicolumn{1}{c}{County Name \& Correct Race}\\\cmidrule(lr){2-2}\cmidrule(lr){3-3}\cmidrule(lr){4-4}\cmidrule(lr){5-5}\cmidrule(lr){6-6}\cmidrule(lr){7-7}
+                    &\multicolumn{1}{c}{(1)}   &\multicolumn{1}{c}{(2)}   &\multicolumn{1}{c}{(3)}   &\multicolumn{1}{c}{(4)}   &\multicolumn{1}{c}{(5)}   &\multicolumn{1}{c}{(6)}   \\
+                    &   b/se/ci95   &   b/se/ci95   &   b/se/ci95   &   b/se/ci95   &   b/se/ci95   &   b/se/ci95   \\
+\midrule
+African American    &     -0.0363   &     -0.0173   &      0.0225   &     -0.0486   &     -0.0359   &     -0.0295   \\
+                    &    (0.0469)   &    (0.0435)   &    (0.0497)   &    (0.0505)   &    (0.0505)   &    (0.0475)   \\
+                    &[-0.1283,0.0558]   &[-0.1027,0.0681]   &[-0.0751,0.1201]   &[-0.1476,0.0504]   &[-0.1349,0.0631]   &[-0.1226,0.0636]   \\
+Hispanic            &     -0.0004   &      0.0246   &      0.1378** &      0.0005   &      0.0102   &      0.0211   \\
+                    &    (0.0737)   &    (0.0768)   &    (0.0670)   &    (0.0677)   &    (0.0704)   &    (0.0662)   \\
+                    &[-0.1449,0.1441]   &[-0.1261,0.1753]   &[0.0063,0.2693]   &[-0.1322,0.1333]   &[-0.1279,0.1483]   &[-0.1088,0.1510]   \\
+Asian               &     -0.1101*  &     -0.1492** &     -0.0260   &     -0.0152   &     -0.0429   &     -0.0417   \\
+                    &    (0.0624)   &    (0.0658)   &    (0.0669)   &    (0.0622)   &    (0.0610)   &    (0.0578)   \\
+                    &[-0.2325,0.0124]   &[-0.2784,-0.0201]   &[-0.1573,0.1053]   &[-0.1372,0.1067]   &[-0.1626,0.0767]   &[-0.1552,0.0718]   \\
+Other Race          &     -0.0183   &               &               &               &               &               \\
+                    &    (0.3942)   &               &               &               &               &               \\
+                    &[-0.7916,0.7551]   &               &               &               &               &               \\
+\midrule
+Observations        &       10807   &        5108   &        5108   &        5108   &        5108   &        5108   \\
+Adjusted R$^2$      &      0.8690   &      0.7999   &      0.8067   &      0.7838   &      0.7775   &      0.8076   \\
+Number of Cities    &         932   &         932   &         666   &         523   &         585   &         105   \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\end{document}
+

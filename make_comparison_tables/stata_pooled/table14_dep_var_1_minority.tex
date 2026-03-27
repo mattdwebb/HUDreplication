@@ -1,0 +1,28 @@
+% 10 Mar 2026 11:33:47
+\documentclass{article}
+\usepackage{dcolumn}
+\usepackage{booktabs}
+\begin{document}
+
+\begin{table}[htbp]\centering
+\def\sym#1{\ifmmode^{#1}\else\(^{#1}\)\fi}
+\caption{Neighbourhood Attributes as salespriceamount\_rec\_log, Clustered at trial}
+\begin{tabular}{l*{6}{c}}
+\toprule
+                    &\multicolumn{1}{c}{Original Data}&\multicolumn{1}{c}{Correct Race Only}&\multicolumn{1}{c}{Updated City Name \& Correct Race}&\multicolumn{1}{c}{Proper City Name \& Correct Race}&\multicolumn{1}{c}{Place Name \& Correct Race}&\multicolumn{1}{c}{County Name \& Correct Race}\\\cmidrule(lr){2-2}\cmidrule(lr){3-3}\cmidrule(lr){4-4}\cmidrule(lr){5-5}\cmidrule(lr){6-6}\cmidrule(lr){7-7}
+                    &\multicolumn{1}{c}{(1)}   &\multicolumn{1}{c}{(2)}   &\multicolumn{1}{c}{(3)}   &\multicolumn{1}{c}{(4)}   &\multicolumn{1}{c}{(5)}   &\multicolumn{1}{c}{(6)}   \\
+                    &   b/se/ci95   &   b/se/ci95   &   b/se/ci95   &   b/se/ci95   &   b/se/ci95   &   b/se/ci95   \\
+\midrule
+Racial Minority     &     -0.0540   &     -0.0600   &      0.0212   &     -0.0313   &     -0.0331   &     -0.0271   \\
+                    &    (0.0391)   &    (0.0416)   &    (0.0457)   &    (0.0464)   &    (0.0453)   &    (0.0429)   \\
+                    &[-0.1307,0.0227]   &[-0.1415,0.0216]   &[-0.0685,0.1110]   &[-0.1223,0.0598]   &[-0.1219,0.0557]   &[-0.1114,0.0571]   \\
+\midrule
+Observations        &       10807   &        5108   &        5108   &        5108   &        5108   &        5108   \\
+Adjusted R$^2$      &      0.8690   &      0.7999   &      0.8066   &      0.7839   &      0.7776   &      0.8077   \\
+Number of Cities    &         932   &         932   &         666   &         523   &         585   &         105   \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\end{document}
+
