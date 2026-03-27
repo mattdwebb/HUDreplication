@@ -1,0 +1,42 @@
+\begin{table}[!htbp]
+\centering
+\def\sym#1{\ifmmode^{#1}\else\(^{#1}\)\fi}
+\caption{Discriminatory Steering and Availability of Advertised Properties}
+\label{tab:table5}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{l*{4}{c}}
+\toprule
+& \multicolumn{4}{c}{Dependent Variable} \\
+\cmidrule(lr){2-5}
+&\multicolumn{1}{c}{\begin{tabular}{@{}c@{}}Total Recommended\\Properties\end{tabular}} &\multicolumn{1}{c}{\begin{tabular}{@{}c@{}}Ad Property Ever\\Available\end{tabular}} &\multicolumn{1}{c}{\begin{tabular}{@{}c@{}}Recommended Properties\\per Appointment\end{tabular}} &\multicolumn{1}{c}{\begin{tabular}{@{}c@{}}Ad Property Available\\per Appointment\end{tabular}}\\
+\midrule
+Racial Minority & -0.3863\sym{***} & -0.0223\sym{**} & -0.2491\sym{***} & -0.0067 \\
+ & ( 0.0724) & ( 0.0105) & ( 0.0641) & ( 0.0103) \\
+ & [-0.5282,-0.2444] & [-0.0429,-0.0017] & [-0.3748,-0.1234] & [-0.0268, 0.0135] \\
+[1ex]
+African American & -0.4999\sym{***} & -0.0178 & -0.3689\sym{***} &  0.0048 \\
+ & ( 0.1222) & ( 0.0169) & ( 0.1095) & ( 0.0168) \\
+ & [-0.7394,-0.2603] & [-0.0509, 0.0153] & [-0.5835,-0.1542] & [-0.0281, 0.0376] \\
+[1ex]
+Hispanic & -0.2445\sym{**} & -0.0235 & -0.1767\sym{*} & -0.0152 \\
+ & ( 0.1134) & ( 0.0179) & ( 0.1026) & ( 0.0174) \\
+ & [-0.4669,-0.0221] & [-0.0585, 0.0115] & [-0.3779, 0.0245] & [-0.0493, 0.0190] \\
+[1ex]
+Asian & -0.4104\sym{***} & -0.0255 & -0.1988\sym{*} & -0.0099 \\
+ & ( 0.1233) & ( 0.0171) & ( 0.1100) & ( 0.0169) \\
+ & [-0.6521,-0.1686] & [-0.0591, 0.0080] & [-0.4144, 0.0168] & [-0.0431, 0.0233] \\
+\midrule
+Observations      &6306&6306&7220&7220\\
+Adjusted R$^2$ (Minority)      &0.2064&0.4076&0.1144&0.3185\\
+Adjusted R$^2$ (Category)      &0.2065&0.4072&0.1144&0.3183\\
+Number of Trials      &3153&3153&3153&3153\\
+\bottomrule
+\end{tabular}
+}
+\begin{minipage}{\textwidth}
+\footnotesize
+Cluster-robust standard errors in parentheses; clustered at the trial level. 95\% confidence intervals in square brackets.
+\sym{*} \(p<0.10\), \sym{**} \(p<0.05\), \sym{***} \(p<0.01\)
+\end{minipage}
+\end{table}
+
