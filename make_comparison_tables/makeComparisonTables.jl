@@ -96,8 +96,8 @@ DualPanelTableBuilder.build_table(
     output_path = "temp_tables/all6col_comparison_table5_built.tex",    # (d) specify output path and file name
     copy_cols = [1,2,3,5,6],                                            # (e) specify columns of input source to be copied to comparison table
     caption = "\\small Results Comparison for Table 5 Column 2 and 4, C\\&T 2022",  # (f) specify caption for comparison table
-    top_title = "Panel A: Neighbourhood Attributes as Number of Recommendations, Clustered at Trial",   # (g) specify title for top panel
-    bottom_title = "Panel B: Neighbourhood Attributes as Home Availability, Clustered at Trial",        # (h) specify title for bottom panel
+    top_title = "Panel A: Number of Recommendations, Clustered at Trial",   # (g) specify title for top panel
+    bottom_title = "Panel B: Home Availability, Clustered at Trial",        # (h) specify title for bottom panel
 )
 
 
@@ -117,7 +117,7 @@ SinglePanelTableBuilder.build_single_panel_table(
     output_path = "temp_tables/all6col_comparison_table6_built.tex",
     copy_cols = [1,2,3,4,5,6],
     caption = "\\small Results Comparison for Table 6 Column 5, C\\&T 2022",
-    panel_title = "Neighbourhood Attributes as Racial Composition, Clustered at Trial",
+    panel_title = "White Household Share, Clustered at Trial",
 )
 
 
@@ -140,8 +140,8 @@ DualPanelTableBuilder.build_table(
     output_path = "temp_tables/all6col_comparison_table7_built.tex",
     copy_cols = [1,2,3,4,5,6],
     caption = "\\small Results Comparison for Table 7 Column 1 and 3, C\\&T 2022",
-    top_title = "Panel A: Neighbourhood Attributes as High Income, Clustered at Trial",
-    bottom_title = "Panel B: Neighbourhood Attributes as Low Income, Clustered at Trial",
+    top_title = "Panel A: White Household Share (High Income Neighbourhood), Clustered at Trial",
+    bottom_title = "Panel B: White Household Share (Low Income Neighbourhood), Clustered at Trial",
 )
 
 
@@ -165,8 +165,8 @@ DualPanelTableBuilder.build_table(
     output_path = "temp_tables/all6col_comparison_table8_built.tex",
     copy_cols = [1,2,3,4,5,6],
     caption = "\\small Results Comparison for Table 8 Panel A Column 4 and Panel B Column 1, C\\&T 2022",
-    top_title = "Panel A: Neighbourhood Attributes as Elementary School Rating, Clustered at Trial",
-    bottom_title = "Panel B: Neighbourhood Attributes as ACS Poverty Rate, Clustered at Trial",
+    top_title = "Panel A: Elementary School Rating on Housing Search Platform, Clustered at Trial",
+    bottom_title = "Panel B: American Community Survey Poverty Rate, Clustered at Trial",
 )
 
 # === Table 9 ===
@@ -188,8 +188,8 @@ DualPanelTableBuilder.build_table(
     output_path = "temp_tables/all6col_comparison_table9_built.tex",
     copy_cols = [1,2,3,4,5,6],
     caption = "\\small Results Comparison for Table 9 Column 1, C\\&T 2022",
-    top_title = "Panel A: Neighbourhood Attributes as Superfund Sites, Clustered at Trial",
-    bottom_title = "Panel B: Neighbourhood Attributes as Superfund Sites (Mothers Only), Clustered at Trial",
+    top_title = "Panel A: Local Pollution Exposures as Superfund Sites (Entire Sample), Clustered at Trial",
+    bottom_title = "Panel B: Local Pollution Exposures as Superfund Sites (Mothers Only), Clustered at Trial",
 )
 
 # === Table 10A ===
@@ -211,8 +211,8 @@ DualPanelTableBuilder.build_table(
     output_path = "temp_tables/all6col_comparison_table10A_built.tex",
     copy_cols = [1,2,3,4,5,6],
     caption = "\\small Results Comparison for Table 10 Panel A Column 1 and 2, C\\&T 2022",
-    top_title = "Panel A: Neighbourhood Attributes as Elementary School Scores, Clustered at Trial",
-    bottom_title = "Panel B: Neighbourhood Attributes as Middle School Scores, Clustered at Trial",
+    top_title = "Panel A: Elementary School Test Scores (Mothers Only), Clustered at Trial",
+    bottom_title = "Panel B: Middle School Test Scores (Mothers Only), Clustered at Trial",
 )
 
 # === Table 10B ===
@@ -234,8 +234,8 @@ DualPanelTableBuilder.build_table(
     output_path = "temp_tables/all6col_comparison_table10B_built.tex",
     copy_cols = [1,2,3,4,5,6],
     caption = "\\small Results Comparison for Table 10 Panel B Column 2 and 4, C\\&T 2022",
-    top_title = "Panel A: Neighbourhood Attributes as ACS High Skill, Clustered at Trial",
-    bottom_title = "Panel B: Neighbourhood Attributes as ACS Single Parent Household, Clustered at Trial",
+    top_title = "Panel A: American Community Survey High Skill Neighbourhood, Clustered at Trial",
+    bottom_title = "Panel B: American Community Survey Single Parent Household, Clustered at Trial",
 )
 
 # === Table 11 ===
@@ -252,7 +252,7 @@ SinglePanelTableBuilder.build_single_panel_table(
     output_path = "temp_tables/all6col_comparison_table11_built.tex",
     copy_cols = [1,2,3,4,5],
     caption = "\\small Results Comparison for Table 11 Column 1, C\\&T 2022",
-    panel_title = "Neighbourhood Attributes as Poverty Rate, Clustered at Trial",
+    panel_title = "Low-Poverty Neighbourhoods, Clustered at Trial",
 )
 
 
@@ -270,7 +270,7 @@ SinglePanelTableBuilder.build_single_panel_table(
     output_path = "temp_tables/all6col_comparison_table12_built.tex",
     copy_cols = [1,2,3,4,5,6],
     caption = "\\small Results Comparison for Table 12 Column 1, C\\&T 2022",
-    panel_title = "Neighbourhood Attributes as Median Income, Clustered at Trial",
+    panel_title = "Median Income in Neighbourhood, Clustered at Trial",
 )
 
 
@@ -292,8 +292,8 @@ DualPanelTableBuilder.build_table(
     output_path = "temp_tables/all6col_comparison_table13_built.tex",
     copy_cols = [1,2,3,4,5],
     caption = "\\small Results Comparison for Table 13 Panel A Column 4 and Panel B Column 2, C\\&T 2022",
-    top_title = "Panel A: Neighbourhood Attributes as Elementary School Quality, Clustered at Trial",
-    bottom_title = "Panel B: Neighbourhood Attributes as ACS High Skilled Neighbourhood, Clustered at Trial",
+    top_title = "Panel A: Elementary School Rating on Housing Search Platform, Clustered at Trial",
+    bottom_title = "Panel B: American Community Survey High Skill Neighbourhood, Clustered at Trial",
 )
 
 
@@ -311,7 +311,7 @@ SinglePanelTableBuilder.build_single_panel_table(
     output_path = "temp_tables/all6col_comparison_table14_built.tex",
     copy_cols = [1,2,3,4,5],
     caption = "\\small Results Comparison for Table 14 Column 5, C\\&T 2022",
-    panel_title = "Neighbourhood Attributes as Log Sale Price, Clustered at Trial",
+    panel_title = "Logarithm of Sale Price, Clustered at Trial",
 )
 
 
