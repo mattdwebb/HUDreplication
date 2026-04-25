@@ -1,12 +1,10 @@
 resolve_repo_root <- function() {
   cwd <- normalizePath(getwd(), winslash = "/", mustWork = TRUE)
-  if (basename(cwd) %in% c("HUDreplication", "HUDreplication_new")) return(cwd)
+  if (basename(cwd) == "HUDreplication") return(cwd)
   if (basename(cwd) == "Paired_Tester_Analysis") return(dirname(cwd))
-  candidate_new <- file.path(cwd, "HUDreplication_new")
-  if (dir.exists(candidate_new)) return(normalizePath(candidate_new, winslash = "/", mustWork = TRUE))
-  candidate_old <- file.path(cwd, "HUDreplication")
-  if (dir.exists(candidate_old)) return(normalizePath(candidate_old, winslash = "/", mustWork = TRUE))
-  stop("Could not infer repo_root. Run from HUDreplication, HUDreplication_new, or Paired_Tester_Analysis.")
+  candidate <- file.path(cwd, "HUDreplication")
+  if (dir.exists(candidate)) return(normalizePath(candidate, winslash = "/", mustWork = TRUE))
+  stop("Could not infer repo_root. Run from HUDreplication or Paired_Tester_Analysis.")
 }
 
 repo_root <- resolve_repo_root()

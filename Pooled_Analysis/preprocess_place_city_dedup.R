@@ -12,8 +12,8 @@ library(stringr)
 # Important! Set sf to not use the spherical s2 geometry, opting instead for planar geometry to reduce computation time with negligible accuracy changes.
 sf_use_s2(FALSE)
 
-# Set this to the local location of the HUDreplication_new repository.
-REPO_ROOT <- path.expand("~/PATH/TO/HUDreplication_new")
+# Set this to the local location of the HUDreplication repository.
+REPO_ROOT <- path.expand("~/PATH/TO/HUDreplication")
 
 # Define the pooled-output folder and shared generated root
 generated_root <- file.path(REPO_ROOT, "Data", "Generated")

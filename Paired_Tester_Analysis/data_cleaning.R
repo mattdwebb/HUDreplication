@@ -35,13 +35,11 @@ if (skip_geocoding) {
 
 resolve_repo_root <- function() {
   cwd <- normalizePath(getwd(), winslash = "/", mustWork = TRUE)
-  if (basename(cwd) %in% c("HUDreplication", "HUDreplication_new")) return(cwd)
+  if (basename(cwd) == "HUDreplication") return(cwd)
   if (basename(cwd) == "Paired_Tester_Analysis") return(dirname(cwd))
   candidate <- file.path(cwd, "HUDreplication")
   if (dir.exists(candidate)) return(normalizePath(candidate, winslash = "/", mustWork = TRUE))
-  candidate <- file.path(cwd, "HUDreplication_new")
-  if (dir.exists(candidate)) return(normalizePath(candidate, winslash = "/", mustWork = TRUE))
-  stop("Could not infer repo_root. Run from HUDreplication, HUDreplication_new, or Paired_Tester_Analysis.")
+  stop("Could not infer repo_root. Run from HUDreplication or Paired_Tester_Analysis.")
 }
 
 repo_root <- resolve_repo_root()

@@ -2,8 +2,8 @@ clear all
 
 // Set paths, open log and install packages
 
-	/* Set path to the local location of the HUDreplication_new repository */
-	global REPO_ROOT "/PATH/TO/HUDreplication_new"
+	/* Set path to the local location of the HUDreplication repository */
+	global REPO_ROOT "/PATH/TO/HUDreplication"
 
 	global CODE "${REPO_ROOT}/Pooled_Analysis" // set the file path to the pooled analysis directory
 	global DATA "${REPO_ROOT}/Data" // set the file path to the data subdirectory
