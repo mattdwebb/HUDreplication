@@ -1,0 +1,69 @@
+\begin{table}[!htbp]
+\centering
+\def\sym#1{\ifmmode^{#1}\else\(^{#1}\)\fi}
+\caption{Discriminatory Steering and Neighborhood Effects}
+\label{tab:table8}
+\textbf{School Quality and Safety}\\[0.5em]
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lcccc}
+\toprule
+& \multicolumn{4}{c}{Dependent variable} \\
+\cmidrule(lr){2-5}
+& SEDA Elementary & SEDA Middle & Assaults & GreatSchools Elem \\
+\midrule
+Racial Minority &  0.0007 & -0.0046 &  5.3488 & -0.0600  \\
+ & ( 0.0085) & ( 0.0074) & ( 3.7274) & ( 0.0592)  \\
+ & [-0.0160,  0.0173] & [-0.0192,  0.0100] & [-1.9662,  12.6639] & [-0.1761,  0.0561]  \\
+African American & -0.0119 & -0.0159 &  7.2186 & -0.0352  \\
+ & ( 0.0137) & ( 0.0118) & ( 5.2206) & ( 0.0973)  \\
+ & [-0.0388,  0.0151] & [-0.0389,  0.0072] & [-3.0269,  17.4640] & [-0.2262,  0.1558]  \\
+Hispanic & -0.0092 &  0.0013 &  6.5850 & -0.1394  \\
+ & ( 0.0121) & ( 0.0131) & ( 5.2567) & ( 0.1032)  \\
+ & [-0.0329,  0.0146] & [-0.0244,  0.0271] & [-3.7313,  16.9012] & [-0.3419,  0.0630]  \\
+Asian &  0.0259\sym{*} &  0.0040 &  2.2083 & -0.0185  \\
+ & ( 0.0146) & ( 0.0114) & ( 7.6656) & ( 0.0993)  \\
+ & [-0.0027,  0.0545] & [-0.0185,  0.0264] & [-12.8356,  17.2521] & [-0.2134,  0.1765]  \\
+\midrule
+Observations & 9{,}486 & 9{,}973 & 5{,}961 & 6{,}027\\
+Adjusted R$^2$ (Minority) & 0.6269 & 0.7911 & 0.6391 & 0.5155\\
+Adjusted R$^2$ (Category) & 0.6271 & 0.7911 & 0.6390 & 0.5155\\
+Number of Trials & 1{,}396 & 1{,}467 & 937 & 937\\
+\bottomrule
+\end{tabular}
+}
+\medskip
+\textbf{ACS Characteristics}\\[0.5em]
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lccccc}
+\toprule
+& \multicolumn{5}{c}{Dependent variable} \\
+\cmidrule(lr){2-6}
+& Poverty Rate & High Skill & College & Single Family & Ownership Rate \\
+\midrule
+Racial Minority &  0.0007 & -0.0033 & -0.0067\sym{**} &  0.0029\sym{**} & -0.0001  \\
+ & ( 0.0013) & ( 0.0022) & ( 0.0027) & ( 0.0013) & ( 0.0032)  \\
+ & [-0.0019,  0.0033] & [-0.0077,  0.0011] & [-0.0120, -0.0014] & [ 0.0004,  0.0054] & [-0.0064,  0.0061]  \\
+African American & -0.0001 & -0.0029 & -0.0093\sym{**} &  0.0057\sym{***} & -0.0005  \\
+ & ( 0.0019) & ( 0.0033) & ( 0.0043) & ( 0.0021) & ( 0.0050)  \\
+ & [-0.0038,  0.0036] & [-0.0094,  0.0037] & [-0.0177, -0.0009] & [ 0.0016,  0.0097] & [-0.0103,  0.0094]  \\
+Hispanic &  0.0014 & -0.0085\sym{**} & -0.0105\sym{**} &  0.0023 & -0.0049  \\
+ & ( 0.0022) & ( 0.0035) & ( 0.0043) & ( 0.0021) & ( 0.0054)  \\
+ & [-0.0030,  0.0057] & [-0.0154, -0.0016] & [-0.0190, -0.0020] & [-0.0018,  0.0065] & [-0.0155,  0.0056]  \\
+Asian &  0.0009 &  0.0009 & -0.0006 &  0.0005 &  0.0045  \\
+ & ( 0.0022) & ( 0.0041) & ( 0.0049) & ( 0.0021) & ( 0.0054)  \\
+ & [-0.0034,  0.0052] & [-0.0071,  0.0088] & [-0.0101,  0.0089] & [-0.0036,  0.0046] & [-0.0061,  0.0150]  \\
+\midrule
+Observations & 16{,}837 & 16{,}837 & 16{,}837 & 16{,}837 & 16{,}837\\
+Adjusted R$^2$ (Minority) & 0.5139 & 0.6546 & 0.7324 & 0.5264 & 0.5606\\
+Adjusted R$^2$ (Category) & 0.5139 & 0.6547 & 0.7325 & 0.5265 & 0.5606\\
+Number of Trials & 2{,}373 & 2{,}373 & 2{,}373 & 2{,}373 & 2{,}373\\
+\bottomrule
+\end{tabular}
+}
+\begin{minipage}{\textwidth}
+\footnotesize
+Cluster-robust standard errors in parentheses; clustered at the trial level. 95\% confidence intervals in square brackets.
+\sym{*} \(p<0.10\), \sym{**} \(p<0.05\), \sym{***} \(p<0.01\)
+\end{minipage}
+\end{table}
+
