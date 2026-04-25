@@ -151,26 +151,27 @@ This script reads the paired cleaned data from `Data` and writes outputs to:
 
 Run:
 
-- `Rscript Paired_Tester_Analysis/make_pretty_tables.R`
+- `Rscript Paired_Tester_Analysis/format_tables.R`
 
 This script reads the main paired-tester LaTeX outputs from `Paired_Tester_Analysis/Tables` and writes cleaned presentation versions to:
 
-- `Paired_Tester_Analysis/Tables/Pretty_Tables`
+- `Paired_Tester_Analysis/Tables/Formatted_Tables`
 
 The formatted outputs include:
 
 - single-table versions of Tables 5, 6, 7, and 12
 - combined panel versions of Tables 8, 9, and 10
-- a preview wrapper document at `Paired_Tester_Analysis/Tables/Pretty_Tables/pretty_tables_preview.tex`
+- the original Christensen and Timmins table number as a subtitle in each formatted caption
+- a preview wrapper document at `Paired_Tester_Analysis/Tables/Formatted_Tables/formatted_tables_preview.tex`
 
 To compile the preview PDF, run:
 
-- `cd Paired_Tester_Analysis/Tables/Pretty_Tables`
-- `pdflatex -interaction=nonstopmode -halt-on-error pretty_tables_preview.tex`
+- `cd Paired_Tester_Analysis/Tables/Formatted_Tables`
+- `pdflatex -interaction=nonstopmode -halt-on-error formatted_tables_preview.tex`
 
 This writes:
 
-- `Paired_Tester_Analysis/Tables/Pretty_Tables/pretty_tables_preview.pdf`
+- `Paired_Tester_Analysis/Tables/Formatted_Tables/formatted_tables_preview.pdf`
 
 ## Expected Execution Order
 
@@ -182,5 +183,4 @@ For a full clean replication from source inputs:
 4. Run `Pooled_Analysis/main.do`
 5. Run `Paired_Tester_Analysis/data_cleaning.R`
 6. Run `Paired_Tester_Analysis/analysis.R`
-7. Run `Paired_Tester_Analysis/make_pretty_tables.R`
-
+7. Run `Paired_Tester_Analysis/format_tables.R`

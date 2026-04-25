@@ -34,11 +34,17 @@ normalize_text <- function(x) {
   str_squish(x)
 }
 
-normalize_city_for_join <- function(x) {
-  x <- as.character(x)
-  x <- str_squish(str_to_upper(x))
-  x[x == ""] <- NA_character_
-  x
+normalize_geoid <- function(x, width = 15) {
+  x_chr <- as.character(x)
+  x_num <- suppressWarnings(as.numeric(x_chr))
+  x_chr <- ifelse(
+    !is.na(x_num),
+    format(round(x_num), scientific = FALSE, trim = TRUE),
+    x_chr
+  )
+  x_chr <- str_replace_all(x_chr, "[^0-9]", "")
+  x_chr[x_chr == ""] <- NA_character_
+  str_pad(x_chr, width = width, side = "left", pad = "0")
 }
 
 new_dedup_log <- function() {
@@ -69,12 +75,6 @@ prepare_stata_dataset <- function(dataset) {
     select_if(~ !is.list(.))
 }
 
-valid_geo_value <- function(x) {
-  x_chr <- as.character(x)
-  x_chr <- str_trim(x_chr)
-  !is.na(x) & !(x_chr %in% c("", ".", "NA"))
-}
-
 filter_processed_geo <- function(dataset, required_cols, label) {
   missing_cols <- setdiff(required_cols, names(dataset))
   if (length(missing_cols) > 0) {
@@ -82,7 +82,11 @@ filter_processed_geo <- function(dataset, required_cols, label) {
   }
 
   rows_before <- nrow(dataset)
-  keep <- Reduce(`&`, lapply(required_cols, function(col) valid_geo_value(dataset[[col]])))
+  keep <- Reduce(`&`, lapply(required_cols, function(col) {
+    x <- dataset[[col]]
+    x_chr <- str_trim(as.character(x))
+    !is.na(x) & !(x_chr %in% c("", ".", "NA"))
+  }))
   filtered_dataset <- dataset[keep, , drop = FALSE]
   rows_after <- nrow(filtered_dataset)
 
@@ -222,15 +226,28 @@ dedup_by_key <- function(df, key_cols, label) {
   df
 }
 
-log_control_ad_variation <- function(df, label) {
-  if (!("CONTROL" %in% names(df))) return(invisible(NULL))
-  addr_key <- build_address_key(df)
-  tmp <- df %>%
-    mutate(addr_key = addr_key) %>%
-    group_by(CONTROL) %>%
-    summarize(distinct_ads = n_distinct(addr_key, na.rm = TRUE), .groups = "drop")
-  count_multi <- sum(tmp$distinct_ads > 1, na.rm = TRUE)
-  cat(label, "- controls with >1 distinct ad address:", count_multi, "of", nrow(tmp), "\n")
+merge_canonical_ads_into_hud <- function(dataset, dataset_name, canonical_hud_lookup) {
+  cat("\nMerging canonical advertised-home values into", dataset_name, "...\n")
+
+  missing_join_cols <- setdiff(c("CONTROL", "TESTERID"), names(dataset))
+  if (length(missing_join_cols) > 0) {
+    stop(paste("Missing required join columns in", dataset_name, ":", paste(missing_join_cols, collapse = ", ")))
+  }
+
+  overlapping_cols <- intersect(setdiff(names(canonical_hud_lookup), c("CONTROL", "TESTERID")), names(dataset))
+  rows_before <- nrow(dataset)
+
+  merged_dataset <- dataset %>%
+    mutate(TESTERID = as.character(TESTERID)) %>%
+    select(-any_of(overlapping_cols)) %>%
+    inner_join(canonical_hud_lookup, by = c("CONTROL", "TESTERID"))
+
+  cat("Rows before canonical advertised-home merge:", rows_before, "\n")
+  cat("Rows after canonical advertised-home merge:", nrow(merged_dataset), "\n")
+  cat("Rows dropped because no canonical advertised-home assignment was available:",
+      rows_before - nrow(merged_dataset), "\n")
+
+  merged_dataset
 }
 
 # Load the adsprocessed_JPE data
@@ -239,6 +256,7 @@ adsprocessed_data <- readRDS(paste0(input_folder, "/adsprocessed_JPE_censor.rds"
 # De-duplicate adsprocessed data
 ads_index_cols <- intersect(c("X.x", "X.y", "X.x.1", "X.y.1", "SEQRH"), names(adsprocessed_data))
 adsprocessed_data <- dedup_exact_ignore(adsprocessed_data, ads_index_cols, "adsprocessed")
+adsprocessed_place_lookup_source <- adsprocessed_data
 
 # De-duplicate near-duplicates by normalized address within CONTROL
 adsprocessed_data <- adsprocessed_data %>%
@@ -249,7 +267,18 @@ adsprocessed_data <- adsprocessed_data %>%
 adsprocessed_key <- intersect(c("CONTROL", "TESTERID", "addr_key_dedup"), names(adsprocessed_data))
 adsprocessed_data <- dedup_by_key(adsprocessed_data, adsprocessed_key, "adsprocessed address key")
 adsprocessed_data <- adsprocessed_data %>% select(-addr_key, -addr_key_dedup)
-log_control_ad_variation(adsprocessed_data, "adsprocessed")
+
+# Summarize how many trials still contain multiple distinct advertised-home
+# addresses after address-based de-duplication.
+if ("CONTROL" %in% names(adsprocessed_data)) {
+  addr_key <- build_address_key(adsprocessed_data)
+  control_ad_counts <- adsprocessed_data %>%
+    mutate(addr_key = addr_key) %>%
+    group_by(CONTROL) %>%
+    summarize(distinct_ads = n_distinct(addr_key, na.rm = TRUE), .groups = "drop")
+  multi_ad_controls <- sum(control_ad_counts$distinct_ads > 1, na.rm = TRUE)
+  cat("adsprocessed - controls with >1 distinct ad address:", multi_ad_controls, "of", nrow(control_ad_counts), "\n")
+}
 
 # Load census block groups and places data
 # Using tigris package to get census geography data
@@ -407,27 +436,6 @@ print(head(block_group_place_mapping))
 
 
 
-# Process all observations in adsprocessed_data
-cat("\nProcessing all observations and merging with place information...\n")
-
-# Extract block group GEOID from block GEOID (drop block suffix)
-cat("\nExtracting block group GEOID from block GEOID and merging with place information...\n")
-adsprocessed_data <- adsprocessed_data %>%
-  mutate(block_group_geoid = substr(GEOID10, 1, nchar(GEOID10)-3)) %>%
-  mutate(block_group_geoid = sprintf("%012s", block_group_geoid))
-  
-
-# Merge with block_group_place_mapping to get place information
-adsprocessed_data <- adsprocessed_data %>%
-  left_join(block_group_place_mapping, by = "block_group_geoid")
-
-# For blocks without a corresponding place, fill in with county information
-cat("\nFilling in county information for blocks without a corresponding place...\n")
-
-# Extract county FIPS code (first 5 characters of GEOID10)
-adsprocessed_data <- adsprocessed_data %>%
-  mutate(county_geoid = substr(GEOID10, 1, 5))
-
 # Build county lookup from built-in FIPS codes (offline-safe)
 county_lookup <- tigris::fips_codes %>%
   filter(state %in% unname(states_to_process)) %>%
@@ -437,24 +445,363 @@ county_lookup <- tigris::fips_codes %>%
   ) %>%
   distinct(county_geoid, .keep_all = TRUE)
 
-# Join county names to the data
-adsprocessed_data_processed <- adsprocessed_data %>%
-  left_join(county_lookup, by = "county_geoid") %>%
+add_place_county_info <- function(dataset, label) {
+  cat("\nProcessing", label, "and merging with place information...\n")
+  
+  dataset <- dataset %>%
+    mutate(
+      GEOID10 = normalize_geoid(GEOID10, width = 15),
+      block_group_geoid = substr(GEOID10, 1, 12)
+    ) %>%
+    left_join(block_group_place_mapping, by = "block_group_geoid") %>%
+    mutate(county_geoid = substr(GEOID10, 1, 5)) %>%
+    left_join(county_lookup, by = "county_geoid") %>%
+    mutate(
+      # If place_geoid is missing or has negligible/unknown coverage, fall back to county geography.
+      place_geoid = ifelse(is.na(place_geoid) | is.na(coverage_pct) | coverage_pct <= 0.01, county_geoid, place_geoid),
+      # If place_name is missing or has negligible/unknown coverage, fall back to county name.
+      place_name = ifelse(is.na(place_name) | is.na(coverage_pct) | coverage_pct <= 0.01, county_name, place_name)
+    )
+  
+  cat("\nMerge completed for", label, ". All observations now have place or county information.\n")
+  cat("Number of observations with place information:", sum(!is.na(dataset$coverage_pct)), "\n")
+  cat("Number of observations with county fallback:", sum(is.na(dataset$coverage_pct)), "\n")
+  
+  dataset
+}
+
+adsprocessed_place_lookup_source <- add_place_county_info(
+  adsprocessed_place_lookup_source,
+  "pre-address-dedup ads lookup source"
+)
+
+adsprocessed_data_processed <- add_place_county_info(
+  adsprocessed_data,
+  "deduplicated adsprocessed output"
+)
+
+core_ad_vars <- intersect(
+  c("w2012pc_Ad", "b2012pc_Ad", "a2012pc_Ad", "hisp2012pc_Ad"),
+  names(adsprocessed_data_processed)
+)
+
+# Resolve each CONTROL x TESTERID pair to one canonical advertised-home record.
+# Priority:
+# 1. If the tester reported one advertised home, keep it.
+# 2. If the paired tester reported exactly one advertised home, use that listing.
+# 3. If the tester's multiple listings agree on the core racial-composition ad controls,
+#    keep one row and average price on the dollar scale before logging again.
+# 4. Otherwise, drop the ambiguous tester-trial pair.
+race_candidate_cols <- intersect(
+  c("APRACE", "aprace", "APRACE.x", "apracex", "RACEID.x", "HRACE"),
+  names(adsprocessed_data_processed)
+)
+
+pair_ad_cols <- intersect(
+  unique(c(
+    grep("_Ad$", names(adsprocessed_data_processed), value = TRUE),
+    "AdPrice", "logAdPrice",
+    "HSITEAD", "HUNITNO", "HCITY", "HSTATE", "HZIP",
+    "blkgrp", "GEOID10", "STATEFP10", "COUNTYFP10", "block_group_geoid",
+    "place_geoid", "place_name", "county_geoid", "county_name", "coverage_pct"
+  )),
+  names(adsprocessed_data_processed)
+)
+
+pair_data <- as.data.frame(
+  adsprocessed_data_processed[, unique(c("CONTROL", "TESTERID", pair_ad_cols, race_candidate_cols)), drop = FALSE]
+)
+pair_data$TESTERID <- as.character(pair_data$TESTERID)
+
+addr_raw <- if ("HSITEAD" %in% names(pair_data)) pair_data$HSITEAD else rep(NA_character_, nrow(pair_data))
+addr_alt <- if ("Address" %in% names(pair_data)) pair_data$Address else rep(NA_character_, nrow(pair_data))
+unit_raw <- if ("HUNITNO" %in% names(pair_data)) pair_data$HUNITNO else rep("", nrow(pair_data))
+city_raw <- if ("HCITY" %in% names(pair_data)) pair_data$HCITY else rep(NA_character_, nrow(pair_data))
+city_alt <- if ("City" %in% names(pair_data)) pair_data$City else rep(NA_character_, nrow(pair_data))
+state_raw <- if ("HSTATE" %in% names(pair_data)) pair_data$HSTATE else rep(NA_character_, nrow(pair_data))
+state_alt <- if ("State" %in% names(pair_data)) pair_data$State else rep(NA_character_, nrow(pair_data))
+zip_raw <- if ("HZIP" %in% names(pair_data)) pair_data$HZIP else rep(NA_character_, nrow(pair_data))
+zip_alt <- if ("Zip_Code" %in% names(pair_data)) pair_data$Zip_Code else rep(NA_character_, nrow(pair_data))
+
+pair_data <- pair_data %>%
   mutate(
-    # If place_geoid is NA, use county_geoid instead
-    place_geoid = ifelse(is.na(place_geoid) | coverage_pct <= 0.01, county_geoid, place_geoid),
-    # If place_name is NA, use county_name instead
-    place_name = ifelse(is.na(place_name) | coverage_pct <= 0.01, county_name, place_name)
+    addr_raw = ifelse(!is.na(addr_raw) & addr_raw != "", addr_raw, addr_alt),
+    unit_raw = unit_raw,
+    city_raw = ifelse(!is.na(city_raw) & city_raw != "", city_raw, city_alt),
+    state_raw = ifelse(!is.na(state_raw) & state_raw != "", state_raw, state_alt),
+    zip_raw = ifelse(!is.na(zip_raw) & zip_raw != "", zip_raw, zip_alt),
+    addr_key_resolve = paste(
+      normalize_text(addr_raw),
+      normalize_text(unit_raw),
+      normalize_text(city_raw),
+      normalize_text(state_raw),
+      normalize_text(zip_raw),
+      sep = "|"
+    )
+  )
+pair_data$addr_key_resolve[pair_data$addr_key_resolve == "na|na|na|na|na"] <- NA_character_
+pair_data <- pair_data %>% select(-any_of(c("addr_raw", "unit_raw", "city_raw", "state_raw", "zip_raw")))
+
+preferred_race_var <- if (length(race_candidate_cols) > 0) race_candidate_cols[[1]] else NA_character_
+pair_groups <- split(pair_data, paste(pair_data$CONTROL, pair_data$TESTERID, sep = "||"), drop = TRUE)
+
+pair_meta <- bind_rows(lapply(pair_groups, function(rows) {
+  distinct_addrs <- unique(rows$addr_key_resolve)
+  race_value <- NA_character_
+
+  if (!is.na(preferred_race_var)) {
+    race_codes <- str_squish(str_to_upper(as.character(rows[[preferred_race_var]])))
+    race_codes[race_codes %in% c("", "NA", "<NA>")] <- NA_character_
+    race_labels <- case_when(
+      race_codes %in% c("1", "WHITE", "NON-HISPANIC WHITE", "W") ~ "White",
+      race_codes %in% c("2", "BLACK", "AFRICAN AMERICAN", "B") ~ "Black",
+      race_codes %in% c("3", "HISPANIC", "LATINO", "LATINA", "H") ~ "Hispanic",
+      race_codes %in% c("4", "ASIAN", "A") ~ "Asian",
+      is.na(race_codes) ~ NA_character_,
+      TRUE ~ "Other"
+    )
+    race_labels <- race_labels[!is.na(race_labels)]
+    if (length(race_labels) > 0) {
+      race_value <- race_labels[[1]]
+    }
+  }
+
+  data.frame(
+    CONTROL = rows$CONTROL[[1]],
+    TESTERID = rows$TESTERID[[1]],
+    n_addr = length(distinct_addrs),
+    single_addr = if (length(distinct_addrs) == 1) distinct_addrs[[1]] else NA_character_,
+    race = race_value,
+    stringsAsFactors = FALSE
+  )
+}))
+
+canonical_rows <- list()
+status_rows <- list()
+
+for (i in seq_len(nrow(pair_meta))) {
+  control_value <- pair_meta$CONTROL[[i]]
+  tester_value <- pair_meta$TESTERID[[i]]
+  pair_key <- paste(control_value, tester_value, sep = "||")
+  own_rows <- pair_groups[[pair_key]]
+  source_rows <- NULL
+  status <- NA_character_
+
+  if (pair_meta$n_addr[[i]] == 1) {
+    source_rows <- own_rows
+    status <- "self_unique_advertised_home"
+  } else {
+    partner_meta <- pair_meta %>%
+      filter(CONTROL == control_value, TESTERID != tester_value, n_addr == 1)
+    partner_single_addrs <- unique(partner_meta$single_addr)
+
+    if (length(partner_single_addrs) == 1) {
+      partner_keys <- paste(partner_meta$CONTROL, partner_meta$TESTERID, sep = "||")
+      partner_keys <- intersect(partner_keys, names(pair_groups))
+      if (length(partner_keys) > 0) {
+        source_rows <- bind_rows(pair_groups[partner_keys])
+        status <- "paired_tester_unique_advertised_home"
+      }
+    }
+
+    if (is.null(source_rows)) {
+      available_core_vars <- intersect(core_ad_vars, names(own_rows))
+      core_agreement <- length(available_core_vars) > 0 &&
+        all(vapply(available_core_vars, function(var) length(unique(own_rows[[var]])) <= 1, logical(1)))
+      if (core_agreement) {
+        source_rows <- own_rows
+        status <- "within_tester_core_agreement"
+      }
+    }
+
+    if (is.null(source_rows)) {
+      status <- "dropped_unresolved_advertised_home"
+    }
+  }
+
+  status_rows[[length(status_rows) + 1]] <- data.frame(
+    CONTROL = control_value,
+    TESTERID = tester_value,
+    race = pair_meta$race[[i]],
+    minority = ifelse(is.na(pair_meta$race[[i]]), NA, pair_meta$race[[i]] != "White"),
+    status = status,
+    stringsAsFactors = FALSE
   )
 
-test <- adsprocessed_data_processed %>% 
-  select(HCITY, GEOID10, CONTROL, STATEFP10, COUNTYFP10, block_group_geoid, place_geoid, place_name, coverage_pct) %>%
-  filter(is.na(place_geoid))
+  if (!is.null(source_rows)) {
+    keep_cols <- unique(c("CONTROL", "TESTERID", pair_ad_cols))
+    canonical_row <- source_rows[1, intersect(keep_cols, names(source_rows)), drop = FALSE]
+    canonical_row$CONTROL <- control_value
+    canonical_row$TESTERID <- tester_value
 
+    avg_price <- NA_real_
+    if ("logAdPrice" %in% names(source_rows)) {
+      valid_log <- suppressWarnings(as.numeric(source_rows$logAdPrice))
+      valid_log <- valid_log[!is.na(valid_log)]
+      if (length(valid_log) > 0) {
+        avg_price <- mean(exp(valid_log))
+      }
+    }
+    if ((is.na(avg_price) || !is.finite(avg_price)) && "AdPrice" %in% names(source_rows)) {
+      valid_price <- suppressWarnings(as.numeric(source_rows$AdPrice))
+      valid_price <- valid_price[!is.na(valid_price)]
+      if (length(valid_price) > 0) {
+        avg_price <- mean(valid_price)
+      }
+    }
+    avg_log_price <- if (is.finite(avg_price) && !is.na(avg_price) && avg_price > 0) log(avg_price) else NA_real_
+    if ("AdPrice" %in% names(canonical_row)) canonical_row$AdPrice <- avg_price
+    if ("logAdPrice" %in% names(canonical_row)) canonical_row$logAdPrice <- avg_log_price
 
-cat("\nMerge completed. All observations now have place or county information.\n")
-cat("Number of observations with place information:", sum(!is.na(adsprocessed_data$coverage_pct)), "\n")
-cat("Number of observations with county fallback:", sum(is.na(adsprocessed_data$coverage_pct)), "\n")
+    canonical_rows[[length(canonical_rows) + 1]] <- canonical_row
+  }
+}
+
+status_df <- bind_rows(status_rows)
+canonical_ads_lookup <- bind_rows(canonical_rows) %>%
+  distinct(CONTROL, TESTERID, .keep_all = TRUE)
+
+cat("\nCanonical advertised-home assignment summary:\n")
+print(status_df %>% count(status, name = "pairs"))
+cat("Canonical advertised-home rows retained:", nrow(canonical_ads_lookup), "\n")
+cat("Dropped CONTROL x TESTERID pairs with unresolved advertised homes:",
+    sum(status_df$status == "dropped_unresolved_advertised_home"), "\n")
+
+race_summary <- status_df %>%
+  count(race, status, name = "pairs") %>%
+  arrange(race, status)
+
+minority_summary <- status_df %>%
+  filter(!is.na(minority)) %>%
+  group_by(minority) %>%
+  summarize(
+    pairs = n(),
+    dropped = sum(status == "dropped_unresolved_advertised_home"),
+    drop_rate = dropped / pairs,
+    .groups = "drop"
+  )
+
+control_drop_summary <- status_df %>%
+  filter(!is.na(minority)) %>%
+  group_by(CONTROL) %>%
+  summarize(
+    white_dropped = sum(status == "dropped_unresolved_advertised_home" & minority == FALSE),
+    minority_dropped = sum(status == "dropped_unresolved_advertised_home" & minority == TRUE),
+    .groups = "drop"
+  ) %>%
+  summarize(
+    controls_with_any_drop = sum(white_dropped > 0 | minority_dropped > 0),
+    controls_minority_only = sum(minority_dropped > 0 & white_dropped == 0),
+    controls_white_only = sum(white_dropped > 0 & minority_dropped == 0),
+    controls_both = sum(white_dropped > 0 & minority_dropped > 0)
+  )
+
+fisher_p <- NA_real_
+discordant_p <- NA_real_
+if (nrow(minority_summary) == 2 &&
+    all(c(FALSE, TRUE) %in% minority_summary$minority)) {
+  minority_summary_ordered <- minority_summary %>% arrange(minority)
+  fisher_p <- fisher.test(
+    matrix(
+      c(
+        minority_summary_ordered$dropped[[2]],
+        minority_summary_ordered$pairs[[2]] - minority_summary_ordered$dropped[[2]],
+        minority_summary_ordered$dropped[[1]],
+        minority_summary_ordered$pairs[[1]] - minority_summary_ordered$dropped[[1]]
+      ),
+      nrow = 2,
+      byrow = TRUE
+    )
+  )$p.value
+
+  discordant_total <- control_drop_summary$controls_minority_only + control_drop_summary$controls_white_only
+  if (discordant_total > 0) {
+    discordant_p <- binom.test(
+      control_drop_summary$controls_minority_only,
+      discordant_total,
+      p = 0.5
+    )$p.value
+  }
+}
+
+cat("\nAdvertised-home ambiguity drop summary by preferred race variable:\n")
+if (!is.na(preferred_race_var)) {
+  cat("Preferred race variable:", preferred_race_var, "\n")
+} else {
+  cat("Preferred race variable: none found\n")
+}
+print(race_summary)
+cat("\nDrop rates by minority status:\n")
+print(minority_summary)
+cat("\nWithin-control drop imbalance summary:\n")
+print(control_drop_summary)
+cat("Minority-versus-white Fisher exact p-value:", fisher_p, "\n")
+cat("Discordant-control exact binomial p-value:", discordant_p, "\n")
+
+log_dedup(
+  "adsprocessed canonical advertised-home assignment",
+  nrow(pair_meta),
+  nrow(canonical_ads_lookup)
+)
+
+if (nrow(minority_summary %>% filter(minority == FALSE)) == 1 &&
+    nrow(minority_summary %>% filter(minority == TRUE)) == 1) {
+  white_row <- minority_summary %>% filter(minority == FALSE)
+  minority_row <- minority_summary %>% filter(minority == TRUE)
+  cat("\nAdvertised-home ambiguity race-balance check:\n")
+  cat(sprintf(
+    "Dropped unresolved advertised-home pairs: %d / %d\n",
+    sum(status_df$status == "dropped_unresolved_advertised_home"),
+    nrow(status_df)
+  ))
+  cat(sprintf(
+    "White: %d / %d = %.3f%%\n",
+    white_row$dropped[[1]],
+    white_row$pairs[[1]],
+    100 * white_row$drop_rate[[1]]
+  ))
+  cat(sprintf(
+    "Minority: %d / %d = %.3f%%\n",
+    minority_row$dropped[[1]],
+    minority_row$pairs[[1]],
+    100 * minority_row$drop_rate[[1]]
+  ))
+  cat(sprintf("Fisher exact p = %.7f\n", fisher_p))
+}
+
+# Prepare the canonical advertised-home lookup for the HUD files and overwrite
+# the ad-side fields in the adsprocessed output with the resolved values.
+canonical_hud_lookup <- canonical_ads_lookup %>%
+  mutate(TESTERID = as.character(TESTERID))
+if ("HCITY" %in% names(canonical_hud_lookup)) {
+  canonical_hud_lookup <- canonical_hud_lookup %>% rename(HCITY_Ad = HCITY)
+}
+canonical_hud_keep_cols <- intersect(
+  unique(c(
+    "CONTROL", "TESTERID", "HCITY_Ad",
+    "blkgrp", "GEOID10", "place_name", "place_geoid", "county_name", "county_geoid",
+    grep("_Ad$", names(canonical_hud_lookup), value = TRUE),
+    "AdPrice", "logAdPrice"
+  )),
+  names(canonical_hud_lookup)
+)
+canonical_hud_lookup <- canonical_hud_lookup %>% select(all_of(canonical_hud_keep_cols))
+
+canonical_cols <- setdiff(names(canonical_ads_lookup), c("CONTROL", "TESTERID"))
+adsprocessed_base <- adsprocessed_data_processed %>%
+  mutate(TESTERID = as.character(TESTERID)) %>%
+  group_by(CONTROL, TESTERID) %>%
+  slice(1) %>%
+  ungroup() %>%
+  select(-any_of(canonical_cols))
+ads_rows_before <- nrow(adsprocessed_base)
+adsprocessed_data_processed <- adsprocessed_base %>%
+  inner_join(canonical_ads_lookup %>% mutate(TESTERID = as.character(TESTERID)),
+             by = c("CONTROL", "TESTERID"))
+
+cat("\nApplying canonical advertised-home values to adsprocessed output...\n")
+cat("Tester-control rows before canonical merge:", ads_rows_before, "\n")
+cat("Tester-control rows after canonical merge:", nrow(adsprocessed_data_processed), "\n")
 
 adsprocessed_data_processed <- filter_processed_geo(
   adsprocessed_data_processed,
@@ -483,7 +830,6 @@ adsprocessed <- readRDS(paste0(input_folder, "/adsprocessed_JPE_censor.rds"))
 # Define ad_only_variables with specific variable names
 ad_only_variables <- c("logAdPrice", "stfid_Ad", "w2012pc_Ad", "b2012pc_Ad", 
                       "a2012pc_Ad", "hisp2012pc_Ad", "oth2012pc_Ad", "CONTROL")
-ad_city_join_keys <- c(ad_only_variables, "TESTERID")
 
 # Create an index based on unique combinations of these ad variables
 cat("\nCreating an index based on unique combinations of ad variables...\n")
@@ -569,35 +915,6 @@ if(nrow(selected_block_groups) > 0) {
 # Check if the same ad variables are used across different datasets for identification
 cat("\nChecking consistency of ad variables across datasets...\n")
 
-# Build an ad-city lookup keyed to ad characteristics + tester for later HUD merge
-cat("\nBuilding HCITY_Ad lookup using ad variables + TESTERID...\n")
-ad_city_lookup <- adsprocessed %>%
-  mutate(
-    TESTERID = as.character(TESTERID),
-    hcity_ad_raw = str_squish(as.character(HCITY)),
-    hcity_ad_raw = ifelse(hcity_ad_raw == "", NA_character_, hcity_ad_raw),
-    hcity_ad_norm = normalize_city_for_join(HCITY)
-  ) %>%
-  group_by(across(all_of(ad_city_join_keys))) %>%
-  summarize(
-    HCITY_Ad = {
-      valid_idx <- which(!is.na(hcity_ad_norm))
-      valid_norm <- hcity_ad_norm[valid_idx]
-      valid_raw <- hcity_ad_raw[valid_idx]
-      if (length(valid_norm) == 0) NA_character_
-      else if (dplyr::n_distinct(valid_norm) == 1) valid_raw[[1]]
-      else NA_character_
-    },
-    HCITY_Ad_ambiguous = {
-      valid <- hcity_ad_norm[!is.na(hcity_ad_norm)]
-      length(valid) > 0 && dplyr::n_distinct(valid) > 1
-    },
-    .groups = "drop"
-  )
-
-cat("HCITY_Ad lookup rows:", nrow(ad_city_lookup), "\n")
-cat("HCITY_Ad lookup keys with ambiguous cities:", sum(ad_city_lookup$HCITY_Ad_ambiguous), "\n")
-
 # Function to compare ad variables in a dataset with the reference list
 compare_ad_variables <- function(data, dataset_name) {
   # Get all column names from the dataset
@@ -634,12 +951,10 @@ dedup_hud_dataset <- function(df, dataset_name) {
   index_cols <- intersect(c("X.x", "X.y", "X.x.1", "X.y.1", "SEQRH"), names(df))
   df <- dedup_exact_ignore(df, index_cols, paste(dataset_name, "exact"))
   
-  ad_cols <- grep("_Ad$", names(df), value = TRUE)
   rec_cols <- grep("_Rec$", names(df), value = TRUE)
-  ad_price_cols <- intersect(c("AdPrice", "logAdPrice"), names(df))
   rec_price_cols <- intersect(c("RecPrice", "logRecPrice"), names(df))
-  combined_key <- unique(c("CONTROL", "TESTERID", ad_cols, ad_price_cols, rec_cols, rec_price_cols))
-  df <- dedup_by_key(df, combined_key, paste(dataset_name, "ad+rec"))
+  recommendation_key <- unique(c("CONTROL", "TESTERID", rec_cols, rec_price_cols))
+  df <- dedup_by_key(df, recommendation_key, paste(dataset_name, "recommendation"))
   
   df
 }
@@ -663,134 +978,23 @@ hud_testscores <- dedup_hud_dataset(hud_testscores, "HUDprocessed_JPE_testscores
 hud_testscores_results <- compare_ad_variables(hud_testscores, "HUDprocessed_JPE_testscores_042021.rds")
 
 
-# Merge place information from adsprocessed_data into the three datasets
-cat("\nMerging place information from adsprocessed_data into the three datasets...\n")
-
-# First, create a lookup dataframe with ad variables, place info, and county info
-cat("Creating lookup dataframe with ad variables, place info, and county info...\n")
- place_lookup <- adsprocessed_data_processed %>%
-  select(all_of(ad_only_variables), blkgrp, place_name, place_geoid, county_name, county_geoid) %>%
-  mutate(blkgrp = ifelse(blkgrp == "390553122033", "390553122021", blkgrp)) %>%
-  distinct() %>%
-  distinct(across(all_of(ad_only_variables)), .keep_all = TRUE)
-
-# Check the lookup dataframe
-cat("Lookup dataframe created with", nrow(place_lookup), "rows\n")
-cat("Number of unique combinations of ad variables:", 
-    place_lookup %>% select(all_of(ad_only_variables)) %>% distinct() %>% nrow(), "\n")
-
-# Check for any duplicated ad variable combinations
-duplicate_ad_combos <- place_lookup %>%
-  group_by_at(ad_only_variables) %>%
-  filter(n() > 1) %>%
-  ungroup()
-
-if(nrow(duplicate_ad_combos) > 0) {
-  cat("WARNING:", nrow(duplicate_ad_combos), "rows have duplicate ad variable combinations\n")
-  cat("This may cause issues with the merge as the key is not unique\n")
-  
-  # Show a sample of duplicates
-  cat("Sample of duplicated ad variable combinations:\n")
-  print(head(duplicate_ad_combos))
-} else {
-  cat("All ad variable combinations are unique in the lookup dataframe\n")
-}
-
-# Function to merge place information into a dataset
-merge_place_info <- function(dataset, dataset_name) {
-  cat("\nMerging place information into", dataset_name, "...\n")
-  
-  # Perform the merge using all ad variables
-  rows_before <- nrow(dataset)
-  
-  merged_dataset <- dataset %>%
-    left_join(place_lookup, by = ad_only_variables)
-  
-  rows_after <- nrow(merged_dataset)
-  
-  cat("Rows before merge:", rows_before, "\n")
-  cat("Rows after merge:", rows_after, "\n")
-  
-  if(rows_after > rows_before) {
-    cat("WARNING: The number of rows increased after the merge\n")
-    cat("This indicates a one-to-many join occurred\n")
-  }
-  
-  # Check how many rows got place information
-  rows_with_place <- merged_dataset %>%
-    filter(!is.na(place_name)) %>%
-    nrow()
-  
-  rows_without_place <- merged_dataset %>%
-    filter(is.na(place_name)) %>%
-    nrow()
-  
-  cat("Rows with place information:", rows_with_place, 
-      "(", round(rows_with_place/rows_after*100, 2), "%)\n")
-  
-  cat("Rows without place information:", rows_without_place, 
-      "(", round(rows_without_place/rows_after*100, 2), "%)\n")
-  
-  # Print sample of rows missing place information
-  if(rows_without_place > 0) {
-    cat("Sample of rows missing place information:\n")
-    print(merged_dataset %>%
-          filter(is.na(place_name)) %>%
-          select(all_of(ad_only_variables), blkgrp) %>%
-          head(30))
-  }
-  
-  return(merged_dataset)
-}
-
-# Function to merge ad city information into a dataset
-merge_ad_city <- function(dataset, dataset_name) {
-  cat("\nMerging HCITY_Ad into", dataset_name, "...\n")
-
-  missing_join_cols <- setdiff(ad_city_join_keys, names(dataset))
-  if (length(missing_join_cols) > 0) {
-    cat("WARNING:", dataset_name, "is missing required join columns:",
-        paste(missing_join_cols, collapse = ", "), "\n")
-    dataset$HCITY_Ad <- NA_character_
-    return(dataset)
-  }
-
-  rows_before <- nrow(dataset)
-
-  merged_dataset <- dataset %>%
-    mutate(TESTERID = as.character(TESTERID)) %>%
-    left_join(ad_city_lookup, by = ad_city_join_keys)
-
-  rows_after <- nrow(merged_dataset)
-  rows_with_hcity_ad <- merged_dataset %>%
-    filter(!is.na(HCITY_Ad) & HCITY_Ad != "") %>%
-    nrow()
-  rows_ambiguous <- merged_dataset %>%
-    filter(HCITY_Ad_ambiguous %in% TRUE) %>%
-    nrow()
-
-  cat("Rows before merge:", rows_before, "\n")
-  cat("Rows after merge:", rows_after, "\n")
-  cat("Rows with HCITY_Ad:", rows_with_hcity_ad,
-      "(", round(rows_with_hcity_ad / rows_after * 100, 2), "%)\n")
-  cat("Rows tied to ambiguous ad-city lookup keys:", rows_ambiguous,
-      "(", round(rows_ambiguous / rows_after * 100, 2), "%)\n")
-
-  merged_dataset <- merged_dataset %>%
-    select(-HCITY_Ad_ambiguous)
-
-  return(merged_dataset)
-}
-
-# Merge place information into each dataset
-hud_census_with_place <- merge_place_info(hud_census, "HUDprocessed_JPE_census_042021.rds")
-hud_names_with_place <- merge_place_info(hud_names, "HUDprocessed_JPE_names_042021.rds")
-hud_testscores_with_place <- merge_place_info(hud_testscores, "HUDprocessed_JPE_testscores_042021.rds")
-
-# Merge ad city into each dataset
-hud_census_with_place <- merge_ad_city(hud_census_with_place, "HUDprocessed_JPE_census_042021.rds")
-hud_names_with_place <- merge_ad_city(hud_names_with_place, "HUDprocessed_JPE_names_042021.rds")
-hud_testscores_with_place <- merge_ad_city(hud_testscores_with_place, "HUDprocessed_JPE_testscores_042021.rds")
+# Merge canonical advertised-home values into the three datasets
+cat("\nMerging canonical advertised-home values into the three datasets...\n")
+hud_census_with_place <- merge_canonical_ads_into_hud(
+  hud_census,
+  "HUDprocessed_JPE_census_042021.rds",
+  canonical_hud_lookup
+)
+hud_names_with_place <- merge_canonical_ads_into_hud(
+  hud_names,
+  "HUDprocessed_JPE_names_042021.rds",
+  canonical_hud_lookup
+)
+hud_testscores_with_place <- merge_canonical_ads_into_hud(
+  hud_testscores,
+  "HUDprocessed_JPE_testscores_042021.rds",
+  canonical_hud_lookup
+)
 
 hud_census_with_place <- filter_processed_geo(
   hud_census_with_place,

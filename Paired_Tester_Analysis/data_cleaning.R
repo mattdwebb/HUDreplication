@@ -35,11 +35,13 @@ if (skip_geocoding) {
 
 resolve_repo_root <- function() {
   cwd <- normalizePath(getwd(), winslash = "/", mustWork = TRUE)
-  if (basename(cwd) == "HUDreplication_new") return(cwd)
+  if (basename(cwd) %in% c("HUDreplication", "HUDreplication_new")) return(cwd)
   if (basename(cwd) == "Paired_Tester_Analysis") return(dirname(cwd))
+  candidate <- file.path(cwd, "HUDreplication")
+  if (dir.exists(candidate)) return(normalizePath(candidate, winslash = "/", mustWork = TRUE))
   candidate <- file.path(cwd, "HUDreplication_new")
   if (dir.exists(candidate)) return(normalizePath(candidate, winslash = "/", mustWork = TRUE))
-  stop("Could not infer repo_root. Run from HUDreplication_new or Paired_Tester_Analysis.")
+  stop("Could not infer repo_root. Run from HUDreplication, HUDreplication_new, or Paired_Tester_Analysis.")
 }
 
 repo_root <- resolve_repo_root()
@@ -470,6 +472,12 @@ correct_am_pm_indicator <- function(hour, am_pm_indicator) {
     )
   )
 }
+
+first_by_order <- function(value, order) {
+  idx <- which(!is.na(order))
+  if (length(idx) == 0) return(value[NA_integer_][1])
+  value[idx[which.min(order[idx])]]
+}
 # =================================================================================================== #
 # SALES DATA CLEANING
 # =================================================================================================== #
@@ -554,27 +562,41 @@ sales_with_time %>%
 sales_final <- sales_with_time %>%
   group_by(CONTROL) %>%
   arrange(appointment_datetime) %>%
-  mutate(visit_order = ifelse(is.na(appointment_datetime), NA, row_number())) %>% # only rows with non-NA datetime will have visit_order, NA values ordered at the end of each CONTROL
+  mutate(
+    visit_order = ifelse(is.na(appointment_datetime), NA, row_number()), # only rows with non-NA datetime will have visit_order, NA values ordered at the end of each CONTROL
+    substantive_visit = !is.na(STOTUNIT) | !is.na(SAVLBAD_BINARY),
+    substantive_visit_order = if_else(substantive_visit, as.integer(visit_order), NA_integer_)
+  ) %>%
   ungroup() %>%
   group_by(CONTROL, TESTERID) %>%
   summarise(
     RACEID = first(RACEID),
-    am_indicator_first = first(am_indicator[which.min(visit_order)]),
-    STOTUNIT_FIRST = first(STOTUNIT[which.min(visit_order)]),
-    SAVLBAD_FIRST = first(SAVLBAD_BINARY[which.min(visit_order)]),
-    first_visit_datetime = min(appointment_datetime, na.rm = TRUE),
-    num_visits = n(),
+    am_indicator_first = first_by_order(am_indicator, substantive_visit_order),
+    STOTUNIT_FIRST = first_by_order(STOTUNIT, substantive_visit_order),
+    SAVLBAD_FIRST = first_by_order(SAVLBAD_BINARY, substantive_visit_order),
+    first_visit_datetime = first_by_order(appointment_datetime, substantive_visit_order),
+    first_substantive_visit_order = suppressWarnings(min(substantive_visit_order, na.rm = TRUE)),
+    num_visits = sum(!is.na(substantive_visit_order)),
     STOTUNIT_TOTAL = if(all(is.na(STOTUNIT))) NA_real_ else sum(STOTUNIT, na.rm = TRUE),
     SAVLBAD_ANY = if(all(is.na(SAVLBAD_BINARY))) NA_real_ else as.numeric(any(SAVLBAD_BINARY == 1, na.rm = TRUE)),
-    was_first_visitor = if(all(is.na(visit_order))) NA else any(visit_order == 1, na.rm = TRUE),
     .groups = 'drop'
   ) %>%
   mutate(
     RACE = as.numeric(str_extract(as.character(RACEID), "\\d$")),
-    first_visit_datetime = if_else(is.infinite(first_visit_datetime), 
-                                 as.POSIXct(NA), first_visit_datetime)
+    first_substantive_visit_order = if_else(is.infinite(first_substantive_visit_order), NA_real_, first_substantive_visit_order)
   ) %>%
-  select(-RACEID)
+  group_by(CONTROL) %>%
+  mutate(
+    first_substantive_order_in_trial = suppressWarnings(min(first_substantive_visit_order, na.rm = TRUE)),
+    first_substantive_order_in_trial = if_else(is.infinite(first_substantive_order_in_trial), NA_real_, first_substantive_order_in_trial),
+    was_first_visitor = if_else(
+      is.na(first_substantive_visit_order) | is.na(first_substantive_order_in_trial),
+      NA,
+      first_substantive_visit_order == first_substantive_order_in_trial
+    )
+  ) %>%
+  ungroup() %>%
+  select(-RACEID, -first_substantive_order_in_trial)
 
 cat("Final sales dataset:", nrow(sales_final), "rows (one per tester per control)\n")
 
@@ -664,6 +686,12 @@ cat("Exported sales and tester appointments data to ", generated_file("sales_and
 # =================================================================================================== #
 cat("=== CHECKING RECHOMES FOR DUPLICATES ===\n")
 
+# Prefer rows that are not flagged for deletion, carry the most information,
+# and appear later in sequence when duplicate address rows appear in rechomes.
+rechomes_completeness_score <- function(df) {
+  rowSums(!is.na(df) & df != "")
+}
+
 # Check for duplicates in rechomes by address variables and deduplicate in one step
 rechomes_deduplicated <- rechomes %>%
   {
@@ -671,7 +699,19 @@ rechomes_deduplicated <- rechomes %>%
     .
   } %>%
   group_by(CONTROL, TESTERID, HSITEAD, HSITETYP, HUNITNO, HCITY, HSTATE, HZIP) %>%
-  slice(1) %>%  # Keep first occurrence of each address combination
+  mutate(
+    prefer_not_deleted = is.na(DELREC) | DELREC != 1,
+    completeness_score = rechomes_completeness_score(across(everything())),
+    seqrh_order = coalesce(SEQRH, -Inf)
+  ) %>%
+  arrange(
+    desc(prefer_not_deleted),
+    desc(completeness_score),
+    desc(seqrh_order),
+    .by_group = TRUE
+  ) %>%
+  slice(1) %>%
+  select(-prefer_not_deleted, -completeness_score, -seqrh_order) %>%
   ungroup() %>%
   {
     rows_lost <- nrow(rechomes) - nrow(.)

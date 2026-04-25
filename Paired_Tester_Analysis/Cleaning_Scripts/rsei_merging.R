@@ -68,8 +68,8 @@ library(dplyr)        # Data wrangling with tidyverse syntax
 #'   - ctconc: Carcinogenic toxic concentration
 #'   - nctconc: Non-carcinogenic toxic concentration
 load_rsei_agg <- function(
-  agg_path = "Data/Non_HDS_Data/RSEI/aggmicro2022_2020.csv",
-  cache_path = "Data/Non_HDS_Data/RSEI/rsei_agg_2020.rds",
+  agg_path = "Data/Non_HDS_Data/RSEI/aggmicro2022_2012.csv",
+  cache_path = "Data/Non_HDS_Data/RSEI/rsei_agg_2012.rds",
   refresh = FALSE
 ) {
   # Return cached data if available and not forcing refresh
@@ -172,12 +172,12 @@ load_rsei_grid_centroids <- function(
 #' @return data.table combining centroid coordinates with toxic concentration values
 #'         Keyed by (cellx, celly) for fast lookups
 build_rsei_grid_lookup <- function(
-  agg_path = "Data/Non_HDS_Data/RSEI/aggmicro2022_2020.csv",
+  agg_path = "Data/Non_HDS_Data/RSEI/aggmicro2022_2012.csv",
   bottom_dbf = "Data/Non_HDS_Data/RSEI/poly_gc14_conus_810m_bottom.dbf",
   top_dbf = "Data/Non_HDS_Data/RSEI/poly_gc14_conus_810m_top.dbf",
-  agg_cache = "Data/Non_HDS_Data/RSEI/rsei_agg_2020.rds",
+  agg_cache = "Data/Non_HDS_Data/RSEI/rsei_agg_2012.rds",
   grid_cache = "Data/Non_HDS_Data/RSEI/rsei_grid_centroids.rds",
-  lookup_cache = "Data/Non_HDS_Data/RSEI/rsei_grid_lookup_2020.rds",
+  lookup_cache = "Data/Non_HDS_Data/RSEI/rsei_grid_lookup_2012.rds",
   refresh = FALSE
 ) {
   # Return cached lookup if available

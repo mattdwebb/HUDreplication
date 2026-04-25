@@ -4,16 +4,13 @@ library(dplyr)
 library(tidyr)
 library(haven)
 
-resolve_repo_root <- function() {
-  cwd <- normalizePath(getwd(), winslash = "/", mustWork = TRUE)
-  if (basename(cwd) == "HUDreplication_new") return(cwd)
-  if (basename(cwd) == "Paired_Tester_Analysis") return(dirname(cwd))
-  candidate <- file.path(cwd, "HUDreplication_new")
-  if (dir.exists(candidate)) return(normalizePath(candidate, winslash = "/", mustWork = TRUE))
-  stop("Could not infer repo_root. Run from HUDreplication_new or Paired_Tester_Analysis.")
+repo_root <- normalizePath(getwd(), winslash = "/", mustWork = TRUE)
+
+# Search upward for a directory containing "Paired_Tester_Analysis"
+while (!dir.exists(file.path(repo_root, "Paired_Tester_Analysis")) && repo_root != dirname(repo_root)) {
+  repo_root <- dirname(repo_root)
 }
 
-repo_root <- resolve_repo_root()
 setwd(repo_root)
 
 data_dir <- file.path(repo_root, "Data")
@@ -81,7 +78,10 @@ data <- read.csv(file.path(paired_generated_dir, "sales_and_tester_merged.csv"))
         age = as.numeric(age),
         THIGHEDU = as.factor(THIGHEDU)
     ) %>%
-    mutate(ofcolor = ifelse(RACE %in% c(2,3,4), 1, 0))
+    mutate(
+        ofcolor = ifelse(RACE %in% c(2,3,4), 1, 0),
+        got_second_appointment = as.integer(num_visits >= 2)
+    )
 
 # Note that the only RACE categories present in valid trials are those indicated by 1, 2, 3, 4 (white, black, hispanic, asian)
 summary(data$RACE)
@@ -103,11 +103,37 @@ available_any_ofcolor <- felm(SAVLBAD_ANY ~ ofcolor + was_first_visitor + am_ind
                          TPEGAI + THHEGAI + TSEX + age + THIGHEDU | 
                          CONTROL | 0 | CONTROL, data = data)
 
+second_appointment_races <- felm(got_second_appointment ~ RACE + was_first_visitor + am_indicator_first +
+                         TPEGAI + THHEGAI + TSEX + age + THIGHEDU | 
+                         CONTROL | 0 | CONTROL, data = data)
+
+second_appointment_ofcolor <- felm(got_second_appointment ~ ofcolor + was_first_visitor + am_indicator_first +
+                         TPEGAI + THHEGAI + TSEX + age + THIGHEDU | 
+                         CONTROL | 0 | CONTROL, data = data)
+
+first_appointment_data <- data %>%
+    filter(!is.na(SAVLBAD_FIRST)) %>%
+    group_by(CONTROL) %>%
+    filter(n_distinct(TESTERID) == 2) %>%
+    ungroup()
+
+available_first_races <- felm(SAVLBAD_FIRST ~ RACE + was_first_visitor + am_indicator_first +
+                         TPEGAI + THHEGAI + TSEX + age + THIGHEDU | 
+                         CONTROL | 0 | CONTROL, data = first_appointment_data)
+
+available_first_ofcolor <- felm(SAVLBAD_FIRST ~ ofcolor + was_first_visitor + am_indicator_first +
+                         TPEGAI + THHEGAI + TSEX + age + THIGHEDU | 
+                         CONTROL | 0 | CONTROL, data = first_appointment_data)
+
 # Display summaries of previous models
 summary(recommended_total_races)
 summary(available_any_races)
+summary(second_appointment_races)
 summary(recommended_total_ofcolor)
 summary(available_any_ofcolor)
+summary(second_appointment_ofcolor)
+summary(available_first_races)
+summary(available_first_ofcolor)
 
 # Alternate specification keeping each appointment as a separate row
 appointments_data <- read.csv(file.path(paired_generated_dir, "sales_and_tester_appointments.csv"))  %>%
@@ -175,15 +201,6 @@ write.csv(sample_summary, file.path(tables_dir, "sample_summary.csv"), row.names
 library(broom)
 library(xtable)
 
-# Helper function to extract coefficient, SE, CI
-extract_coef_info <- function(model, varname) {
-    coefs <- coef(summary(model))
-    est <- coefs[varname, "Estimate"]
-    se <- coefs[varname, "Cluster s.e."]
-    ci <- confint(model, level = 0.95)[varname, ]
-    list(est = est, se = se, ci = ci)
-}
-
 # Get info for "ofcolor" (Racial Minority) and "RACE" levels
 get_race_rows <- function(model, race_levels) {
     rows <- lapply(race_levels, function(race) {
@@ -230,125 +247,109 @@ get_race_rows <- function(model, race_levels) {
 }
 
 # Prepare rows for each column
-minority_vars <- c("ofcolor")
 race_vars <- c("RACE2", "RACE3", "RACE4") # African American, Hispanic, Asian
 
-# Column 1: Total Recommended Properties
-col1_minority <- extract_coef_info(recommended_total_ofcolor, "ofcolor")
-col1_race <- get_race_rows(recommended_total_races, race_vars)
+table_specs <- list(
+    list(
+        label = "Total Recommended\\\\Properties",
+        minority = extract_coef_info(recommended_total_ofcolor, "ofcolor"),
+        race = get_race_rows(recommended_total_races, race_vars),
+        minority_model = recommended_total_ofcolor,
+        race_model = recommended_total_races,
+        trials = length(unique(data$CONTROL))
+    ),
+    list(
+        label = "Ad Property Ever\\\\Available",
+        minority = extract_coef_info(available_any_ofcolor, "ofcolor"),
+        race = get_race_rows(available_any_races, race_vars),
+        minority_model = available_any_ofcolor,
+        race_model = available_any_races,
+        trials = length(unique(data$CONTROL))
+    ),
+    list(
+        label = "Received Second\\\\Appointment",
+        minority = extract_coef_info(second_appointment_ofcolor, "ofcolor"),
+        race = get_race_rows(second_appointment_races, race_vars),
+        minority_model = second_appointment_ofcolor,
+        race_model = second_appointment_races,
+        trials = length(unique(data$CONTROL))
+    ),
+    list(
+        label = "Recommended Properties\\\\per Appointment",
+        minority = extract_coef_info(recommended_apps_ofcolor, "ofcolor"),
+        race = get_race_rows(recommended_apps_races, race_vars),
+        minority_model = recommended_apps_ofcolor,
+        race_model = recommended_apps_races,
+        trials = length(unique(appointments_data$CONTROL))
+    ),
+    list(
+        label = "Ad Property Available\\\\First Substantive Appointment",
+        minority = extract_coef_info(available_first_ofcolor, "ofcolor"),
+        race = get_race_rows(available_first_races, race_vars),
+        minority_model = available_first_ofcolor,
+        race_model = available_first_races,
+        trials = length(unique(first_appointment_data$CONTROL))
+    )
+)
 
-# Column 2: Ad Property Ever Available
-col2_minority <- extract_coef_info(available_any_ofcolor, "ofcolor")
-col2_race <- get_race_rows(available_any_races, race_vars)
+cell_for <- function(spec, race_index, stat_index) {
+    if (is.null(race_index)) {
+        info <- spec$minority
+        if (stat_index == 1) return(sprintf("% .4f%s", info$est, info$star))
+        if (stat_index == 2) return(sprintf("(% .4f)", info$se))
+        return(sprintf("[% .4f,% .4f]", info$ci[1], info$ci[2]))
+    }
+    if (nrow(spec$race) < race_index) return(NA)
+    spec$race[race_index, stat_index]
+}
 
-# Column 3: Recommended Properties per Appointment
-col3_minority <- extract_coef_info(recommended_apps_ofcolor, "ofcolor")
-col3_race <- get_race_rows(recommended_apps_races, race_vars)
-
-# Column 4: Ad Property Available per Appointment
-col4_minority <- extract_coef_info(available_apps_ofcolor, "ofcolor")
-col4_race <- get_race_rows(available_apps_races, race_vars)
-
-# Combine rows for LaTeX table
 table_rows <- rbind(
-    c("Racial Minority", 
-      sprintf("% .4f%s", col1_minority$est, col1_minority$star), sprintf("% .4f%s", col2_minority$est, col2_minority$star),
-      sprintf("% .4f%s", col3_minority$est, col3_minority$star), sprintf("% .4f%s", col4_minority$est, col4_minority$star)),
-    c("", 
-      sprintf("(% .4f)", col1_minority$se), sprintf("(% .4f)", col2_minority$se),
-      sprintf("(% .4f)", col3_minority$se), sprintf("(% .4f)", col4_minority$se)),
-    c("", 
-      sprintf("[% .4f,% .4f]", col1_minority$ci[1], col1_minority$ci[2]),
-      sprintf("[% .4f,% .4f]", col2_minority$ci[1], col2_minority$ci[2]),
-      sprintf("[% .4f,% .4f]", col3_minority$ci[1], col3_minority$ci[2]),
-      sprintf("[% .4f,% .4f]", col4_minority$ci[1], col4_minority$ci[2])),
-    c("African American", 
-      if (nrow(col1_race) >= 1) col1_race[1,1] else NA, 
-      if (nrow(col2_race) >= 1) col2_race[1,1] else NA, 
-      if (nrow(col3_race) >= 1) col3_race[1,1] else NA, 
-      if (nrow(col4_race) >= 1) col4_race[1,1] else NA),
-    c("", 
-      if (nrow(col1_race) >= 1) col1_race[1,2] else NA, 
-      if (nrow(col2_race) >= 1) col2_race[1,2] else NA, 
-      if (nrow(col3_race) >= 1) col3_race[1,2] else NA, 
-      if (nrow(col4_race) >= 1) col4_race[1,2] else NA),
-    c("", 
-      if (nrow(col1_race) >= 1) col1_race[1,3] else NA, 
-      if (nrow(col2_race) >= 1) col2_race[1,3] else NA, 
-      if (nrow(col3_race) >= 1) col3_race[1,3] else NA, 
-      if (nrow(col4_race) >= 1) col4_race[1,3] else NA),
-    c("Hispanic", 
-      if (nrow(col1_race) >= 2) col1_race[2,1] else NA, 
-      if (nrow(col2_race) >= 2) col2_race[2,1] else NA, 
-      if (nrow(col3_race) >= 2) col3_race[2,1] else NA, 
-      if (nrow(col4_race) >= 2) col4_race[2,1] else NA),
-    c("", 
-      if (nrow(col1_race) >= 2) col1_race[2,2] else NA, 
-      if (nrow(col2_race) >= 2) col2_race[2,2] else NA, 
-      if (nrow(col3_race) >= 2) col3_race[2,2] else NA, 
-      if (nrow(col4_race) >= 2) col4_race[2,2] else NA),
-    c("", 
-      if (nrow(col1_race) >= 2) col1_race[2,3] else NA, 
-      if (nrow(col2_race) >= 2) col2_race[2,3] else NA, 
-      if (nrow(col3_race) >= 2) col3_race[2,3] else NA, 
-      if (nrow(col4_race) >= 2) col4_race[2,3] else NA),
-    c("Asian", 
-      if (nrow(col1_race) >= 3) col1_race[3,1] else NA, 
-      if (nrow(col2_race) >= 3) col2_race[3,1] else NA, 
-      if (nrow(col3_race) >= 3) col3_race[3,1] else NA, 
-      if (nrow(col4_race) >= 3) col4_race[3,1] else NA),
-    c("", 
-      if (nrow(col1_race) >= 3) col1_race[3,2] else NA, 
-      if (nrow(col2_race) >= 3) col2_race[3,2] else NA, 
-      if (nrow(col3_race) >= 3) col3_race[3,2] else NA, 
-      if (nrow(col4_race) >= 3) col4_race[3,2] else NA),
-    c("", 
-      if (nrow(col1_race) >= 3) col1_race[3,3] else NA, 
-      if (nrow(col2_race) >= 3) col2_race[3,3] else NA, 
-      if (nrow(col3_race) >= 3) col3_race[3,3] else NA, 
-      if (nrow(col4_race) >= 3) col4_race[3,3] else NA)
+    c("Racial Minority", sapply(table_specs, cell_for, race_index = NULL, stat_index = 1)),
+    c("", sapply(table_specs, cell_for, race_index = NULL, stat_index = 2)),
+    c("", sapply(table_specs, cell_for, race_index = NULL, stat_index = 3)),
+    c("African American", sapply(table_specs, cell_for, race_index = 1, stat_index = 1)),
+    c("", sapply(table_specs, cell_for, race_index = 1, stat_index = 2)),
+    c("", sapply(table_specs, cell_for, race_index = 1, stat_index = 3)),
+    c("Hispanic", sapply(table_specs, cell_for, race_index = 2, stat_index = 1)),
+    c("", sapply(table_specs, cell_for, race_index = 2, stat_index = 2)),
+    c("", sapply(table_specs, cell_for, race_index = 2, stat_index = 3)),
+    c("Asian", sapply(table_specs, cell_for, race_index = 3, stat_index = 1)),
+    c("", sapply(table_specs, cell_for, race_index = 3, stat_index = 2)),
+    c("", sapply(table_specs, cell_for, race_index = 3, stat_index = 3))
 )
 
 # Create LaTeX table with proper column labels
 latex_table <- function(rows) {
     cat("\\begin{table}[p]\n\\centering\n")
-    cat("\\def\\sym#1{\\ifmmode^{#1}\\else\\(#^{#1}\\)\\fi}\n")
+    cat("\\def\\sym#1{\\ifmmode^{#1}\\else\\(^{#1}\\)\\fi}\n")
     cat("\\caption{Discriminatory Steering and Availability of Advertised Properties\\\\[0.5em]\\textit{Table 5, C\\&T 2022}}\n")
-    cat("\\label{tab:correcttable5}\n")
+    cat("\\label{tab:table5}\n")
     cat("\\resizebox{\\textwidth}{!}{\n")
-    cat("\\begin{tabular}{l*{4}{c}}\n")
+    cat("\\begin{tabular}{l*{5}{c}}\n")
     cat("\\toprule\n")
-    cat("& \\multicolumn{4}{c}{Dependent Variable} \\\\\n")
-    cat("\\cmidrule(lr){2-5}\n")
-    cat("&\\multicolumn{1}{c}{\\begin{tabular}{@{}c@{}}Total Recommended\\\\Properties\\end{tabular}} ")
-    cat("&\\multicolumn{1}{c}{\\begin{tabular}{@{}c@{}}Ad Property Ever\\\\Available\\end{tabular}} ")
-    cat("&\\multicolumn{1}{c}{\\begin{tabular}{@{}c@{}}Recommended Properties\\\\per Appointment\\end{tabular}} ")
-    cat("&\\multicolumn{1}{c}{\\begin{tabular}{@{}c@{}}Ad Property Available\\\\per Appointment\\end{tabular}}\\\\\n")
+    cat("& \\multicolumn{5}{c}{Dependent Variable} \\\\\n")
+    cat("\\cmidrule(lr){2-6}\n")
+    for (spec in table_specs) {
+        cat(sprintf("&\\multicolumn{1}{c}{\\begin{tabular}{@{}c@{}}%s\\end{tabular}} ", spec$label))
+    }
+    cat("\\\\\n")
     cat("\\midrule\n")
     for (row in 1:nrow(rows)) {
         cat(paste(rows[row,], collapse=" & "), "\\\\\n")
         if (row %% 3 == 0 && row < nrow(rows)) cat("[1ex]\n")
     }
     cat("\\midrule\n")
-    cat(sprintf("Observations      &%d&%d&%d&%d\\\\\n",
-        recommended_total_ofcolor$N, available_any_ofcolor$N,
-        recommended_apps_ofcolor$N, available_apps_ofcolor$N))
-    cat(sprintf("Adjusted R$^2$ (Minority)      &%.4f&%.4f&%.4f&%.4f\\\\\n",
-        summary(recommended_total_ofcolor)$adj.r.squared,
-        summary(available_any_ofcolor)$adj.r.squared,
-        summary(recommended_apps_ofcolor)$adj.r.squared,
-        summary(available_apps_ofcolor)$adj.r.squared))
-    cat(sprintf("Adjusted R$^2$ (Category)      &%.4f&%.4f&%.4f&%.4f\\\\\n",
-        summary(recommended_total_races)$adj.r.squared,
-        summary(available_any_races)$adj.r.squared,
-        summary(recommended_apps_races)$adj.r.squared,
-        summary(available_apps_races)$adj.r.squared))
-    cat(sprintf("Number of Trials      &%d&%d&%d&%d\\\\\n",
-        length(unique(data$CONTROL)), length(unique(data$CONTROL)),
-        length(unique(appointments_data$CONTROL)), length(unique(appointments_data$CONTROL))))
+    cat(sprintf("Observations      &%s\\\\\n",
+        paste(sapply(table_specs, function(spec) spec$minority_model$N), collapse = "&")))
+    cat(sprintf("Adjusted R$^2$ (Minority)      &%s\\\\\n",
+        paste(sprintf("%.4f", sapply(table_specs, function(spec) summary(spec$minority_model)$adj.r.squared)), collapse = "&")))
+    cat(sprintf("Adjusted R$^2$ (Category)      &%s\\\\\n",
+        paste(sprintf("%.4f", sapply(table_specs, function(spec) summary(spec$race_model)$adj.r.squared)), collapse = "&")))
+    cat(sprintf("Number of Trials      &%s\\\\\n",
+        paste(sapply(table_specs, function(spec) spec$trials), collapse = "&")))
     cat("\\bottomrule\n")
-    cat("\\multicolumn{5}{l}{\\footnotesize Cluster-robust standard errors in parentheses. Clustered at the trial level. 95\\% confidence intervals in square brackets.}\\\\\n")
-    cat("\\multicolumn{5}{l}{\\footnotesize \\sym{*} \\(p<0.10\\), \\sym{**} \\(p<0.05\\), \\sym{***} \\(p<0.01\\)}\\\\\n")
+    cat("\\multicolumn{6}{l}{\\footnotesize Cluster-robust standard errors in parentheses. Clustered at the trial level. 95\\% confidence intervals in square brackets.}\\\\\n")
+    cat("\\multicolumn{6}{l}{\\footnotesize \\sym{*} \\(p<0.10\\), \\sym{**} \\(p<0.05\\), \\sym{***} \\(p<0.01\\)}\\\\\n")
     cat("\\end{tabular}\n}\n\\end{table}\n")
 }
 

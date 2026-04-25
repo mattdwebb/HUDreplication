@@ -72,19 +72,9 @@ merge_ct_greatschools_crime <- function(
   merged <- data %>%
     left_join(ct_recs_collapsed, by = key_cols)
 
-  # Coverage summaries
-  if ("HADHOME" %in% names(merged)) {
-    rec_rows <- merged %>% filter(HADHOME != 1)
-
-    rec_match <- sum(!is.na(rec_rows$Elementary_School_Score_Rec) | !is.na(rec_rows$Assault_Rec))
-
-    cat(sprintf("Recommended homes matched: %d / %d (%.1f%%)\n",
-                rec_match, nrow(rec_rows), 100 * rec_match / nrow(rec_rows)))
-  } else {
-    any_match <- sum(!is.na(merged$Elementary_School_Score_Rec) | !is.na(merged$Assault_Rec))
-    cat(sprintf("Rows with any GreatSchools/crime match: %d / %d (%.1f%%)\n",
-                any_match, nrow(merged), 100 * any_match / nrow(merged)))
-  }
+  any_match <- sum(!is.na(merged$Elementary_School_Score_Rec) | !is.na(merged$Assault_Rec))
+  cat(sprintf("Rows with any GreatSchools/crime match: %d / %d (%.1f%%)\n",
+              any_match, nrow(merged), 100 * any_match / nrow(merged)))
 
   return(merged)
 }

@@ -82,10 +82,9 @@ merge_ct_census_vars <- function(
     left_join(ct_collapsed, by = key_cols)
 
   if ("povrate_Rec" %in% names(merged)) {
-    rec_rows <- merged %>% filter(is.na(HADHOME) | HADHOME != 1)
-    rec_match <- sum(!is.na(rec_rows$povrate_Rec))
+    rec_match <- sum(!is.na(merged$povrate_Rec))
     cat(sprintf("C&T census (povrate_Rec) matched: %d / %d (%.1f%%)\n",
-                rec_match, nrow(rec_rows), 100 * rec_match / nrow(rec_rows)))
+                rec_match, nrow(merged), 100 * rec_match / nrow(merged)))
   }
 
   return(merged)
