@@ -1,0 +1,28 @@
+% 10 Mar 2026 11:12:56
+\documentclass{article}
+\usepackage{dcolumn}
+\usepackage{booktabs}
+\begin{document}
+
+\begin{table}[htbp]\centering
+\def\sym#1{\ifmmode^{#1}\else\(^{#1}\)\fi}
+\caption{Neighbourhood Attributes as whitehi\_rec, Clustered at trial}
+\begin{tabular}{l*{6}{c}}
+\toprule
+                    &\multicolumn{1}{c}{Original Data}&\multicolumn{1}{c}{Correct Race Only}&\multicolumn{1}{c}{Updated City Name \& Correct Race}&\multicolumn{1}{c}{Proper City Name \& Correct Race}&\multicolumn{1}{c}{Place Name \& Correct Race}&\multicolumn{1}{c}{County Name \& Correct Race}\\\cmidrule(lr){2-2}\cmidrule(lr){3-3}\cmidrule(lr){4-4}\cmidrule(lr){5-5}\cmidrule(lr){6-6}\cmidrule(lr){7-7}
+                    &\multicolumn{1}{c}{(1)}   &\multicolumn{1}{c}{(2)}   &\multicolumn{1}{c}{(3)}   &\multicolumn{1}{c}{(4)}   &\multicolumn{1}{c}{(5)}   &\multicolumn{1}{c}{(6)}   \\
+                    &   b/se/ci95   &   b/se/ci95   &   b/se/ci95   &   b/se/ci95   &   b/se/ci95   &   b/se/ci95   \\
+\midrule
+Racial Minority     &     -0.0265***&     -0.0248***&     -0.0146** &     -0.0090   &     -0.0083   &     -0.0080   \\
+                    &    (0.0084)   &    (0.0086)   &    (0.0071)   &    (0.0077)   &    (0.0077)   &    (0.0073)   \\
+                    &[-0.0430,-0.0100]   &[-0.0416,-0.0080]   &[-0.0286,-0.0007]   &[-0.0242,0.0061]   &[-0.0235,0.0068]   &[-0.0223,0.0063]   \\
+\midrule
+Observations        &       21442   &       14677   &       14677   &       14677   &       14677   &       14677   \\
+Adjusted R$^2$      &      0.7178   &      0.6771   &      0.6768   &      0.6171   &      0.6085   &      0.6322   \\
+Number of Cities    &        1685   &        1685   &        1057   &         775   &         853   &         132   \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\end{document}
+

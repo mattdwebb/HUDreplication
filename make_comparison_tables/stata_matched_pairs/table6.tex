@@ -1,0 +1,39 @@
+\begin{table}[!htbp]
+\centering
+\def\sym#1{\ifmmode^{#1}\else\(^{#1}\)\fi}
+\caption{Discriminatory Steering and Neighborhood Racial Composition}
+\label{tab:table6}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lc}
+\toprule
+& \multicolumn{1}{c}{Dependent variable} \\
+\cmidrule(lr){2-2}
+& White Household Share \\
+\midrule
+Racial Minority & -0.0102\sym{***}  \\
+ & ( 0.0034)  \\
+ & [-0.0169, -0.0035]  \\
+African American & -0.0192\sym{***}  \\
+ & ( 0.0053)  \\
+ & [-0.0295, -0.0089]  \\
+Hispanic & -0.0027  \\
+ & ( 0.0055)  \\
+ & [-0.0134,  0.0080]  \\
+Asian & -0.0075  \\
+ & ( 0.0053)  \\
+ & [-0.0178,  0.0029]  \\
+\midrule
+Observations & 16{,}837\\
+Adjusted R$^2$ (Minority) & 0.7325\\
+Adjusted R$^2$ (Category) & 0.7327\\
+Number of Trials & 2{,}373\\
+\bottomrule
+\end{tabular}
+}
+\begin{minipage}{\textwidth}
+\footnotesize
+Cluster-robust standard errors in parentheses; clustered at the trial level. 95\% confidence intervals in square brackets.
+\sym{*} \(p<0.10\), \sym{**} \(p<0.05\), \sym{***} \(p<0.01\)
+\end{minipage}
+\end{table}
+
