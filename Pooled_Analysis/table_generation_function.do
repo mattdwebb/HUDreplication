@@ -420,8 +420,6 @@ program define run_regressions, rclass
     local cols_for_depvar_2_minority = " "
     local cols_for_depvar_2_categories = " "
 
-    save "temp_data_table`table_number'_formatted.dta", replace
-
     forvalues d = 1/2 {
         forvalues cols = 1/3 {
             // SET RACIAL MINORITY VARIABLE FOR THIS COLUMN
@@ -546,8 +544,6 @@ program define correct_table, rclass
 
     // Create empty placeholder to store column names
     local cols_for_all_regressions = " "
-
-    save "temp_data_table`table_number'_formatted.dta", replace
 
     local num_regressions : word count `dependent_vars'
     
@@ -776,8 +772,6 @@ program define run_regressions_col1_only, rclass
     local cols_for_depvar_2_categories = " "
 	
 
-    save "temp_data_table`table_number'_formatted.dta", replace
-
     forvalues d = 1/2 {
 		// the local `cols' will be the identifier for later estout
         forvalues cols = 1/1 {
@@ -869,8 +863,6 @@ program define run_regressions_col23_only, rclass
 		keep if !inlist(hcity, "", ".", "NA") & !inlist(place_name, "", ".", "NA") & !inlist(county_name, "", ".", "NA")
 	}
 	
-    save "temp_data_table`table_number'_formatted.dta", replace
-
     forvalues d = 1/2 {
 		// the local `cols' will be the identifier for later estout
         forvalues cols = 2/3 {
@@ -955,8 +947,6 @@ program define run_regressions_col456_only, rclass
 		keep if !inlist(hcity, "", ".", "NA") & !inlist(place_name, "", ".", "NA") & !inlist(county_name, "", ".", "NA")
 	}
 	
-    save "temp_data_table`table_number'_formatted.dta", replace
-
     forvalues d = 1/2 {
 		// the local `cols' will be the identifier for later estout
         forvalues cols = 4/6 {

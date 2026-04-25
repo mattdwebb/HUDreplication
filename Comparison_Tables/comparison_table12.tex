@@ -1,0 +1,54 @@
+% April 13, 2026 -- New panel title
+
+\begin{table}[htbp]\centering
+\def\sym#1{\ifmmode^{#1}\else\(^{#1}\)\fi}
+\caption{\small Results Comparison for Table 12 Column 1, C\&T 2022}
+\label{comptab:table12}
+\resizebox{\textwidth}{!}{
+\begin{tabular}{l*{6}{c}}
+\toprule
+	& \multicolumn{6}{c}{Median Income in Neighbourhood, Clustered at Trial}\\
+\toprule
+                    &\multicolumn{1}{c}{Original}&\multicolumn{1}{c}{Correct}&\multicolumn{1}{c}{Updated City Name}&\multicolumn{1}{c}{Proper City Name}&\multicolumn{1}{c}{Place Name}&\multicolumn{1}{c}{Matched Pairs}\\
+                      &\multicolumn{1}{c}{Data}&\multicolumn{1}{c}{Race Only}&\multicolumn{1}{c}{\& Correct Race}&\multicolumn{1}{c}{\& Correct Race}&\multicolumn{1}{c}{\& Correct Race}&\multicolumn{1}{c}{Design}\\                  
+                    \cmidrule(lr){2-2}\cmidrule(lr){3-3}\cmidrule(lr){4-4}\cmidrule(lr){5-5}\cmidrule(lr){6-6}\cmidrule(lr){7-7}
+                    &\multicolumn{1}{c}{(1)}   &\multicolumn{1}{c}{(2)}   &\multicolumn{1}{c}{(3)}   &\multicolumn{1}{c}{(4)}   &\multicolumn{1}{c}{(5)}   &\multicolumn{1}{c}{(6)}\\
+\midrule
+Racial Minority & -0.0476* & -0.0709*** & -0.0319 & -0.0190 & -0.0199 & - \\
+ & (0.0248) & (0.0273) & (0.0232) & (0.0254) & (0.0243) & - \\
+ & [-0.0962,0.0009] & [-0.1244,-0.0173] & [-0.0774,0.0136] & [-0.0688,0.0308] & [-0.0676,0.0278] & - \\
+\midrule
+African American & -0.0715** & -0.0997*** & -0.0461 & -0.0184 & -0.0222 & -0.0052 \\
+ & (0.0352) & (0.0376) & (0.0306) & (0.0325) & (0.0314) & ( 0.0095) \\
+ & [-0.1406,-0.0024] & [-0.1735,-0.0260] & [-0.1060,0.0138] & [-0.0822,0.0453] & [-0.0838,0.0394] & [-0.0238,  0.0134] \\
+Hispanic & -0.0493 & -0.0608* & -0.0176 & -0.0302 & -0.0277 & -0.0098 \\
+ & (0.0324) & (0.0349) & (0.0286) & (0.0332) & (0.0321) & ( 0.0101) \\
+ & [-0.1129,0.0142] & [-0.1292,0.0076] & [-0.0737,0.0384] & [-0.0952,0.0348] & [-0.0907,0.0353] & [-0.0296,  0.0100] \\
+Asian & -0.0134 & -0.0510 & -0.0291 & -0.0071 & -0.0081 & 0.0023 \\
+ & (0.0284) & (0.0313) & (0.0300) & (0.0320) & (0.0304) & ( 0.0107) \\
+ & [-0.0691,0.0422] & [-0.1125,0.0104] & [-0.0879,0.0296] & [-0.0699,0.0558] & [-0.0677,0.0515] & [-0.0188,  0.0233] \\
+Other Race & 0.0555 &  &  &  &  &  \\
+ & (0.1026) &  &  &  &  &  \\
+ & [-0.1456,0.2567] &  &  &  &  &  \\
+\midrule
+HDS race identifier & & Yes & Yes & Yes & Yes & Yes \\
+HDS city name, recommended homes & Yes & Yes & Yes & & - & -\\
+HDS city name, advertised homes &  &  &  & Yes & - & -\\
+HDS city name spelling fixed & & & Yes & Yes & - & -\\
+Duplicate rows removed &  & Yes & Yes & Yes & Yes & - \\
+\midrule
+Share white, advertised home  & Yes & Yes & Yes & Yes & Yes & - \\
+ln(price), advertised home  & Yes & Yes & Yes & Yes & Yes & - \\
+Racial composition, advertised home & Yes & Yes & Yes & Yes & Yes & - \\
+Poverty share advertised home & Yes & Yes & Yes & Yes & Yes & - \\
+Observations & 21429 & 12918 & 12918 & 12918 & 12918 & 16837 \\
+Adjusted R$^2$ (Minority) & 0.6655 & 0.6097 & 0.6114 & 0.5626 & 0.5554 & - \\
+Adjusted R$^2$ (Category) & 0.6656 & 0.6097 & 0.6114 & 0.5625 & 0.5554 & 0.6315 \\
+Number of Cities & 1685 & 1471 & 916 & 656 & 754 & - \\
+Number of Trials & - & - & - & - & - & 2373 \\
+\bottomrule
+\multicolumn{7}{l}{\footnotesize Cluster-robust standard errors in parentheses. Clustered at the trial level. 95\% confidence intervals in square brackets.}\\
+\multicolumn{7}{l}{\footnotesize \sym{*} \(p<0.10\), \sym{**} \(p<0.05\), \sym{***} \(p<0.01\)}\\
+\end{tabular}
+}
+\end{table}

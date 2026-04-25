@@ -1,0 +1,94 @@
+% April 13, 2026 -- New panel title
+
+\begin{table}[htbp]\centering
+\def\sym#1{\ifmmode^{#1}\else\(^{#1}\)\fi}
+\caption{\small Results Comparison for Table 10 Panel B Column 2 and 4, C\&T 2022}
+\resizebox{\textwidth}{!}{
+\begin{tabular}{l*{6}{c}}
+\toprule
+& \multicolumn{6}{c}{Panel A: American Community Survey High Skill Neighbourhood, Clustered at Trial}\\
+\toprule
+                    &\multicolumn{1}{c}{Original}&\multicolumn{1}{c}{Correct}&\multicolumn{1}{c}{Updated City Name}&\multicolumn{1}{c}{Proper City Name}&\multicolumn{1}{c}{Place Name}&\multicolumn{1}{c}{Matched Pairs}\\
+                      &\multicolumn{1}{c}{Data}&\multicolumn{1}{c}{Race Only}&\multicolumn{1}{c}{\& Correct Race}&\multicolumn{1}{c}{\& Correct Race}&\multicolumn{1}{c}{\& Correct Race}&\multicolumn{1}{c}{Design}\\                  
+                    \cmidrule(lr){2-2}\cmidrule(lr){3-3}\cmidrule(lr){4-4}\cmidrule(lr){5-5}\cmidrule(lr){6-6}\cmidrule(lr){7-7}
+                    &\multicolumn{1}{c}{(1)}   &\multicolumn{1}{c}{(2)}   &\multicolumn{1}{c}{(3)}   &\multicolumn{1}{c}{(4)}   &\multicolumn{1}{c}{(5)}   &\multicolumn{1}{c}{(6)}\\
+\midrule
+Racial Minority & -0.0347** & -0.0626*** & -0.0061 & 0.0037 & -0.0189 & -0.0018 \\
+ & (0.0154) & (0.0228) & (0.0180) & (0.0225) & (0.0185) & ( 0.0036) \\
+ & [-0.0650,-0.0044] & [-0.1073,-0.0178] & [-0.0415,0.0292] & [-0.0404,0.0478] & [-0.0552,0.0175] & [-0.0089,  0.0052] \\
+\midrule
+African American & -0.0622*** & -0.0754*** & -0.0090 & 0.0039 & -0.0251 & -0.0044 \\
+ & (0.0225) & (0.0284) & (0.0250) & (0.0291) & (0.0232) & ( 0.0052) \\
+ & [-0.1064,-0.0181] & [-0.1311,-0.0197] & [-0.0581,0.0401] & [-0.0533,0.0610] & [-0.0706,0.0204] & [-0.0145,  0.0057] \\
+Hispanic & -0.0530*** & -0.0836*** & -0.0362* & -0.0010 & -0.0264 & -0.0084 \\
+ & (0.0184) & (0.0250) & (0.0198) & (0.0251) & (0.0213) & ( 0.0059) \\
+ & [-0.0891,-0.0170] & [-0.1327,-0.0346] & [-0.0752,0.0028] & [-0.0503,0.0482] & [-0.0683,0.0154] & [-0.0201,  0.0032] \\
+Asian & -0.0081 & -0.0211 & 0.0529** & 0.0113 & 0.0016 & 0.0089 \\
+ & (0.0220) & (0.0267) & (0.0232) & (0.0283) & (0.0246) & ( 0.0064) \\
+ & [-0.0513,0.0352] & [-0.0736,0.0313] & [0.0073,0.0985] & [-0.0442,0.0668] & [-0.0468,0.0500] & [-0.0038,  0.0215] \\
+Other Race & -0.0433 &  &  &  &  &  \\
+ & (0.0508) &  &  &  &  &  \\
+ & [-0.1429,0.0563] &  &  &  &  &  \\
+\midrule
+HDS race identifier & & Yes & Yes & Yes & Yes & Yes \\
+HDS city name, recommended homes & Yes & Yes & Yes & & - & -\\
+HDS city name, advertised homes &  &  &  & Yes & - & -\\
+HDS city name spelling fixed & & & Yes & Yes & - & -\\
+Duplicate rows removed &  & Yes & Yes & Yes & Yes & - \\
+\midrule
+Share white, advertised home  & Yes & Yes & Yes & Yes & Yes & - \\
+ln(price), advertised home  & Yes & Yes & Yes & Yes & Yes & - \\
+Racial composition, advertised home & Yes & Yes & Yes & Yes & Yes & - \\
+Poverty share advertised home & Yes & Yes & Yes & Yes & Yes & - \\
+Observations & 7997 & 4868 & 4868 & 4868 & 4868 & 6407 \\
+Adjusted R$^2$ (Minority) & 0.6615 & 0.6036 & 0.6014 & 0.5192 & 0.5091 & 0.6326 \\
+Adjusted R$^2$ (Category) & 0.6617 & 0.6037 & 0.6020 & 0.5190 & 0.5089 & 0.6330 \\
+Number of Cities & 874 & 742 & 552 & 370 & 397 & - \\
+Number of Trials & - & - & - & - & - & 882 \\
+\bottomrule
+\toprule
+& \multicolumn{6}{c}{Panel B: American Community Survey Single Parent Household, Clustered at Trial}\\
+\toprule
+                    &\multicolumn{1}{c}{Original}&\multicolumn{1}{c}{Correct}&\multicolumn{1}{c}{Updated City Name}&\multicolumn{1}{c}{Proper City Name}&\multicolumn{1}{c}{Place Name}&\multicolumn{1}{c}{Matched Pairs}\\
+                      &\multicolumn{1}{c}{Data}&\multicolumn{1}{c}{Race Only}&\multicolumn{1}{c}{\& Correct Race}&\multicolumn{1}{c}{\& Correct Race}&\multicolumn{1}{c}{\& Correct Race}&\multicolumn{1}{c}{Design}\\                  
+                    \cmidrule(lr){2-2}\cmidrule(lr){3-3}\cmidrule(lr){4-4}\cmidrule(lr){5-5}\cmidrule(lr){6-6}\cmidrule(lr){7-7}
+                    &\multicolumn{1}{c}{(1)}   &\multicolumn{1}{c}{(2)}   &\multicolumn{1}{c}{(3)}   &\multicolumn{1}{c}{(4)}   &\multicolumn{1}{c}{(5)}   &\multicolumn{1}{c}{(6)}\\
+\midrule
+Racial Minority & 0.0001 & 0.0205 & 0.0020 & -0.0096 & -0.0074 & 0.0024 \\
+ & (0.0134) & (0.0203) & (0.0135) & (0.0143) & (0.0128) & ( 0.0020) \\
+ & [-0.0261,0.0263] & [-0.0194,0.0604] & [-0.0244,0.0284] & [-0.0377,0.0185] & [-0.0325,0.0177] & [-0.0014,  0.0063] \\
+\midrule
+African American & 0.0264 & 0.0377 & 0.0191 & 0.0081 & 0.0110 & 0.0068\sym{**} \\
+ & (0.0175) & (0.0233) & (0.0163) & (0.0173) & (0.0152) & ( 0.0031) \\
+ & [-0.0080,0.0608] & [-0.0081,0.0835] & [-0.0128,0.0510] & [-0.0259,0.0422] & [-0.0188,0.0408] & [ 0.0008,  0.0129] \\
+Hispanic & 0.0197 & 0.0243 & 0.0161 & -0.0127 & -0.0083 & 0.0027 \\
+ & (0.0149) & (0.0247) & (0.0164) & (0.0168) & (0.0154) & ( 0.0032) \\
+ & [-0.0096,0.0489] & [-0.0241,0.0728] & [-0.0162,0.0484] & [-0.0456,0.0202] & [-0.0385,0.0220] & [-0.0037,  0.0090] \\
+Asian & -0.0163 & 0.0031 & -0.0361** & -0.0141 & -0.0239 & -0.0033 \\
+ & (0.0176) & (0.0220) & (0.0171) & (0.0181) & (0.0164) & ( 0.0032) \\
+ & [-0.0508,0.0182] & [-0.0400,0.0462] & [-0.0697,-0.0025] & [-0.0495,0.0214] & [-0.0561,0.0083] & [-0.0096,  0.0029] \\
+Other Race & 0.0662** &  &  &  &  &  \\
+ & (0.0337) &  &  &  &  &  \\
+ & [0.0001,0.1323] &  &  &  &  &  \\
+\midrule
+HDS race identifier & & Yes & Yes & Yes & Yes & Yes \\
+HDS city name, recommended homes & Yes & Yes & Yes & & - & -\\
+HDS city name, advertised homes &  &  &  & Yes & - & -\\
+HDS city name spelling fixed & & & Yes & Yes & - & -\\
+Duplicate rows removed &  & Yes & Yes & Yes & Yes & - \\
+\midrule
+Share white, advertised home  & Yes & Yes & Yes & Yes & Yes & - \\
+ln(price), advertised home  & Yes & Yes & Yes & Yes & Yes & - \\
+Racial composition, advertised home & Yes & Yes & Yes & Yes & Yes & - \\
+Poverty share advertised home & Yes & Yes & Yes & Yes & Yes & - \\
+Observations & 7997 & 4868 & 4868 & 4868 & 4868 & 6407 \\
+Adjusted R$^2$ (Minority) & 0.4836 & 0.4120 & 0.4184 & 0.3547 & 0.3432 & 0.5334 \\
+Adjusted R$^2$ (Category) & 0.4840 & 0.4119 & 0.4191 & 0.3546 & 0.3434 & 0.5338 \\
+Number of Cities & 874 & 742 & 552 & 370 & 397 & - \\
+Number of Trials & - & - & - & - & - & 882 \\
+\bottomrule
+\multicolumn{7}{l}{\footnotesize Cluster-robust standard errors in parentheses. Clustered at the trial level. 95\% confidence intervals in square brackets.}\\
+\multicolumn{7}{l}{\footnotesize \sym{*} \(p<0.10\), \sym{**} \(p<0.05\), \sym{***} \(p<0.01\)}\\
+\end{tabular}
+}
+\end{table}
