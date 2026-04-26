@@ -136,4 +136,6 @@ twoway (scatter cube_root_pnew cube_root_pold if coeff == "Overall" & mother == 
 	   
 // Combine the four plots into one figure
 graph combine african_plot asian_plot hispanic_plot overall_plot,  cols(2)
+graph export "${OUTPUT}/meta_analysis_p_values.pdf", replace
+graph export "${OUTPUT}/meta_analysis_p_values.png", replace
 

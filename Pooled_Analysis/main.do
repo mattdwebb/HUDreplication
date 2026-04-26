@@ -10,6 +10,9 @@ clear all
 
 	cap mkdir "${CODE}/Output" // make an Output folder if it doesn't already exist
 	global OUTPUT "${CODE}/Output" // set the output file path
+
+	// Rebuild all cleaned Stata inputs from the current generated CSV files.
+	global FORCE_CLEAN 1
 	
 	cap log close
 	log using "${OUTPUT}/HUDreplication_log.txt", text replace

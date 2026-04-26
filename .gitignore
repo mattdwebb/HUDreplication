@@ -1,6 +1,7 @@
 Paired_Tester_Analysis/api_keys.R
 .DS_Store
 Data/**
+!Data/meta_comparison.csv
 !Data/Generated/
 Data/Generated/**
 Paired_Tester_Analysis/Appendix_Tables/**
@@ -11,4 +12,3 @@ Comparison_Tables/
 
 Paired_Tester_Analysis/.Rhistory
 Rplots.pdf
-
