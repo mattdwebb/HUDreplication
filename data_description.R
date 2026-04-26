@@ -700,6 +700,218 @@ cat(
 )
 
 
+# ---- Duplicate-row race balance and treatment-gap diagnostics ----------------
+
+race_labels <- c("1" = "White", "2" = "Black", "3" = "Hispanic", "4" = "Asian")
+
+# This address key mirrors the adsprocessed address-key deduplication in the preprocessing script.
+preprocess_text_key <- function(x) {
+  x <- iconv(x, to = "UTF-8", sub = "")
+  x <- tolower(x)
+  x <- str_replace_all(x, "[^a-z0-9 ]", " ")
+  str_squish(x)
+}
+
+build_ads_address_key <- function(df) {
+  addr <- if ("HSITEAD" %in% names(df)) df$HSITEAD else NA
+  addr_alt <- if ("Address" %in% names(df)) df$Address else NA
+  addr <- ifelse(!is.na(addr) & addr != "", addr, addr_alt)
+
+  unit <- if ("HUNITNO" %in% names(df)) df$HUNITNO else ""
+
+  city <- if ("HCITY" %in% names(df)) df$HCITY else NA
+  city_alt <- if ("City" %in% names(df)) df$City else NA
+  city <- ifelse(!is.na(city) & city != "", city, city_alt)
+
+  state <- if ("HSTATE" %in% names(df)) df$HSTATE else NA
+  state_alt <- if ("State" %in% names(df)) df$State else NA
+  state <- ifelse(!is.na(state) & state != "", state, state_alt)
+
+  zip <- if ("HZIP" %in% names(df)) df$HZIP else NA
+  zip_alt <- if ("Zip_Code" %in% names(df)) df$Zip_Code else NA
+  zip <- ifelse(!is.na(zip) & zip != "", zip, zip_alt)
+
+  paste(
+    preprocess_text_key(addr), preprocess_text_key(unit), preprocess_text_key(city),
+    preprocess_text_key(state), preprocess_text_key(zip),
+    sep = "|"
+  )
+}
+
+mean_no_na <- function(x) {
+  x <- suppressWarnings(as.numeric(x))
+  if (all(is.na(x))) return(NA_real_)
+  mean(x, na.rm = TRUE)
+}
+
+run_gap_regression <- function(pair_data, file_label, outcome_var) {
+  gap_data <- pair_data %>%
+    filter(!is.na(.data[[outcome_var]]), !is.na(total_duplicate_rows)) %>%
+    group_by(CONTROL) %>%
+    summarize(
+      white_outcome = mean_no_na(.data[[outcome_var]][race == "White"]),
+      minority_outcome = mean_no_na(.data[[outcome_var]][race != "White"]),
+      white_duplicate_rows = mean_no_na(total_duplicate_rows[race == "White"]),
+      minority_duplicate_rows = mean_no_na(total_duplicate_rows[race != "White"]),
+      .groups = "drop"
+    ) %>%
+    mutate(
+      white_minus_minority_gap = white_outcome - minority_outcome,
+      extra_white_duplicate_rows = white_duplicate_rows - minority_duplicate_rows
+    ) %>%
+    filter(!is.na(white_minus_minority_gap), !is.na(extra_white_duplicate_rows))
+
+  gap_model <- lm(white_minus_minority_gap ~ extra_white_duplicate_rows, data = gap_data)
+  coef_table <- summary(gap_model)$coefficients
+
+  tibble(
+    file = file_label,
+    outcome = outcome_var,
+    controls = nrow(gap_data),
+    mean_gap = mean(gap_data$white_minus_minority_gap),
+    mean_extra_white_duplicate_rows = mean(gap_data$extra_white_duplicate_rows),
+    estimate = coef_table["extra_white_duplicate_rows", "Estimate"],
+    se = coef_table["extra_white_duplicate_rows", "Std. Error"],
+    p_value = coef_table["extra_white_duplicate_rows", "Pr(>|t|)"]
+  )
+}
+
+# adsprocessed uses two duplicate definitions: exact duplicates after ignoring index-like
+# columns, then repeated normalized addresses within CONTROL x TESTERID.
+ads_data <- readRDS(adsprocessed_path) %>%
+  mutate(CONTROL = as.character(CONTROL), TESTERID = as.character(TESTERID))
+ads_index_cols <- intersect(c("X.x", "X.y", "X.x.1", "X.y.1", "SEQRH"), names(ads_data))
+ads_exact_cols <- setdiff(names(ads_data), ads_index_cols)
+
+ads_exact_counts <- ads_data %>%
+  group_by(CONTROL, TESTERID) %>%
+  summarize(
+    exact_duplicate_rows = n() - n_distinct(pick(all_of(setdiff(ads_exact_cols, c("CONTROL", "TESTERID"))))),
+    hds_race = first(suppressWarnings(as.numeric(as.character(RACE_Ad))) %% 10),
+    .groups = "drop"
+  )
+
+ads_exact <- if (length(ads_index_cols) > 0) {
+  ads_data %>% distinct(across(-all_of(ads_index_cols)), .keep_all = TRUE)
+} else {
+  ads_data %>% distinct()
+}
+
+ads_address_counts <- ads_exact %>%
+  mutate(
+    address_key = build_ads_address_key(.),
+    address_key = ifelse(is.na(address_key) | address_key == "", paste0("missing_", row_number()), address_key)
+  ) %>%
+  group_by(CONTROL, TESTERID) %>%
+  summarize(address_duplicate_rows = n() - n_distinct(address_key), .groups = "drop")
+
+ads_duplicate_counts <- ads_exact_counts %>%
+  left_join(ads_address_counts, by = c("CONTROL", "TESTERID")) %>%
+  mutate(
+    address_duplicate_rows = coalesce(address_duplicate_rows, 0L),
+    total_duplicate_rows = exact_duplicate_rows + address_duplicate_rows,
+    race = factor(unname(race_labels[as.character(hds_race)]), levels = c("White", "Black", "Hispanic", "Asian"))
+  ) %>%
+  filter(hds_race %in% 1:4)
+
+# The HUD pooled files use the final pooled-data key: one row per distinct
+# advertised-home x recommended-home combination within CONTROL x TESTERID.
+hud_files <- list(
+  "HUDprocessed census" = hudprocessed_census_path,
+  "HUDprocessed names" = hudprocessed_names_path,
+  "HUDprocessed test scores" = hudprocessed_testscores_path
+)
+hud_duplicate_counts <- list()
+
+for (file_label in names(hud_files)) {
+  hud_data <- readRDS(hud_files[[file_label]]) %>%
+    mutate(CONTROL = as.character(CONTROL), TESTERID = as.character(TESTERID))
+
+  ad_cols <- grep("_Ad$", names(hud_data), value = TRUE)
+  ad_price_cols <- intersect(c("AdPrice", "logAdPrice"), names(hud_data))
+  rec_cols <- grep("_Rec$", names(hud_data), value = TRUE)
+  rec_price_cols <- intersect(c("RecPrice", "logRecPrice"), names(hud_data))
+  hud_key_cols <- unique(c("CONTROL", "TESTERID", ad_cols, ad_price_cols, rec_cols, rec_price_cols))
+
+  hud_duplicate_counts[[file_label]] <- hud_data %>%
+    group_by(CONTROL, TESTERID) %>%
+    summarize(
+      total_duplicate_rows = n() - n_distinct(pick(all_of(setdiff(hud_key_cols, c("CONTROL", "TESTERID"))))),
+      hds_race = first(suppressWarnings(as.numeric(as.character(RACE_Rec))) %% 10),
+      .groups = "drop"
+    ) %>%
+    mutate(race = factor(unname(race_labels[as.character(hds_race)]), levels = c("White", "Black", "Hispanic", "Asian"))) %>%
+    filter(hds_race %in% 1:4)
+}
+
+cat("\n\nDuplicate-row race balance regressions:\n")
+cat("=======================================\n\n")
+cat("Outcome is total duplicate rows in each CONTROL x TESTERID pair; white testers are the omitted category.\n")
+
+all_duplicate_counts <- c(list("adsprocessed" = ads_duplicate_counts), hud_duplicate_counts)
+duplicate_balance_summary <- bind_rows(lapply(names(all_duplicate_counts), function(file_label) {
+  race_model <- lm(total_duplicate_rows ~ race, data = all_duplicate_counts[[file_label]])
+  coef_table <- summary(race_model)$coefficients
+  terms <- c("raceBlack", "raceHispanic", "raceAsian")
+
+  bind_rows(lapply(terms, function(term) {
+    tibble(
+      file = file_label,
+      term = term,
+      estimate = coef_table[term, "Estimate"],
+      se = coef_table[term, "Std. Error"],
+      p_value = coef_table[term, "Pr(>|t|)"]
+    )
+  }))
+}))
+print(duplicate_balance_summary)
+
+# Bias would be most concerning if extra white duplicate rows appear in trials
+# where white testers received especially favorable treatment relative to minority testers.
+ads_treatment_pairs <- ads_exact %>%
+  mutate(
+    address_key = build_ads_address_key(.),
+    address_key = ifelse(is.na(address_key) | address_key == "", paste0("missing_", row_number()), address_key)
+  ) %>%
+  distinct(CONTROL, TESTERID, address_key, .keep_all = TRUE) %>%
+  group_by(CONTROL, TESTERID) %>%
+  summarize(STOTUNIT = mean_no_na(STOTUNIT), .groups = "drop") %>%
+  left_join(
+    ads_duplicate_counts %>% select(CONTROL, TESTERID, race, total_duplicate_rows),
+    by = c("CONTROL", "TESTERID")
+  )
+
+hud_white_share_pairs <- list()
+for (file_label in names(hud_files)) {
+  hud_data <- readRDS(hud_files[[file_label]]) %>%
+    mutate(CONTROL = as.character(CONTROL), TESTERID = as.character(TESTERID))
+
+  ad_cols <- grep("_Ad$", names(hud_data), value = TRUE)
+  ad_price_cols <- intersect(c("AdPrice", "logAdPrice"), names(hud_data))
+  rec_cols <- grep("_Rec$", names(hud_data), value = TRUE)
+  rec_price_cols <- intersect(c("RecPrice", "logRecPrice"), names(hud_data))
+  hud_key_cols <- unique(c("CONTROL", "TESTERID", ad_cols, ad_price_cols, rec_cols, rec_price_cols))
+
+  hud_white_share_pairs[[file_label]] <- hud_data %>%
+    distinct(across(all_of(hud_key_cols)), .keep_all = TRUE) %>%
+    group_by(CONTROL, TESTERID) %>%
+    summarize(w2012pc_Rec = mean_no_na(w2012pc_Rec), .groups = "drop") %>%
+    left_join(
+      hud_duplicate_counts[[file_label]] %>% select(CONTROL, TESTERID, race, total_duplicate_rows),
+      by = c("CONTROL", "TESTERID")
+    )
+}
+
+cat("\n\nDuplicate-row treatment-gap regressions:\n")
+cat("========================================\n\n")
+cat("Outcome is the white-minus-minority treatment gap in a trial; regressor is white duplicate rows minus minority duplicate rows.\n")
+duplicate_gap_summary <- bind_rows(
+  run_gap_regression(ads_treatment_pairs, "adsprocessed", "STOTUNIT"),
+  bind_rows(lapply(names(hud_white_share_pairs), function(file_label) {
+    run_gap_regression(hud_white_share_pairs[[file_label]], file_label, "w2012pc_Rec")
+  }))
+)
+print(duplicate_gap_summary)
 # ---- Reverse-engineer the APRACE rule used in C&T ---------------------------
 
 ct_aprace_testers <- readRDS(adsprocessed_path) %>%

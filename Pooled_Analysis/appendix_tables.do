@@ -36,7 +36,13 @@ qui cap destring show, replace force
 qui replace show = . if show < 0
 
 qui gen home_av = savlbad
-qui replace home_av = "." if home_av == "NA" | home_av == "-1"
+capture confirm string variable home_av
+if !_rc {
+    qui replace home_av = "." if home_av == "NA" | home_av == "-1"
+}
+else {
+    qui replace home_av = . if home_av == -1
+}
 qui cap destring home_av, replace force
 qui replace home_av = 0 if home_av > 1 & home_av != .
 
