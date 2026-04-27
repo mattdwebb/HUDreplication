@@ -658,25 +658,37 @@ latex_table_custom <- function(rows, outcome_labels, caption, label,
 }
 
 # ----- Table 6: Discriminatory Steering and Neighborhood Racial Composition -----
-table6_data <- prep_table_data(cleaned_data, c("w2012pc_Rec"))
-table6_race <- felm(as.formula(paste("w2012pc_Rec ~ RACE +", base_covariates_fml, "| CONTROL | 0 | CONTROL")), data = table6_data)
-table6_minority <- felm(as.formula(paste("w2012pc_Rec ~ ofcolor +", base_covariates_fml, "| CONTROL | 0 | CONTROL")), data = table6_data)
+table6_outcomes <- c("w2012pc_Rec", "percent_black", "percent_hispanic", "percent_asian")
+table6_labels <- c("White Share", "Black Share", "Hispanic Share", "Asian Share")
+table6_data_list <- lapply(table6_outcomes, function(outcome) {
+  prep_table_data(cleaned_data, c(outcome))
+})
+
+table6_models_race <- Map(function(outcome, df) {
+  fml <- as.formula(paste(outcome, "~ RACE +", base_covariates_fml, "| CONTROL | 0 | CONTROL"))
+  felm(fml, data = df)
+}, table6_outcomes, table6_data_list)
+table6_models_minority <- Map(function(outcome, df) {
+  fml <- as.formula(paste(outcome, "~ ofcolor +", base_covariates_fml, "| CONTROL | 0 | CONTROL"))
+  felm(fml, data = df)
+}, table6_outcomes, table6_data_list)
+table6_n_trials <- sapply(table6_data_list, function(df) length(unique(df$CONTROL)))
 
 table6_rows <- build_rows(
-  list(table6_minority),
-  list(table6_race),
-  outcome_labels = c("White Household Share")
+  table6_models_minority,
+  table6_models_race,
+  outcome_labels = table6_labels
 )
 write_table(
   file.path(tables_dir, "table6.tex"),
   latex_table_multi(
     table6_rows,
-    outcome_labels = c("White Household Share"),
+    outcome_labels = table6_labels,
     caption = "Discriminatory Steering and Neighborhood Racial Composition\\\\[0.5em]\\textit{Table 6, C\\&T 2022}",
     label = "tab:table6",
-    models_minority = list(table6_minority),
-    models_race = list(table6_race),
-    n_trials = length(unique(table6_data$CONTROL))
+    models_minority = table6_models_minority,
+    models_race = table6_models_race,
+    n_trials = table6_n_trials
   )
 )
 

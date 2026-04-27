@@ -265,6 +265,79 @@ adsprocessed_data <- adsprocessed_data %>%
     addr_key_dedup = ifelse(is.na(addr_key) | addr_key == "", paste0("missing_", row_number()), addr_key)
   )
 adsprocessed_key <- intersect(c("CONTROL", "TESTERID", "addr_key_dedup"), names(adsprocessed_data))
+
+# Preserve Table 5 outcomes before collapsing repeated advertised-home rows.
+# Multiple rows with the same advertised-home address usually represent multiple
+# appointments, so recommendation counts should be accumulated and advertised
+# home availability should be recorded if it occurred in any appointment.
+if ("STOTUNIT" %in% names(adsprocessed_data)) {
+  stotunit_variation <- adsprocessed_data %>%
+    group_by(across(all_of(adsprocessed_key))) %>%
+    summarize(
+      rows = n(),
+      distinct_stotunit = {
+        stotunit_clean <- suppressWarnings(as.numeric(STOTUNIT))
+        stotunit_clean[stotunit_clean < 0] <- NA_real_
+        n_distinct(stotunit_clean, na.rm = FALSE)
+      },
+      .groups = "drop"
+    )
+  cat(
+    "adsprocessed address-key groups with varying STOTUNIT:",
+    sum(stotunit_variation$rows > 1 & stotunit_variation$distinct_stotunit > 1),
+    "\n"
+  )
+
+  adsprocessed_data <- adsprocessed_data %>%
+    group_by(across(all_of(adsprocessed_key))) %>%
+    mutate(
+      STOTUNIT = {
+        stotunit_clean <- suppressWarnings(as.numeric(STOTUNIT))
+        stotunit_clean[stotunit_clean < 0] <- NA_real_
+        if (all(is.na(stotunit_clean))) NA_real_ else sum(stotunit_clean, na.rm = TRUE)
+      }
+    ) %>%
+    ungroup()
+}
+
+if ("SAVLBAD" %in% names(adsprocessed_data)) {
+  savlbad_variation <- adsprocessed_data %>%
+    group_by(across(all_of(adsprocessed_key))) %>%
+    summarize(
+      rows = n(),
+      distinct_savlbad = {
+        savlbad_clean <- suppressWarnings(as.numeric(as.character(SAVLBAD)))
+        savlbad_clean[savlbad_clean < 0] <- NA_real_
+        savlbad_clean[savlbad_clean > 1] <- 0
+        n_distinct(savlbad_clean, na.rm = FALSE)
+      },
+      .groups = "drop"
+    )
+  cat(
+    "adsprocessed address-key groups with varying SAVLBAD:",
+    sum(savlbad_variation$rows > 1 & savlbad_variation$distinct_savlbad > 1),
+    "\n"
+  )
+
+  adsprocessed_data <- adsprocessed_data %>%
+    group_by(across(all_of(adsprocessed_key))) %>%
+    mutate(
+      SAVLBAD = {
+        savlbad_clean <- suppressWarnings(as.numeric(as.character(SAVLBAD)))
+        savlbad_clean[savlbad_clean < 0] <- NA_real_
+        savlbad_clean[savlbad_clean > 1] <- 0
+        if (any(savlbad_clean == 1, na.rm = TRUE)) {
+          1
+        } else if (all(is.na(savlbad_clean))) {
+          NA_real_
+        } else {
+          0
+        }
+      }
+    ) %>%
+    ungroup()
+}
+
 adsprocessed_data <- dedup_by_key(adsprocessed_data, adsprocessed_key, "adsprocessed address key")
 adsprocessed_data <- adsprocessed_data %>% select(-addr_key, -addr_key_dedup)
 

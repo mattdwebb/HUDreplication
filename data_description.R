@@ -147,9 +147,11 @@ hudprocessed_testscores_path <- file.path(repo_root, "Data", "CT2022_Replication
 hudprocessed_names_duplicates_path <- file.path(repo_root, "Data", "Generated", "Pooled_Analysis", "HUDprocessed_names_correct_cities_with_duplicates.csv")
 hudprocessed_census_duplicates_path <- file.path(repo_root, "Data", "Generated", "Pooled_Analysis", "HUDprocessed_census_correct_cities_with_duplicates.csv")
 hudprocessed_testscores_duplicates_path <- file.path(repo_root, "Data", "Generated", "Pooled_Analysis", "HUDprocessed_testscores_correct_cities_with_duplicates.csv")
+adsprocessed_processed_path <- file.path(repo_root, "Data", "Generated", "Pooled_Analysis", "adsprocessed_correct_cities_processed.csv")
 hudprocessed_names_processed_path <- file.path(repo_root, "Data", "Generated", "Pooled_Analysis", "HUDprocessed_names_correct_cities_processed.csv")
 hudprocessed_census_processed_path <- file.path(repo_root, "Data", "Generated", "Pooled_Analysis", "HUDprocessed_census_correct_cities_processed.csv")
 hudprocessed_testscores_processed_path <- file.path(repo_root, "Data", "Generated", "Pooled_Analysis", "HUDprocessed_testscores_correct_cities_processed.csv")
+dedup_log_processed_path <- file.path(repo_root, "Data", "Generated", "Pooled_Analysis", "dedup_log_processed.csv")
 rechomes_path <- file.path(repo_root, "Data", "HDS2012_Raw_Data", "rechomes.sas7bdat")
 sales_path <- file.path(repo_root, "Data", "HDS2012_Raw_Data", "sales.sas7bdat")
 taf_path <- file.path(repo_root, "Data", "HDS2012_Raw_Data", "taf.sas7bdat")
@@ -162,6 +164,39 @@ normalize_text <- function(x) {
   x <- coalesce(as.character(x), "")
   x <- str_to_upper(str_trim(x))
   str_replace_all(x, "[^A-Z0-9]", "")
+}
+
+preprocess_text_key <- function(x) {
+  x <- iconv(x, to = "UTF-8", sub = "")
+  x <- tolower(x)
+  x <- str_replace_all(x, "[^a-z0-9 ]", " ")
+  str_squish(x)
+}
+
+build_ads_address_key <- function(df) {
+  addr <- if ("HSITEAD" %in% names(df)) df$HSITEAD else NA
+  addr_alt <- if ("Address" %in% names(df)) df$Address else NA
+  addr <- ifelse(!is.na(addr) & addr != "", addr, addr_alt)
+
+  unit <- if ("HUNITNO" %in% names(df)) df$HUNITNO else ""
+
+  city <- if ("HCITY" %in% names(df)) df$HCITY else NA
+  city_alt <- if ("City" %in% names(df)) df$City else NA
+  city <- ifelse(!is.na(city) & city != "", city, city_alt)
+
+  state <- if ("HSTATE" %in% names(df)) df$HSTATE else NA
+  state_alt <- if ("State" %in% names(df)) df$State else NA
+  state <- ifelse(!is.na(state) & state != "", state, state_alt)
+
+  zip <- if ("HZIP" %in% names(df)) df$HZIP else NA
+  zip_alt <- if ("Zip_Code" %in% names(df)) df$Zip_Code else NA
+  zip <- ifelse(!is.na(zip) & zip != "", zip, zip_alt)
+
+  paste(
+    preprocess_text_key(addr), preprocess_text_key(unit), preprocess_text_key(city),
+    preprocess_text_key(state), preprocess_text_key(zip),
+    sep = "|"
+  )
 }
 
 normalize_zip <- function(x) {
@@ -609,134 +644,463 @@ summarize_hud_city_matches(hudprocessed_census_duplicates_path, hudprocessed_cen
 summarize_hud_city_matches(hudprocessed_testscores_duplicates_path, hudprocessed_testscores_processed_path, "HUDprocessed testscores")
 
 
-# ---- Duplicate provenance in the pooled Census file --------------------------
+# ---- Duplicate cleanup counts and retained-ad provenance ---------------------
 
-census_adsprocessed_source <- readRDS(adsprocessed_path) %>%
+dedup_log_processed <- read.csv(dedup_log_processed_path, stringsAsFactors = FALSE)
+
+ads_source_for_dedup <- readRDS(adsprocessed_path) %>%
+  mutate(CONTROL = as.character(CONTROL), TESTERID = as.character(TESTERID))
+
+ads_index_cols_for_dedup <- intersect(c("X.x", "X.y", "X.x.1", "X.y.1", "SEQRH"), names(ads_source_for_dedup))
+ads_exact_for_dedup <- if (length(ads_index_cols_for_dedup) > 0) {
+  ads_source_for_dedup %>% distinct(across(-all_of(ads_index_cols_for_dedup)), .keep_all = TRUE)
+} else {
+  ads_source_for_dedup %>% distinct()
+}
+
+# Reconstruct the canonical-advertised-home pair list used by preprocessing.
+# This does not redo the geographic merge; it only reproduces which CONTROL x
+# TESTERID pairs have a unique enough advertised-home assignment to be retained.
+ads_address_for_dedup <- ads_exact_for_dedup %>%
   mutate(
-    CONTROL = as.character(CONTROL),
-    TESTERID = as.character(TESTERID)
-  )
+    address_key = build_ads_address_key(.),
+    address_key = ifelse(is.na(address_key) | address_key == "", paste0("missing_", row_number()), address_key)
+  ) %>%
+  distinct(CONTROL, TESTERID, address_key, .keep_all = TRUE)
 
-census_recsprocessed_source <- readRDS(recsprocessed_path) %>%
-  mutate(
-    CONTROL = as.character(CONTROL),
-    TESTERID = as.character(TESTERID)
-  )
-
-census_hud <- readRDS(hudprocessed_census_path) %>%
-  mutate(
-    CONTROL = as.character(CONTROL),
-    TESTERID = as.character(TESTERID)
-  )
-
-census_index_cols <- intersect(c("X.x", "X.y", "X.x.1", "X.y.1", "SEQRH"), names(census_hud))
-census_ad_cols <- grep("_Ad$", names(census_hud), value = TRUE)
-census_ad_price_cols <- intersect(c("AdPrice", "logAdPrice"), names(census_hud))
-census_rec_cols <- grep("_Rec$", names(census_hud), value = TRUE)
-census_rec_price_cols <- intersect(c("RecPrice", "logRecPrice"), names(census_hud))
-
-# In the Census file, the final row definition keeps the ad-side variables with
-# _Ad suffixes and the recommended-home side as the remaining non-index columns.
-census_ads_exact_cols <- intersect(
-  c("CONTROL", "TESTERID", census_ad_cols, census_ad_price_cols),
-  names(census_adsprocessed_source)
+core_ad_vars_for_dedup <- intersect(
+  c("w2012pc_Ad", "b2012pc_Ad", "a2012pc_Ad", "hisp2012pc_Ad"),
+  names(ads_address_for_dedup)
 )
-census_recs_exact_cols <- intersect(
-  setdiff(names(census_hud), c(census_index_cols, census_ad_cols, census_ad_price_cols)),
-  names(census_recsprocessed_source)
+
+pair_groups_for_dedup <- split(
+  ads_address_for_dedup,
+  paste(ads_address_for_dedup$CONTROL, ads_address_for_dedup$TESTERID, sep = "||"),
+  drop = TRUE
 )
-census_hud_key_cols <- unique(c("CONTROL", "TESTERID", census_ad_cols, census_ad_price_cols, census_rec_cols, census_rec_price_cols))
 
-census_ads_counts <- census_adsprocessed_source %>%
-  group_by(CONTROL, TESTERID) %>%
-  summarize(
-    ads_rows = n(),
-    ads_rows_under_census_definition =
-      n_distinct(pick(all_of(setdiff(census_ads_exact_cols, c("CONTROL", "TESTERID"))))),
-    .groups = "drop"
+pair_meta_for_dedup <- bind_rows(lapply(pair_groups_for_dedup, function(rows) {
+  distinct_addresses <- unique(rows$address_key)
+  data.frame(
+    CONTROL = rows$CONTROL[[1]],
+    TESTERID = rows$TESTERID[[1]],
+    n_addresses = length(distinct_addresses),
+    single_address = if (length(distinct_addresses) == 1) distinct_addresses[[1]] else NA_character_,
+    stringsAsFactors = FALSE
   )
+}))
 
-census_recs_counts <- census_recsprocessed_source %>%
-  group_by(CONTROL, TESTERID) %>%
-  summarize(
-    recs_rows = n(),
-    recs_rows_under_census_definition =
-      n_distinct(pick(all_of(setdiff(census_recs_exact_cols, c("CONTROL", "TESTERID"))))),
-    .groups = "drop"
+canonical_status_rows <- vector("list", nrow(pair_meta_for_dedup))
+for (i in seq_len(nrow(pair_meta_for_dedup))) {
+  control_value <- pair_meta_for_dedup$CONTROL[[i]]
+  tester_value <- pair_meta_for_dedup$TESTERID[[i]]
+  own_rows <- pair_groups_for_dedup[[paste(control_value, tester_value, sep = "||")]]
+
+  if (pair_meta_for_dedup$n_addresses[[i]] == 1) {
+    status <- "retained"
+  } else {
+    partner_meta <- pair_meta_for_dedup %>%
+      filter(CONTROL == control_value, TESTERID != tester_value, n_addresses == 1)
+    partner_addresses <- unique(partner_meta$single_address)
+
+    if (length(partner_addresses) == 1) {
+      status <- "retained"
+    } else {
+      core_agreement <- length(core_ad_vars_for_dedup) > 0 &&
+        all(vapply(core_ad_vars_for_dedup, function(var) length(unique(own_rows[[var]])) <= 1, logical(1)))
+      status <- if (core_agreement) "retained" else "dropped_unresolved_advertised_home"
+    }
+  }
+
+  canonical_status_rows[[i]] <- data.frame(
+    CONTROL = control_value,
+    TESTERID = tester_value,
+    status = status,
+    stringsAsFactors = FALSE
   )
+}
 
-census_final_counts <- census_hud %>%
-  group_by(CONTROL, TESTERID) %>%
+canonical_status <- bind_rows(canonical_status_rows)
+canonical_retained_pairs <- canonical_status %>%
+  filter(status == "retained") %>%
+  select(CONTROL, TESTERID)
+
+ads_final_rows <- nrow(read.csv(adsprocessed_processed_path, stringsAsFactors = FALSE, check.names = FALSE))
+ads_no_unique_drop <- sum(canonical_status$status == "dropped_unresolved_advertised_home")
+
+duplicate_cleanup_summary <- tibble(
+  dataset = "adsprocessed",
+  original_rows = nrow(ads_source_for_dedup),
+  exact_duplicates_removed = dedup_log_processed$dropped[dedup_log_processed$step == "adsprocessed"],
+  key_based_dedup_removed = dedup_log_processed$dropped[dedup_log_processed$step == "adsprocessed address key"],
+  no_unique_advertised_home = ads_no_unique_drop,
+  missing_city_drop = nrow(canonical_retained_pairs) - ads_final_rows,
+  final_rows = ads_final_rows
+)
+
+hud_dedup_specs <- tibble(
+  dataset = c("census", "names", "testscores"),
+  raw_path = c(hudprocessed_census_path, hudprocessed_names_path, hudprocessed_testscores_path),
+  processed_path = c(hudprocessed_census_processed_path, hudprocessed_names_processed_path, hudprocessed_testscores_processed_path),
+  log_stem = c(
+    "HUDprocessed_JPE_census_042021.rds",
+    "HUDprocessed_JPE_names_042021.rds",
+    "HUDprocessed_JPE_testscores_042021.rds"
+  )
+)
+
+for (i in seq_len(nrow(hud_dedup_specs))) {
+  hud_source <- readRDS(hud_dedup_specs$raw_path[[i]]) %>%
+    mutate(CONTROL = as.character(CONTROL), TESTERID = as.character(TESTERID))
+
+  hud_index_cols <- intersect(c("X.x", "X.y", "X.x.1", "X.y.1", "SEQRH"), names(hud_source))
+  hud_after_exact <- if (length(hud_index_cols) > 0) {
+    hud_source %>% distinct(across(-all_of(hud_index_cols)), .keep_all = TRUE)
+  } else {
+    hud_source %>% distinct()
+  }
+
+  rec_cols <- grep("_Rec$", names(hud_after_exact), value = TRUE)
+  rec_price_cols <- intersect(c("RecPrice", "logRecPrice"), names(hud_after_exact))
+  recommendation_key <- unique(c("CONTROL", "TESTERID", rec_cols, rec_price_cols))
+  hud_after_key <- hud_after_exact %>% distinct(across(all_of(recommendation_key)), .keep_all = TRUE)
+
+  exact_step <- paste(hud_dedup_specs$log_stem[[i]], "exact")
+  key_step <- paste(hud_dedup_specs$log_stem[[i]], "recommendation")
+  final_rows <- nrow(read.csv(hud_dedup_specs$processed_path[[i]], stringsAsFactors = FALSE, check.names = FALSE))
+  no_unique_drop <- nrow(anti_join(hud_after_key, canonical_retained_pairs, by = c("CONTROL", "TESTERID")))
+
+  duplicate_cleanup_summary <- bind_rows(
+    duplicate_cleanup_summary,
+    tibble(
+      dataset = hud_dedup_specs$dataset[[i]],
+      original_rows = nrow(hud_source),
+      exact_duplicates_removed = dedup_log_processed$dropped[dedup_log_processed$step == exact_step],
+      key_based_dedup_removed = dedup_log_processed$dropped[dedup_log_processed$step == key_step],
+      no_unique_advertised_home = no_unique_drop,
+      missing_city_drop = nrow(hud_after_key) - no_unique_drop - final_rows,
+      final_rows = final_rows
+    )
+  )
+}
+
+write.csv(
+  duplicate_cleanup_summary,
+  file.path(output_dir, "duplicate_cleanup_summary.csv"),
+  row.names = FALSE
+)
+
+dataset_tex_labels <- c(
+  adsprocessed = "\\texttt{adsprocessed}",
+  census = "\\texttt{census}",
+  names = "\\texttt{names}",
+  testscores = "\\texttt{testscores}"
+)
+
+duplicate_cleanup_lines <- c(
+  "\\begin{table}[htbp]",
+  "\\centering",
+  "\\caption{Rows removed by the corrected pooled-file cleaning procedure}",
+  "\\label{tab:duplicate_cleanup_summary}",
+  "\\resizebox{\\textwidth}{!}{%",
+  "\\begin{tabular}{lrrrrrr}",
+  "\\toprule",
+  "Dataset & Original rows & Exact duplicates removed & Key-based dedup removed & No unique advertised home & Missing city drop & Final rows\\\\",
+  "\\midrule"
+)
+
+for (i in seq_len(nrow(duplicate_cleanup_summary))) {
+  row <- duplicate_cleanup_summary[i, ]
+  duplicate_cleanup_lines <- c(
+    duplicate_cleanup_lines,
+    paste(
+      dataset_tex_labels[[row$dataset]],
+      format_int(row$original_rows),
+      format_int(row$exact_duplicates_removed),
+      format_int(row$key_based_dedup_removed),
+      format_int(row$no_unique_advertised_home),
+      format_int(row$missing_city_drop),
+      format_int(row$final_rows),
+      sep = " & "
+    ) |> paste0("\\\\")
+  )
+}
+
+duplicate_cleanup_lines <- c(
+  duplicate_cleanup_lines,
+  "\\bottomrule",
+  "\\end{tabular}%",
+  "}",
+  "\\begin{minipage}{\\textwidth}",
+  "\\footnotesize Notes: Exact duplicates are computed after ignoring index-like columns. Key-based deduplication uses normalized advertised-home addresses for \\texttt{adsprocessed} and recommended-home characteristics for the pooled files. The advertised-home ambiguity column counts unresolved \\texttt{CONTROL}$\\times$\\texttt{TESTERID} pairs for \\texttt{adsprocessed} and rows lost at that step for the pooled files.",
+  "\\end{minipage}",
+  "\\end{table}"
+)
+
+writeLines(duplicate_cleanup_lines, file.path(output_dir, "duplicate_cleanup_summary.tex"))
+
+summarize_retained_ad_duplicates <- function(dataset_label, hud_data, ads_data) {
+  hud_data <- hud_data %>%
+    mutate(CONTROL = as.character(CONTROL), TESTERID = as.character(TESTERID))
+
+  possible_ad_cols <- unique(c(
+    grep("_Ad$", names(hud_data), value = TRUE),
+    intersect(c("AdPrice", "logAdPrice"), names(hud_data))
+  ))
+  ad_cols <- intersect(possible_ad_cols, names(ads_data))
+
+  ads_matched <- ads_data %>%
+    semi_join(hud_data %>% distinct(CONTROL, TESTERID), by = c("CONTROL", "TESTERID"))
+
+  sequence_col <- grep("^SEQUENCE", names(ads_matched), value = TRUE)[[1]]
+  duplicate_groups <- ads_matched %>%
+    group_by(across(all_of(c("CONTROL", "TESTERID", ad_cols)))) %>%
+    summarize(
+      source_ad_rows = n(),
+      sequence_pattern = paste(sort(unique(as.character(.data[[sequence_col]]))), collapse = " | "),
+      sequence_count = n_distinct(.data[[sequence_col]]),
+      .groups = "drop"
+    ) %>%
+    mutate(
+      duplicate_retained_ad_rows = source_ad_rows - 1,
+      multiple_appointment_sequences = sequence_count > 1
+    ) %>%
+    filter(duplicate_retained_ad_rows > 0)
+
+  duplicate_rows_by_pair <- duplicate_groups %>%
+    group_by(CONTROL, TESTERID) %>%
+    summarize(
+      duplicate_retained_ad_rows = sum(duplicate_retained_ad_rows),
+      multi_sequence_duplicate_rows = sum(duplicate_retained_ad_rows[multiple_appointment_sequences == TRUE], na.rm = TRUE),
+      .groups = "drop"
+    )
+
+  # Because the pooled files are produced by crossing ad rows with recommendation
+  # rows, each extra retained-ad row expands by the number of final-file rows per
+  # source ad row in that tester-trial pair.
+  crossing_rows <- hud_data %>%
+    count(CONTROL, TESTERID, name = "pooled_rows") %>%
+    left_join(
+      ads_matched %>% count(CONTROL, TESTERID, name = "source_ad_rows"),
+      by = c("CONTROL", "TESTERID")
+    ) %>%
+    mutate(recommendation_rows_crossed = pooled_rows / source_ad_rows)
+
+  duplicate_rows_by_pair <- duplicate_rows_by_pair %>%
+    left_join(crossing_rows, by = c("CONTROL", "TESTERID"))
+
+  duplicate_sequence_rows <- duplicate_groups %>%
+    filter(multiple_appointment_sequences) %>%
+    count(sequence_pattern, wt = duplicate_retained_ad_rows, name = "duplicate_rows") %>%
+    arrange(desc(duplicate_rows))
+
+  tibble(
+    dataset = dataset_label,
+    duplicate_retained_ad_rows = sum(duplicate_groups$duplicate_retained_ad_rows),
+    multi_sequence_duplicate_rows = sum(
+      duplicate_groups$duplicate_retained_ad_rows[duplicate_groups$multiple_appointment_sequences == TRUE],
+      na.rm = TRUE
+    ),
+    share_multi_sequence = multi_sequence_duplicate_rows / duplicate_retained_ad_rows,
+    sequence_pattern = if (nrow(duplicate_sequence_rows) == 1) duplicate_sequence_rows$sequence_pattern[[1]] else "multiple",
+    extra_pooled_rows_from_ad_duplicates =
+      round(sum(
+        duplicate_rows_by_pair$duplicate_retained_ad_rows * duplicate_rows_by_pair$recommendation_rows_crossed,
+        na.rm = TRUE
+      )),
+    extra_pooled_rows_from_multi_sequence =
+      round(sum(
+        duplicate_rows_by_pair$multi_sequence_duplicate_rows * duplicate_rows_by_pair$recommendation_rows_crossed,
+        na.rm = TRUE
+      )),
+    share_extra_rows_multi_sequence =
+      extra_pooled_rows_from_multi_sequence / extra_pooled_rows_from_ad_duplicates
+  )
+}
+
+raw_ads_for_provenance <- ads_source_for_dedup
+raw_hud_census <- readRDS(hudprocessed_census_path) %>%
+  mutate(CONTROL = as.character(CONTROL), TESTERID = as.character(TESTERID))
+raw_hud_names <- readRDS(hudprocessed_names_path) %>%
+  mutate(CONTROL = as.character(CONTROL), TESTERID = as.character(TESTERID))
+raw_hud_testscores <- readRDS(hudprocessed_testscores_path) %>%
+  mutate(CONTROL = as.character(CONTROL), TESTERID = as.character(TESTERID))
+
+duplicate_ad_provenance <- bind_rows(
+  summarize_retained_ad_duplicates("Census-matched adsprocessed rows", raw_hud_census, raw_ads_for_provenance),
+  summarize_retained_ad_duplicates("Names-matched adsprocessed rows", raw_hud_names, raw_ads_for_provenance),
+  summarize_retained_ad_duplicates("Test-scores-matched adsprocessed rows", raw_hud_testscores, raw_ads_for_provenance)
+)
+
+census_ad_cols_for_full_ads <- intersect(
+  unique(c(grep("_Ad$", names(raw_hud_census), value = TRUE), "AdPrice", "logAdPrice")),
+  names(raw_ads_for_provenance)
+)
+full_ads_sequence_col <- grep("^SEQUENCE", names(raw_ads_for_provenance), value = TRUE)[[1]]
+full_ads_duplicate_groups <- raw_ads_for_provenance %>%
+  group_by(across(all_of(c("CONTROL", "TESTERID", census_ad_cols_for_full_ads)))) %>%
   summarize(
-    final_rows = n(),
-    distinct_rows_after_dedup =
-      n_distinct(pick(all_of(setdiff(census_hud_key_cols, c("CONTROL", "TESTERID"))))),
+    source_ad_rows = n(),
+    sequence_pattern = paste(sort(unique(as.character(.data[[full_ads_sequence_col]]))), collapse = " | "),
+    sequence_count = n_distinct(.data[[full_ads_sequence_col]]),
     .groups = "drop"
   ) %>%
-  left_join(census_ads_counts, by = c("CONTROL", "TESTERID")) %>%
-  left_join(census_recs_counts, by = c("CONTROL", "TESTERID")) %>%
   mutate(
-    observed_duplicates = final_rows - distinct_rows_after_dedup,
-    expected_duplicates =
-      final_rows - ads_rows_under_census_definition * recs_rows_under_census_definition
+    duplicate_retained_ad_rows = source_ad_rows - 1,
+    multiple_appointment_sequences = sequence_count > 1
+  ) %>%
+  filter(duplicate_retained_ad_rows > 0)
+
+full_ads_sequence_rows <- full_ads_duplicate_groups %>%
+  filter(multiple_appointment_sequences) %>%
+  count(sequence_pattern, wt = duplicate_retained_ad_rows, name = "duplicate_rows") %>%
+  arrange(desc(duplicate_rows))
+
+duplicate_ad_provenance <- bind_rows(
+  duplicate_ad_provenance,
+  tibble(
+    dataset = "Full adsprocessed file",
+    duplicate_retained_ad_rows = sum(full_ads_duplicate_groups$duplicate_retained_ad_rows),
+    multi_sequence_duplicate_rows = sum(
+      full_ads_duplicate_groups$duplicate_retained_ad_rows[full_ads_duplicate_groups$multiple_appointment_sequences == TRUE],
+      na.rm = TRUE
+    ),
+    share_multi_sequence = multi_sequence_duplicate_rows / duplicate_retained_ad_rows,
+    sequence_pattern = if (nrow(full_ads_sequence_rows) == 1) full_ads_sequence_rows$sequence_pattern[[1]] else "multiple",
+    extra_pooled_rows_from_ad_duplicates = NA_real_,
+    extra_pooled_rows_from_multi_sequence = NA_real_,
+    share_extra_rows_multi_sequence = NA_real_
+  )
+)
+
+write.csv(
+  duplicate_ad_provenance,
+  file.path(output_dir, "duplicate_ad_sequence_provenance.csv"),
+  row.names = FALSE
+)
+
+duplicate_ad_lines <- c(
+  "\\begin{table}[htbp]",
+  "\\centering",
+  "\\caption{Retained advertised-home duplicates and appointment-sequence provenance}",
+  "\\label{tab:duplicate_ad_sequence_provenance}",
+  "\\resizebox{\\textwidth}{!}{%",
+  "\\begin{tabular}{lrrrrrrr}",
+  "\\toprule",
+  "Sample & Duplicate retained-ad rows & Multi-appointment rows & Share multi-appointment & Sequence pattern & Extra pooled rows from ad duplicates & Extra pooled rows from multi-appointment rows & Share from multi-appointment rows\\\\",
+  "\\midrule"
+)
+
+for (i in seq_len(nrow(duplicate_ad_provenance))) {
+  row <- duplicate_ad_provenance[i, ]
+  duplicate_ad_lines <- c(
+    duplicate_ad_lines,
+    paste(
+      row$dataset,
+      format_int(row$duplicate_retained_ad_rows),
+      format_int(row$multi_sequence_duplicate_rows),
+      format_pct(row$share_multi_sequence),
+      row$sequence_pattern,
+      ifelse(is.na(row$extra_pooled_rows_from_ad_duplicates), "--", format_int(row$extra_pooled_rows_from_ad_duplicates)),
+      ifelse(is.na(row$extra_pooled_rows_from_multi_sequence), "--", format_int(row$extra_pooled_rows_from_multi_sequence)),
+      ifelse(is.na(row$share_extra_rows_multi_sequence), "--", format_pct(row$share_extra_rows_multi_sequence)),
+      sep = " & "
+    ) |> paste0("\\\\")
+  )
+}
+
+duplicate_ad_lines <- c(
+  duplicate_ad_lines,
+  "\\bottomrule",
+  "\\end{tabular}%",
+  "}",
+  "\\begin{minipage}{\\textwidth}",
+  "\\footnotesize Notes: Retained-ad duplicates are repeated rows in \\texttt{adsprocessed} that are identical on the advertised-home variables retained in the corresponding pooled file. Extra pooled rows are computed by crossing each extra retained-ad row with the number of recommendation rows in the same \\texttt{CONTROL}$\\times$\\texttt{TESTERID} pair.",
+  "\\end{minipage}",
+  "\\end{table}"
+)
+
+writeLines(duplicate_ad_lines, file.path(output_dir, "duplicate_ad_sequence_provenance.tex"))
+
+cat("\n\nDuplicate cleanup summary:\n")
+cat("=========================================================\n\n")
+print(duplicate_cleanup_summary)
+
+cat("\n\nRetained advertised-home duplicate provenance:\n")
+cat("=========================================================\n\n")
+print(duplicate_ad_provenance)
+
+# The Names and Test Scores files contain more duplicate rows than can be
+# explained by retained advertised-home duplicates alone. This check compares
+# the raw final-file row count in each CONTROL x TESTERID pair with the row
+# count implied by crossing the corresponding adsprocessed rows with matching
+# recsprocessed rows. A fourfold ratio indicates that the saved final file
+# contains four copies of the same rows implied by the source ad-rec crossing.
+raw_recs_for_fourfold_check <- readRDS(recsprocessed_path) %>%
+  mutate(CONTROL = as.character(CONTROL), TESTERID = as.character(TESTERID))
+
+fourfold_summary <- list()
+for (dataset_name in c("names", "testscores")) {
+  hud_data <- if (dataset_name == "names") raw_hud_names else raw_hud_testscores
+
+  rec_cols <- grep("_Rec$", names(hud_data), value = TRUE)
+  rec_price_cols <- intersect(c("RecPrice", "logRecPrice"), names(hud_data))
+  rec_key_cols <- intersect(
+    unique(c("CONTROL", "TESTERID", rec_cols, rec_price_cols)),
+    names(raw_recs_for_fourfold_check)
   )
 
-cat("\n\nDuplicate provenance in the pooled Census file:\n")
+  matched_rec_rows <- raw_recs_for_fourfold_check %>%
+    semi_join(
+      hud_data %>% distinct(across(all_of(rec_key_cols))),
+      by = rec_key_cols
+    )
+
+  pair_row_counts <- hud_data %>%
+    count(CONTROL, TESTERID, name = "final_rows") %>%
+    left_join(
+      raw_ads_for_provenance %>%
+        semi_join(hud_data %>% distinct(CONTROL, TESTERID), by = c("CONTROL", "TESTERID")) %>%
+        count(CONTROL, TESTERID, name = "source_ad_rows"),
+      by = c("CONTROL", "TESTERID")
+    ) %>%
+    left_join(
+      matched_rec_rows %>% count(CONTROL, TESTERID, name = "source_rec_rows"),
+      by = c("CONTROL", "TESTERID")
+    ) %>%
+    mutate(
+      expected_source_cross_rows = source_ad_rows * source_rec_rows,
+      extra_rows_over_source_cross = final_rows - expected_source_cross_rows,
+      expansion_ratio = final_rows / expected_source_cross_rows
+    )
+
+  fourfold_pairs <- pair_row_counts %>%
+    filter(!is.na(expansion_ratio), abs(expansion_ratio - 4) < 1e-10)
+
+  fourfold_summary[[dataset_name]] <- tibble(
+    dataset = dataset_name,
+    tester_trial_pairs_with_source_cross = sum(!is.na(pair_row_counts$expected_source_cross_rows)),
+    tester_trial_pairs_with_fourfold_expansion = nrow(fourfold_pairs),
+    raw_final_rows = sum(pair_row_counts$final_rows),
+    expected_source_cross_rows = round(sum(pair_row_counts$expected_source_cross_rows, na.rm = TRUE)),
+    total_extra_rows_over_source_cross = round(sum(pair_row_counts$extra_rows_over_source_cross, na.rm = TRUE)),
+    positive_extra_rows_over_source_cross = round(sum(pmax(pair_row_counts$extra_rows_over_source_cross, 0), na.rm = TRUE)),
+    extra_rows_from_fourfold_expansion = round(sum(fourfold_pairs$extra_rows_over_source_cross, na.rm = TRUE)),
+    share_positive_extra_rows_from_fourfold_expansion =
+      extra_rows_from_fourfold_expansion / positive_extra_rows_over_source_cross
+  )
+}
+
+fourfold_summary <- bind_rows(fourfold_summary)
+
+cat("\n\nFourfold row-expansion check for Names and Test Scores:\n")
 cat("=========================================================\n\n")
-cat("Rows in HUDprocessed_JPE_census_042021.rds:", format(sum(census_final_counts$final_rows), big.mark = ","), "\n")
-cat("Rows remaining after exact and key deduplication:", format(sum(census_final_counts$distinct_rows_after_dedup), big.mark = ","), "\n")
-cat("Observed duplicate rows removed:", format(sum(census_final_counts$observed_duplicates), big.mark = ","), "\n")
-cat(
-  "Expected duplicate rows from adsprocessed x recsprocessed multiplicity under the same Census row definition:",
-  format(sum(census_final_counts$expected_duplicates), big.mark = ","),
-  "\n"
-)
-cat(
-  "Pairs where observed and expected duplicate counts agree exactly:",
-  format(sum(census_final_counts$observed_duplicates == census_final_counts$expected_duplicates), big.mark = ","),
-  "/",
-  format(nrow(census_final_counts), big.mark = ","),
-  "\n"
-)
+print(fourfold_summary)
 
 
 # ---- Duplicate-row race balance and treatment-gap diagnostics ----------------
 
 race_labels <- c("1" = "White", "2" = "Black", "3" = "Hispanic", "4" = "Asian")
-
-# This address key mirrors the adsprocessed address-key deduplication in the preprocessing script.
-preprocess_text_key <- function(x) {
-  x <- iconv(x, to = "UTF-8", sub = "")
-  x <- tolower(x)
-  x <- str_replace_all(x, "[^a-z0-9 ]", " ")
-  str_squish(x)
-}
-
-build_ads_address_key <- function(df) {
-  addr <- if ("HSITEAD" %in% names(df)) df$HSITEAD else NA
-  addr_alt <- if ("Address" %in% names(df)) df$Address else NA
-  addr <- ifelse(!is.na(addr) & addr != "", addr, addr_alt)
-
-  unit <- if ("HUNITNO" %in% names(df)) df$HUNITNO else ""
-
-  city <- if ("HCITY" %in% names(df)) df$HCITY else NA
-  city_alt <- if ("City" %in% names(df)) df$City else NA
-  city <- ifelse(!is.na(city) & city != "", city, city_alt)
-
-  state <- if ("HSTATE" %in% names(df)) df$HSTATE else NA
-  state_alt <- if ("State" %in% names(df)) df$State else NA
-  state <- ifelse(!is.na(state) & state != "", state, state_alt)
-
-  zip <- if ("HZIP" %in% names(df)) df$HZIP else NA
-  zip_alt <- if ("Zip_Code" %in% names(df)) df$Zip_Code else NA
-  zip <- ifelse(!is.na(zip) & zip != "", zip, zip_alt)
-
-  paste(
-    preprocess_text_key(addr), preprocess_text_key(unit), preprocess_text_key(city),
-    preprocess_text_key(state), preprocess_text_key(zip),
-    sep = "|"
-  )
-}
 
 mean_no_na <- function(x) {
   x <- suppressWarnings(as.numeric(x))
