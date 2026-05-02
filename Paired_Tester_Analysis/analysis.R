@@ -13,10 +13,30 @@ while (!dir.exists(file.path(repo_root, "Paired_Tester_Analysis")) && repo_root 
 
 setwd(repo_root)
 
+args <- commandArgs(trailingOnly = TRUE)
+cluster_level <- Sys.getenv("MATCHED_PAIR_CLUSTER", "trial")
+if (cluster_level == "") cluster_level <- "trial"
+if (any(args %in% c("market", "--cluster=market", "--market-clustering"))) {
+  cluster_level <- "market"
+}
+if (!cluster_level %in% c("trial", "market")) {
+  stop("cluster_level must be either 'trial' or 'market'")
+}
+cluster_note <- if (cluster_level == "market") {
+  "Cluster-robust standard errors in parentheses; clustered at the market level. 95\\% confidence intervals in square brackets."
+} else {
+  "Cluster-robust standard errors in parentheses; clustered at the trial level. 95\\% confidence intervals in square brackets."
+}
+
 data_dir <- file.path(repo_root, "Data")
 paired_generated_dir <- file.path(data_dir, "Generated", "Paired_Tester_Analysis")
-tables_dir <- file.path(repo_root, "Paired_Tester_Analysis", "Tables")
-appendix_tables_dir <- file.path(repo_root, "Paired_Tester_Analysis", "Appendix_Tables")
+if (cluster_level == "market") {
+  tables_dir <- file.path(repo_root, "Paired_Tester_Analysis", "market_clustering", "Tables")
+  appendix_tables_dir <- file.path(repo_root, "Paired_Tester_Analysis", "market_clustering", "Appendix_Tables")
+} else {
+  tables_dir <- file.path(repo_root, "Paired_Tester_Analysis", "Tables")
+  appendix_tables_dir <- file.path(repo_root, "Paired_Tester_Analysis", "Appendix_Tables")
+}
 
 dir.create(tables_dir, showWarnings = FALSE, recursive = TRUE)
 dir.create(appendix_tables_dir, showWarnings = FALSE, recursive = TRUE)
@@ -79,6 +99,8 @@ data <- read.csv(file.path(paired_generated_dir, "sales_and_tester_merged.csv"))
         THIGHEDU = as.factor(THIGHEDU)
     ) %>%
     mutate(
+        site = as.factor(substr(as.character(CONTROL), 1, 2)),
+        cluster_group = if (cluster_level == "market") site else CONTROL,
         ofcolor = ifelse(RACE %in% c(2,3,4), 1, 0),
         got_second_appointment = as.integer(num_visits >= 2)
     )
@@ -89,27 +111,27 @@ summary(data$RACE)
 # Run regressions with felm
 recommended_total_races <- felm(STOTUNIT_TOTAL ~ RACE + was_first_visitor + am_indicator_first +
                          TPEGAI + THHEGAI + TSEX + age + THIGHEDU | 
-                         CONTROL | 0 | CONTROL, data = data)
+                         CONTROL | 0 | cluster_group, data = data)
 
 available_any_races <- felm(SAVLBAD_ANY ~ RACE + was_first_visitor + am_indicator_first +
                          TPEGAI + THHEGAI + TSEX + age + THIGHEDU | 
-                         CONTROL | 0 | CONTROL, data = data)
+                         CONTROL | 0 | cluster_group, data = data)
 
 recommended_total_ofcolor <- felm(STOTUNIT_TOTAL ~ ofcolor + was_first_visitor + am_indicator_first +
                          TPEGAI + THHEGAI + TSEX + age + THIGHEDU | 
-                         CONTROL | 0 | CONTROL, data = data)
+                         CONTROL | 0 | cluster_group, data = data)
 
 available_any_ofcolor <- felm(SAVLBAD_ANY ~ ofcolor + was_first_visitor + am_indicator_first +
                          TPEGAI + THHEGAI + TSEX + age + THIGHEDU | 
-                         CONTROL | 0 | CONTROL, data = data)
+                         CONTROL | 0 | cluster_group, data = data)
 
 second_appointment_races <- felm(got_second_appointment ~ RACE + was_first_visitor + am_indicator_first +
                          TPEGAI + THHEGAI + TSEX + age + THIGHEDU | 
-                         CONTROL | 0 | CONTROL, data = data)
+                         CONTROL | 0 | cluster_group, data = data)
 
 second_appointment_ofcolor <- felm(got_second_appointment ~ ofcolor + was_first_visitor + am_indicator_first +
                          TPEGAI + THHEGAI + TSEX + age + THIGHEDU | 
-                         CONTROL | 0 | CONTROL, data = data)
+                         CONTROL | 0 | cluster_group, data = data)
 
 first_appointment_data <- data %>%
     filter(!is.na(SAVLBAD_FIRST)) %>%
@@ -119,11 +141,11 @@ first_appointment_data <- data %>%
 
 available_first_races <- felm(SAVLBAD_FIRST ~ RACE + was_first_visitor + am_indicator_first +
                          TPEGAI + THHEGAI + TSEX + age + THIGHEDU | 
-                         CONTROL | 0 | CONTROL, data = first_appointment_data)
+                         CONTROL | 0 | cluster_group, data = first_appointment_data)
 
 available_first_ofcolor <- felm(SAVLBAD_FIRST ~ ofcolor + was_first_visitor + am_indicator_first +
                          TPEGAI + THHEGAI + TSEX + age + THIGHEDU | 
-                         CONTROL | 0 | CONTROL, data = first_appointment_data)
+                         CONTROL | 0 | cluster_group, data = first_appointment_data)
 
 # Display summaries of previous models
 summary(recommended_total_races)
@@ -164,25 +186,29 @@ appointments_data <- read.csv(file.path(paired_generated_dir, "sales_and_tester_
         age = as.numeric(age),
         THIGHEDU = as.factor(THIGHEDU)
     ) %>%
-    mutate(ofcolor = ifelse(RACE %in% c(2,3,4), 1, 0))
+    mutate(
+        site = as.factor(substr(as.character(CONTROL), 1, 2)),
+        cluster_group = if (cluster_level == "market") site else CONTROL,
+        ofcolor = ifelse(RACE %in% c(2,3,4), 1, 0)
+    )
 
 
 # Run regressions with felm for appointments data
 recommended_apps_races <- felm(STOTUNIT ~ RACE + visit_order + am_indicator +
                          TPEGAI + THHEGAI + TSEX + age + THIGHEDU | 
-                         CONTROL | 0 | CONTROL, data = appointments_data)
+                         CONTROL | 0 | cluster_group, data = appointments_data)
 
 available_apps_races <- felm(SAVLBAD_BINARY ~ RACE + visit_order + am_indicator +
                         TPEGAI + THHEGAI + TSEX + age + THIGHEDU | 
-                        CONTROL | 0 | CONTROL, data = appointments_data)
+                        CONTROL | 0 | cluster_group, data = appointments_data)
 
 recommended_apps_ofcolor <- felm(STOTUNIT ~ ofcolor + visit_order + am_indicator +
                          TPEGAI + THHEGAI + TSEX + age + THIGHEDU | 
-                         CONTROL | 0 | CONTROL, data = appointments_data)
+                         CONTROL | 0 | cluster_group, data = appointments_data)
 
 available_apps_ofcolor <- felm(SAVLBAD_BINARY ~ ofcolor + visit_order + am_indicator +
                         TPEGAI + THHEGAI + TSEX + age + THIGHEDU | 
-                        CONTROL | 0 | CONTROL, data = appointments_data)
+                        CONTROL | 0 | cluster_group, data = appointments_data)
 
 # Display results for appointments analysis
 summary(recommended_apps_races)
@@ -348,7 +374,7 @@ latex_table <- function(rows) {
     cat(sprintf("Number of Trials      &%s\\\\\n",
         paste(sapply(table_specs, function(spec) spec$trials), collapse = "&")))
     cat("\\bottomrule\n")
-    cat("\\multicolumn{6}{l}{\\footnotesize Cluster-robust standard errors in parentheses. Clustered at the trial level. 95\\% confidence intervals in square brackets.}\\\\\n")
+    cat("\\multicolumn{6}{l}{\\footnotesize ", cluster_note, "}\\\\\n", sep = "")
     cat("\\multicolumn{6}{l}{\\footnotesize \\sym{*} \\(p<0.10\\), \\sym{**} \\(p<0.05\\), \\sym{***} \\(p<0.01\\)}\\\\\n")
     cat("\\end{tabular}\n}\n\\end{table}\n")
 }
@@ -382,7 +408,8 @@ cleaned_data <- read.csv(file.path(paired_generated_dir, "cleaned_hds.csv")) %>%
     ofcolor = ifelse(RACE %in% c(2, 3, 4), 1, 0),
     kids = as.numeric(kids),
     mother = if_else(!is.na(mother), mother, if_else(kids == 1 & TSEX_num == 0, 1, 0)),
-    site = substr(as.character(CONTROL), 1, 2)
+    site = as.factor(substr(as.character(CONTROL), 1, 2)),
+    cluster_group = if (cluster_level == "market") site else CONTROL
   )
 
 base_covariates <- c("was_first_visitor", "am_indicator_first", "TSEX", "THHEGAI", "TPEGAI", "THIGHEDU", "TCURTENR", "age")
@@ -569,7 +596,7 @@ latex_table_multi <- function(rows, outcome_labels, caption, label,
   cat("\\\\\n")
   cat("\\bottomrule\n")
   cat("\\multicolumn{", n_cols + 1,
-      "}{l}{\\footnotesize Cluster-robust standard errors in parentheses; clustered at the trial level. 95\\% confidence intervals in square brackets.}\\\\\n", sep = "")
+      "}{l}{\\footnotesize ", cluster_note, "}\\\\\n", sep = "")
   cat("\\multicolumn{", n_cols + 1,
       "}{l}{\\footnotesize \\sym{*} \\(p<0.10\\), \\sym{**} \\(p<0.05\\), \\sym{***} \\(p<0.01\\)}\\\\\n", sep = "")
   cat("\\end{tabular}%\n")
@@ -604,7 +631,7 @@ latex_table_race_only <- function(rows, outcome_labels, caption, label, models, 
   cat("\\\\\n")
   cat("\\bottomrule\n")
   cat("\\multicolumn{", n_cols + 1,
-      "}{l}{\\footnotesize Cluster-robust standard errors in parentheses; clustered at the trial level. 95\\% confidence intervals in square brackets.}\\\\\n", sep = "")
+      "}{l}{\\footnotesize ", cluster_note, "}\\\\\n", sep = "")
   cat("\\multicolumn{", n_cols + 1,
       "}{l}{\\footnotesize \\sym{*} \\(p<0.10\\), \\sym{**} \\(p<0.05\\), \\sym{***} \\(p<0.01\\)}\\\\\n", sep = "")
   cat("\\end{tabular}%\n")
@@ -616,7 +643,7 @@ latex_table_custom <- function(rows, outcome_labels, caption, label,
   n_cols <- length(outcome_labels)
   if (is.null(note_lines)) {
     note_lines <- c(
-      "Cluster-robust standard errors in parentheses; clustered at the trial level. 95\\% confidence intervals in square brackets.",
+      cluster_note,
       "\\sym{*} \\(p<0.10\\), \\sym{**} \\(p<0.05\\), \\sym{***} \\(p<0.01\\)"
     )
   }
@@ -665,11 +692,11 @@ table6_data_list <- lapply(table6_outcomes, function(outcome) {
 })
 
 table6_models_race <- Map(function(outcome, df) {
-  fml <- as.formula(paste(outcome, "~ RACE +", base_covariates_fml, "| CONTROL | 0 | CONTROL"))
+  fml <- as.formula(paste(outcome, "~ RACE +", base_covariates_fml, "| CONTROL | 0 | cluster_group"))
   felm(fml, data = df)
 }, table6_outcomes, table6_data_list)
 table6_models_minority <- Map(function(outcome, df) {
-  fml <- as.formula(paste(outcome, "~ ofcolor +", base_covariates_fml, "| CONTROL | 0 | CONTROL"))
+  fml <- as.formula(paste(outcome, "~ ofcolor +", base_covariates_fml, "| CONTROL | 0 | cluster_group"))
   felm(fml, data = df)
 }, table6_outcomes, table6_data_list)
 table6_n_trials <- sapply(table6_data_list, function(df) length(unique(df$CONTROL)))
@@ -701,11 +728,11 @@ table7_data_list <- lapply(table7_outcomes, function(outcome) {
 })
 
 table7_models_race <- Map(function(outcome, df) {
-  fml <- as.formula(paste(outcome, "~ RACE +", base_covariates_fml, "| CONTROL | 0 | CONTROL"))
+  fml <- as.formula(paste(outcome, "~ RACE +", base_covariates_fml, "| CONTROL | 0 | cluster_group"))
   felm(fml, data = df)
 }, table7_outcomes, table7_data_list)
 table7_models_minority <- Map(function(outcome, df) {
-  fml <- as.formula(paste(outcome, "~ ofcolor +", base_covariates_fml, "| CONTROL | 0 | CONTROL"))
+  fml <- as.formula(paste(outcome, "~ ofcolor +", base_covariates_fml, "| CONTROL | 0 | cluster_group"))
   felm(fml, data = df)
 }, table7_outcomes, table7_data_list)
 table7_n_trials <- sapply(table7_data_list, function(df) length(unique(df$CONTROL)))
@@ -733,11 +760,11 @@ table8a_data_list <- lapply(table8a_outcomes, function(outcome) {
 })
 
 table8a_models_race <- Map(function(outcome, df) {
-  fml <- as.formula(paste(outcome, "~ RACE +", base_covariates_fml, "| CONTROL | 0 | CONTROL"))
+  fml <- as.formula(paste(outcome, "~ RACE +", base_covariates_fml, "| CONTROL | 0 | cluster_group"))
   felm(fml, data = df)
 }, table8a_outcomes, table8a_data_list)
 table8a_models_minority <- Map(function(outcome, df) {
-  fml <- as.formula(paste(outcome, "~ ofcolor +", base_covariates_fml, "| CONTROL | 0 | CONTROL"))
+  fml <- as.formula(paste(outcome, "~ ofcolor +", base_covariates_fml, "| CONTROL | 0 | cluster_group"))
   felm(fml, data = df)
 }, table8a_outcomes, table8a_data_list)
 table8a_n_trials <- sapply(table8a_data_list, function(df) length(unique(df$CONTROL)))
@@ -764,11 +791,11 @@ table8b_data_list <- lapply(table8b_outcomes, function(outcome) {
 })
 
 table8b_models_race <- Map(function(outcome, df) {
-  fml <- as.formula(paste(outcome, "~ RACE +", base_covariates_fml, "| CONTROL | 0 | CONTROL"))
+  fml <- as.formula(paste(outcome, "~ RACE +", base_covariates_fml, "| CONTROL | 0 | cluster_group"))
   felm(fml, data = df)
 }, table8b_outcomes, table8b_data_list)
 table8b_models_minority <- Map(function(outcome, df) {
-  fml <- as.formula(paste(outcome, "~ ofcolor +", base_covariates_fml, "| CONTROL | 0 | CONTROL"))
+  fml <- as.formula(paste(outcome, "~ ofcolor +", base_covariates_fml, "| CONTROL | 0 | cluster_group"))
   felm(fml, data = df)
 }, table8b_outcomes, table8b_data_list)
 table8b_n_trials <- sapply(table8b_data_list, function(df) length(unique(df$CONTROL)))
@@ -796,11 +823,11 @@ table9_data_list <- lapply(table9_outcomes, function(outcome) {
 })
 
 table9_models_race <- Map(function(outcome, df) {
-  fml <- as.formula(paste(outcome, "~ RACE +", base_covariates_fml, "| CONTROL | 0 | CONTROL"))
+  fml <- as.formula(paste(outcome, "~ RACE +", base_covariates_fml, "| CONTROL | 0 | cluster_group"))
   felm(fml, data = df)
 }, table9_outcomes, table9_data_list)
 table9_models_minority <- Map(function(outcome, df) {
-  fml <- as.formula(paste(outcome, "~ ofcolor +", base_covariates_fml, "| CONTROL | 0 | CONTROL"))
+  fml <- as.formula(paste(outcome, "~ ofcolor +", base_covariates_fml, "| CONTROL | 0 | cluster_group"))
   felm(fml, data = df)
 }, table9_outcomes, table9_data_list)
 table9_n_trials <- sapply(table9_data_list, function(df) length(unique(df$CONTROL)))
@@ -826,11 +853,11 @@ table9_mom_data_list <- lapply(table9_outcomes, function(outcome) {
     paired_filter()
 })
 table9_mom_models_race <- Map(function(outcome, df) {
-  fml <- as.formula(paste(outcome, "~ RACE +", base_covariates_mom_fml, "| CONTROL | 0 | CONTROL"))
+  fml <- as.formula(paste(outcome, "~ RACE +", base_covariates_mom_fml, "| CONTROL | 0 | cluster_group"))
   felm(fml, data = df)
 }, table9_outcomes, table9_mom_data_list)
 table9_mom_models_minority <- Map(function(outcome, df) {
-  fml <- as.formula(paste(outcome, "~ ofcolor +", base_covariates_mom_fml, "| CONTROL | 0 | CONTROL"))
+  fml <- as.formula(paste(outcome, "~ ofcolor +", base_covariates_mom_fml, "| CONTROL | 0 | cluster_group"))
   felm(fml, data = df)
 }, table9_outcomes, table9_mom_data_list)
 table9_mom_n_trials <- sapply(table9_mom_data_list, function(df) length(unique(df$CONTROL)))
@@ -860,11 +887,11 @@ table10a_data_list <- lapply(table10a_outcomes, function(outcome) {
 })
 
 table10a_models_race <- Map(function(outcome, df) {
-  fml <- as.formula(paste(outcome, "~ RACE +", base_covariates_mom_fml, "| CONTROL | 0 | CONTROL"))
+  fml <- as.formula(paste(outcome, "~ RACE +", base_covariates_mom_fml, "| CONTROL | 0 | cluster_group"))
   felm(fml, data = df)
 }, table10a_outcomes, table10a_data_list)
 table10a_models_minority <- Map(function(outcome, df) {
-  fml <- as.formula(paste(outcome, "~ ofcolor +", base_covariates_mom_fml, "| CONTROL | 0 | CONTROL"))
+  fml <- as.formula(paste(outcome, "~ ofcolor +", base_covariates_mom_fml, "| CONTROL | 0 | cluster_group"))
   felm(fml, data = df)
 }, table10a_outcomes, table10a_data_list)
 table10a_n_trials <- sapply(table10a_data_list, function(df) length(unique(df$CONTROL)))
@@ -893,11 +920,11 @@ table10b_data_list <- lapply(table10b_outcomes, function(outcome) {
 })
 
 table10b_models_race <- Map(function(outcome, df) {
-  fml <- as.formula(paste(outcome, "~ RACE +", base_covariates_mom_fml, "| CONTROL | 0 | CONTROL"))
+  fml <- as.formula(paste(outcome, "~ RACE +", base_covariates_mom_fml, "| CONTROL | 0 | cluster_group"))
   felm(fml, data = df)
 }, table10b_outcomes, table10b_data_list)
 table10b_models_minority <- Map(function(outcome, df) {
-  fml <- as.formula(paste(outcome, "~ ofcolor +", base_covariates_mom_fml, "| CONTROL | 0 | CONTROL"))
+  fml <- as.formula(paste(outcome, "~ ofcolor +", base_covariates_mom_fml, "| CONTROL | 0 | cluster_group"))
   felm(fml, data = df)
 }, table10b_outcomes, table10b_data_list)
 table10b_n_trials <- sapply(table10b_data_list, function(df) length(unique(df$CONTROL)))
@@ -926,9 +953,9 @@ table12_data_fam <- table12_data_all %>% filter(kids == 1)
 table12_data_mom <- table12_data_all %>% filter(kids == 1 & TSEX_num == 0)
 
 table12_models <- list(
-  felm(as.formula(paste("log(medincome_Rec) ~ RACE +", base_covariates_fml, "| CONTROL | 0 | CONTROL")), data = table12_data_all),
-  felm(as.formula(paste("log(medincome_Rec) ~ RACE +", base_covariates_fml, "| CONTROL | 0 | CONTROL")), data = table12_data_fam),
-  felm(as.formula(paste("log(medincome_Rec) ~ RACE +", base_covariates_mom_fml, "| CONTROL | 0 | CONTROL")), data = table12_data_mom)
+  felm(as.formula(paste("log(medincome_Rec) ~ RACE +", base_covariates_fml, "| CONTROL | 0 | cluster_group")), data = table12_data_all),
+  felm(as.formula(paste("log(medincome_Rec) ~ RACE +", base_covariates_fml, "| CONTROL | 0 | cluster_group")), data = table12_data_fam),
+  felm(as.formula(paste("log(medincome_Rec) ~ RACE +", base_covariates_mom_fml, "| CONTROL | 0 | cluster_group")), data = table12_data_mom)
 )
 
 table12_labels <- c("All Testers", "Families", "Moms")
@@ -958,11 +985,11 @@ appendix_a1_data_list <- lapply(appendix_a1_outcomes, function(outcome) {
 })
 
 appendix_a1_models_race <- Map(function(outcome, df) {
-  fml <- as.formula(paste(outcome, "~ RACE +", base_covariates_fml, "| CONTROL | 0 | CONTROL"))
+  fml <- as.formula(paste(outcome, "~ RACE +", base_covariates_fml, "| CONTROL | 0 | cluster_group"))
   felm(fml, data = df)
 }, appendix_a1_outcomes, appendix_a1_data_list)
 appendix_a1_models_minority <- Map(function(outcome, df) {
-  fml <- as.formula(paste(outcome, "~ ofcolor +", base_covariates_fml, "| CONTROL | 0 | CONTROL"))
+  fml <- as.formula(paste(outcome, "~ ofcolor +", base_covariates_fml, "| CONTROL | 0 | cluster_group"))
   felm(fml, data = df)
 }, appendix_a1_outcomes, appendix_a1_data_list)
 appendix_a1_n_trials <- sapply(appendix_a1_data_list, function(df) length(unique(df$CONTROL)))
@@ -1006,11 +1033,11 @@ for (i in seq_along(family_aux_races)) {
   })
 
   kids_models <- Map(function(outcome, df) {
-    fml <- as.formula(paste(outcome, "~ kids +", base_covariates_fml, "| 0 | 0 | CONTROL"))
+    fml <- as.formula(paste(outcome, "~ kids +", base_covariates_fml, "| 0 | 0 | cluster_group"))
     felm(fml, data = df)
   }, family_aux_outcomes, family_data_list)
   mother_models <- Map(function(outcome, df) {
-    fml <- as.formula(paste(outcome, "~ mother +", base_covariates_fml, "| 0 | 0 | CONTROL"))
+    fml <- as.formula(paste(outcome, "~ mother +", base_covariates_fml, "| 0 | 0 | cluster_group"))
     felm(fml, data = df)
   }, family_aux_outcomes, family_data_list)
 
@@ -1044,7 +1071,7 @@ for (i in seq_along(family_aux_races)) {
       stat_lines = family_stat_lines,
       note_lines = c(
         "Rows come from separate linear regressions on kids and mother indicators with the full baseline controls, without control fixed effects.",
-        "Cluster-robust standard errors in parentheses; clustered at the trial level. 95\\% confidence intervals in square brackets.",
+        cluster_note,
         "\\sym{*} \\(p<0.10\\), \\sym{**} \\(p<0.05\\), \\sym{***} \\(p<0.01\\)"
       )
     )
@@ -1058,11 +1085,11 @@ run_race_control_table <- function(outcomes, labels, file, caption, table_label)
   })
 
   models_race <- Map(function(outcome, df) {
-    fml <- as.formula(paste(outcome, "~ RACE +", base_covariates_fml, "+", race_share_controls_fml, "| CONTROL | 0 | CONTROL"))
+    fml <- as.formula(paste(outcome, "~ RACE +", base_covariates_fml, "+", race_share_controls_fml, "| CONTROL | 0 | cluster_group"))
     felm(fml, data = df)
   }, outcomes, data_list)
   models_minority <- Map(function(outcome, df) {
-    fml <- as.formula(paste(outcome, "~ ofcolor +", base_covariates_fml, "+", race_share_controls_fml, "| CONTROL | 0 | CONTROL"))
+    fml <- as.formula(paste(outcome, "~ ofcolor +", base_covariates_fml, "+", race_share_controls_fml, "| CONTROL | 0 | cluster_group"))
     felm(fml, data = df)
   }, outcomes, data_list)
   n_trials <- sapply(data_list, function(df) length(unique(df$CONTROL)))
@@ -1114,7 +1141,7 @@ current_table <- "Appendix Table A9"
 appendix_a9_data <- prep_table_data(cleaned_data, c("medincome_Rec"), extra_vars = race_share_controls) %>%
   filter(medincome_Rec > 0)
 appendix_a9_model <- felm(
-  as.formula(paste("log(medincome_Rec) ~ RACE +", base_covariates_fml, "+", race_share_controls_fml, "| CONTROL | 0 | CONTROL")),
+  as.formula(paste("log(medincome_Rec) ~ RACE +", base_covariates_fml, "+", race_share_controls_fml, "| CONTROL | 0 | cluster_group")),
   data = appendix_a9_data
 )
 appendix_a9_rows <- build_race_only_rows(list(appendix_a9_model), c("Log Median Income"))
@@ -1225,103 +1252,107 @@ if (nrow(explicit_nonwhite_text) > 0) {
 writeLines(hispanic_note_lines, file.path(appendix_tables_dir, "hispanic_tester_proxy_note.txt"))
 
 # ----- Market heterogeneity outputs (site-level summary plus Atlanta/Chicago highlight table) -----
-site_market_lookup <- cleaned_data %>%
-  mutate(site = substr(as.character(CONTROL), 1, 2)) %>%
-  group_by(site, HSTATE, HCITY) %>%
-  summarise(rows = n(), .groups = "drop") %>%
-  group_by(site) %>%
-  slice_max(rows, n = 1, with_ties = FALSE) %>%
-  ungroup() %>%
-  rename(dominant_state = HSTATE, dominant_city = HCITY) %>%
-  left_join(
-    cleaned_data %>%
-      distinct(CONTROL, site) %>%
-      count(site, name = "controls"),
-    by = "site"
-  ) %>%
-  arrange(site)
-write.csv(site_market_lookup, file.path(appendix_tables_dir, "site_market_lookup.csv"), row.names = FALSE)
+# These site-specific regressions have only one market by construction, so market
+# clustering is undefined. Keep them only in the standard trial-clustered run.
+if (cluster_level == "trial") {
+  site_market_lookup <- cleaned_data %>%
+    mutate(site = substr(as.character(CONTROL), 1, 2)) %>%
+    group_by(site, HSTATE, HCITY) %>%
+    summarise(rows = n(), .groups = "drop") %>%
+    group_by(site) %>%
+    slice_max(rows, n = 1, with_ties = FALSE) %>%
+    ungroup() %>%
+    rename(dominant_state = HSTATE, dominant_city = HCITY) %>%
+    left_join(
+      cleaned_data %>%
+        distinct(CONTROL, site) %>%
+        count(site, name = "controls"),
+      by = "site"
+    ) %>%
+    arrange(site)
+  write.csv(site_market_lookup, file.path(appendix_tables_dir, "site_market_lookup.csv"), row.names = FALSE)
 
-current_table <- "Appendix Table A10"
-market_sites <- site_market_lookup$site
-market_outcomes <- appendix_a1_outcomes
-market_labels <- appendix_a1_labels
+  current_table <- "Appendix Table A10"
+  market_sites <- site_market_lookup$site
+  market_outcomes <- appendix_a1_outcomes
+  market_labels <- appendix_a1_labels
 
-site_outcome_data <- lapply(market_sites, function(site_code) {
-  race_df <- cleaned_data %>% filter(site == site_code)
-  lapply(market_outcomes, function(outcome) prep_table_data(race_df, c(outcome)))
-})
-names(site_outcome_data) <- market_sites
+  site_outcome_data <- lapply(market_sites, function(site_code) {
+    race_df <- cleaned_data %>% filter(site == site_code)
+    lapply(market_outcomes, function(outcome) prep_table_data(race_df, c(outcome)))
+  })
+  names(site_outcome_data) <- market_sites
 
-site_outcome_models <- lapply(market_sites, function(site_code) {
-  Map(function(outcome, df) {
-    felm(as.formula(paste(outcome, "~ RACE +", base_covariates_fml, "| CONTROL | 0 | CONTROL")), data = df)
-  }, market_outcomes, site_outcome_data[[site_code]])
-})
-names(site_outcome_models) <- market_sites
+  site_outcome_models <- lapply(market_sites, function(site_code) {
+    Map(function(outcome, df) {
+      felm(as.formula(paste(outcome, "~ RACE +", base_covariates_fml, "| CONTROL | 0 | cluster_group")), data = df)
+    }, market_outcomes, site_outcome_data[[site_code]])
+  })
+  names(site_outcome_models) <- market_sites
 
-market_coef_summary <- do.call(rbind, lapply(market_sites, function(site_code) {
-  site_models <- site_outcome_models[[site_code]]
-  site_data <- site_outcome_data[[site_code]]
-  dominant_row <- site_market_lookup %>% filter(site == site_code)
-  do.call(rbind, lapply(seq_along(site_models), function(j) {
-    outcome_name <- market_outcomes[j]
-    outcome_label <- market_labels[j]
-    do.call(rbind, lapply(
-      c("RACE2", "RACE3", "RACE4"),
-      function(coef_name) {
-        info <- extract_coef_numeric(site_models[[j]], coef_name)
-        if (is.null(info)) return(NULL)
-        data.frame(
-          site = site_code,
-          dominant_city = dominant_row$dominant_city,
-          dominant_state = dominant_row$dominant_state,
-          outcome = outcome_name,
-          outcome_label = outcome_label,
-          coefficient = coef_name,
-          coefficient_label = c(RACE2 = "African American", RACE3 = "Hispanic", RACE4 = "Asian")[coef_name],
-          estimate = info$estimate,
-          se = info$se,
-          ci_lo = info$ci_lo,
-          ci_hi = info$ci_hi,
-          p = info$p,
-          observations = site_models[[j]]$N,
-          trials = length(unique(site_data[[j]]$CONTROL))
-        )
-      }
-    ))
+  market_coef_summary <- do.call(rbind, lapply(market_sites, function(site_code) {
+    site_models <- site_outcome_models[[site_code]]
+    site_data <- site_outcome_data[[site_code]]
+    dominant_row <- site_market_lookup %>% filter(site == site_code)
+    do.call(rbind, lapply(seq_along(site_models), function(j) {
+      outcome_name <- market_outcomes[j]
+      outcome_label <- market_labels[j]
+      do.call(rbind, lapply(
+        c("RACE2", "RACE3", "RACE4"),
+        function(coef_name) {
+          info <- extract_coef_numeric(site_models[[j]], coef_name)
+          if (is.null(info)) return(NULL)
+          data.frame(
+            site = site_code,
+            dominant_city = dominant_row$dominant_city,
+            dominant_state = dominant_row$dominant_state,
+            outcome = outcome_name,
+            outcome_label = outcome_label,
+            coefficient = coef_name,
+            coefficient_label = c(RACE2 = "African American", RACE3 = "Hispanic", RACE4 = "Asian")[coef_name],
+            estimate = info$estimate,
+            se = info$se,
+            ci_lo = info$ci_lo,
+            ci_hi = info$ci_hi,
+            p = info$p,
+            observations = site_models[[j]]$N,
+            trials = length(unique(site_data[[j]]$CONTROL))
+          )
+        }
+      ))
+    }))
   }))
-}))
-write.csv(
-  market_coef_summary,
-  file.path(appendix_tables_dir, "market_racial_share_heterogeneity.csv"),
-  row.names = FALSE
-)
+  write.csv(
+    market_coef_summary,
+    file.path(appendix_tables_dir, "market_racial_share_heterogeneity.csv"),
+    row.names = FALSE
+  )
 
-atl_models <- site_outcome_models[["AT"]]
-chi_models <- site_outcome_models[["CH"]]
-appendix_a10_rows <- build_model_group_rows(
-  list(appendix_a1_models_race, atl_models, chi_models),
-  outcome_labels = market_labels,
-  coef_names = "RACE2",
-  group_labels = c("Full Sample", "Atlanta (AT)", "Chicago (CH)")
-)
-write_table(
-  file.path(appendix_tables_dir, "tableA10_black_market_highlights.tex"),
-  latex_table_custom(
-    appendix_a10_rows,
+  atl_models <- site_outcome_models[["AT"]]
+  chi_models <- site_outcome_models[["CH"]]
+  appendix_a10_rows <- build_model_group_rows(
+    list(appendix_a1_models_race, atl_models, chi_models),
     outcome_labels = market_labels,
-    caption = "Market Heterogeneity in African American Steering to Neighborhood Racial Composition\\\\[0.5em]\\textit{Appendix Table A10}",
-    label = "tab:appendixA10",
-    stat_lines = NULL,
-    note_lines = c(
-      "Rows report the African American coefficient from separate site-specific paired-tester regressions with the full baseline controls and control fixed effects.",
-      "A full site-by-race-by-outcome coefficient file is saved to Appendix\\_Tables/market\\_racial\\_share\\_heterogeneity.csv; site labels are summarized in Appendix\\_Tables/site\\_market\\_lookup.csv.",
-      "Cluster-robust standard errors in parentheses; clustered at the trial level. 95\\% confidence intervals in square brackets.",
-      "\\sym{*} \\(p<0.10\\), \\sym{**} \\(p<0.05\\), \\sym{***} \\(p<0.01\\)"
+    coef_names = "RACE2",
+    group_labels = c("Full Sample", "Atlanta (AT)", "Chicago (CH)")
+  )
+  write_table(
+    file.path(appendix_tables_dir, "tableA10_black_market_highlights.tex"),
+    latex_table_custom(
+      appendix_a10_rows,
+      outcome_labels = market_labels,
+      caption = "Market Heterogeneity in African American Steering to Neighborhood Racial Composition\\\\[0.5em]\\textit{Appendix Table A10}",
+      label = "tab:appendixA10",
+      stat_lines = NULL,
+      note_lines = c(
+        "Rows report the African American coefficient from separate site-specific paired-tester regressions with the full baseline controls and control fixed effects.",
+        "A full site-by-race-by-outcome coefficient file is saved to Appendix\\_Tables/market\\_racial\\_share\\_heterogeneity.csv; site labels are summarized in Appendix\\_Tables/site\\_market\\_lookup.csv.",
+        cluster_note,
+        "\\sym{*} \\(p<0.10\\), \\sym{**} \\(p<0.05\\), \\sym{***} \\(p<0.01\\)"
+      )
     )
   )
-)
+}
 
 if (length(rank_warn_log) > 0) {
   dir.create(tables_dir, showWarnings = FALSE, recursive = TRUE)

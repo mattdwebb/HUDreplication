@@ -12,3 +12,15 @@ Comparison_Tables/
 
 Paired_Tester_Analysis/.Rhistory
 Rplots.pdf
+
+# Generated market-clustered and exploratory output folders.
+Paired_Tester_Analysis/market_clustering/**
+Paired_Tester_Analysis/Market_Heterogeneity/**
+Market_Clustered_*/
+
+# Generated original-paper table exports.
+Pooled_Analysis/original_tables/
+
+# Scratch/experimental scripts that are not part of the main replication run.
+Paired_Tester_Analysis/table5_wild_cluster_bootstrap.R
+Pooled_Analysis/audit_adsprocessed_provenance.R

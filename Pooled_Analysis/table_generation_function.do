@@ -1,3 +1,7 @@
+if "${POOLED_CLUSTER_VAR}" == "" global POOLED_CLUSTER_VAR "control"
+if "${POOLED_CLUSTER_LABEL}" == "" global POOLED_CLUSTER_LABEL "trial"
+if "${POOLED_CLUSTER_DESCRIPTION}" == "" global POOLED_CLUSTER_DESCRIPTION "${POOLED_CLUSTER_VAR}"
+
 capture program drop clean_vars
 program define clean_vars
 	args all_vars
@@ -192,16 +196,22 @@ program define apply_hds_fixed_race_spec
     }
 
     replace aprace = .
-    replace aprace = mod(`race_code', 10) if !missing(`race_code')
-    label define race 1 "White" 2 "African American" 3 "Hispanic" 4 "Asian" 5 "Other Race", replace
+    replace aprace = mod(`race_code', 10) if inlist(mod(`race_code', 10), 1, 2, 3, 4)
+    count if !missing(`race_code') & missing(aprace)
+    if r(N) > 0 {
+        display as error "HDS race source contains values outside supported race codes 1-4: `source'"
+        tab `source' if !missing(`race_code') & missing(aprace), missing
+        error 459
+    }
+
+    label define race 1 "White" 2 "African American" 3 "Hispanic" 4 "Asian", replace
     label values aprace race
 
     replace ofcolor = .
     replace ofcolor = 0 if aprace == 1
     replace ofcolor = 1 if inlist(aprace, 2, 3, 4)
 
-    replace othrace = .
-    replace othrace = 0 if !missing(`race_code')
+    capture drop othrace
 end
 
 capture program drop run_comparison_regressions
@@ -278,13 +288,13 @@ program define run_comparison_regressions, rclass
             disp as text "Dep. Var. is: " as result "`dependent_var_`d''"
             disp as text "Racial Minority specification is: " as result "`racial_minority'"
             disp as text "City Fixed Effect is: " as result "`geofe'"
-            disp as text "Clustered by: control (a variable representing the trial)"
+            disp as text "Clustered by: ${POOLED_CLUSTER_DESCRIPTION}"
 
-            if "`table_number'" == "13" & `cols' == 1 {
+            if "`table_number'" == "13" & `cols' == 1 & "${POOLED_CLUSTER_VAR}" == "control" {
                 reghdfe `dependent_var_`d'' `racial_minority' `CONTROL_VARS' `control_var_`d'' if condition_`d', absorb(`ABS_VARS' `geofe') keepsingle
             }
             else {
-                reghdfe `dependent_var_`d'' `racial_minority' `CONTROL_VARS' `control_var_`d'' if condition_`d', absorb(`ABS_VARS' `geofe') keepsingle cluster(control)
+                reghdfe `dependent_var_`d'' `racial_minority' `CONTROL_VARS' `control_var_`d'' if condition_`d', absorb(`ABS_VARS' `geofe') keepsingle cluster(${POOLED_CLUSTER_VAR})
             }
 
             matrix hdfe = e(dof_table)
@@ -294,11 +304,11 @@ program define run_comparison_regressions, rclass
             qui eststo dep_var_`d'_col_`cols'_minority
             local cols_for_depvar_`d'_minority = " `cols_for_depvar_`d'_minority' dep_var_`d'_col_`cols'_minority "
 
-            if "`table_number'" == "13" & `cols' == 1 {
+            if "`table_number'" == "13" & `cols' == 1 & "${POOLED_CLUSTER_VAR}" == "control" {
                 reghdfe `dependent_var_`d'' i.aprace `CONTROL_VARS' `control_var_`d'' if condition_`d', absorb(`ABS_VARS' `geofe') keepsingle
             }
             else {
-                reghdfe `dependent_var_`d'' i.aprace `CONTROL_VARS' `control_var_`d'' if condition_`d', absorb(`ABS_VARS' `geofe') keepsingle cluster(control)
+                reghdfe `dependent_var_`d'' i.aprace `CONTROL_VARS' `control_var_`d'' if condition_`d', absorb(`ABS_VARS' `geofe') keepsingle cluster(${POOLED_CLUSTER_VAR})
             }
 
             matrix hdfe = e(dof_table)
@@ -325,7 +335,7 @@ program define run_comparison_regressions, rclass
         replace booktabs label ///
         mgroups("Original Data" "Correct Race Only" "Updated City Name \& Correct Race" "Proper City Name \& Correct Race" "Place Name \& Correct Race" "County Name \& Correct Race",pattern(1 1 1 1 1 1) ///
         prefix(\multicolumn{@span}{c}{) suffix(}) span erepeat(\cmidrule(lr){@span})) ///
-        title(Neighbourhood Attributes as `dependent_var_`d'', Clustered at trial) ///
+        title(Neighbourhood Attributes as `dependent_var_`d'', Clustered at ${POOLED_CLUSTER_LABEL}) ///
         alignment(c) page(dcolumn) nomtitle ///
         cells("b(star fmt(4))" se(par fmt(4)) ci(fmt(4) par)) ///
         starlevels(* 0.10 ** 0.05 *** 0.01) ///
@@ -360,7 +370,7 @@ program define run_comparison_regressions, rclass
         replace booktabs label ///
         mgroups("Original Data" "Correct Race Only" "Updated City Name \& Correct Race" "Proper City Name \& Correct Race" "Place Name \& Correct Race" "County Name \& Correct Race",pattern(1 1 1 1 1 1) ///
         prefix(\multicolumn{@span}{c}{) suffix(}) span erepeat(\cmidrule(lr){@span})) ///
-        title(Neighbourhood Attributes as `dependent_var_`d'', Clustered at trial) ///
+        title(Neighbourhood Attributes as `dependent_var_`d'', Clustered at ${POOLED_CLUSTER_LABEL}) ///
         alignment(c) page(dcolumn) nomtitle ///
         cells("b(star fmt(4))" se(par fmt(4)) ci(fmt(4) par)) ///
         starlevels(* 0.10 ** 0.05 *** 0.01) ///
@@ -386,147 +396,6 @@ program define run_comparison_regressions, rclass
     }
 end
 
-capture program drop run_regressions
-program define run_regressions, rclass
-    args CONTROL_VARS ABS_VARS dependent_var_1 dependent_var_2 control_var_1 control_var_2 table_number
-
-    local all_vars "`CONTROL_VARS' `ABS_VARS' `dependent_var_1' `dependent_var_2' `control_var_1' `control_var_2'"
-
-    clean_vars "`all_vars'"
-
-    // Normalize race variable name to aprace (avoid ambiguous abbreviations)
-    local allvars ""
-    capture qui ds
-    if !_rc local allvars "`r(varlist)'"
-    local has_aprace = strpos(" `allvars' ", " aprace ") > 0
-    local has_apracex = strpos(" `allvars' ", " apracex ") > 0
-    if `has_apracex' {
-        if `has_aprace' {
-            drop apracex
-            display "Variable apracex dropped (aprace already exists)."
-        }
-        else {
-            rename apracex aprace
-            display "Variable apracex has been renamed to aprace."
-        }
-    }
-    else if !`has_aprace' {
-        display "Neither apracex nor aprace exists in the dataset."
-    }
-
-    // Create empty placeholders to store column names
-    local cols_for_depvar_1_minority = " "
-    local cols_for_depvar_1_categories = " "
-    local cols_for_depvar_2_minority = " "
-    local cols_for_depvar_2_categories = " "
-
-    forvalues d = 1/2 {
-        forvalues cols = 1/3 {
-            // SET RACIAL MINORITY VARIABLE FOR THIS COLUMN
-            if `cols' == 1 {
-                local racial_minority = "ofcolor"
-                local geofe = "hcity"
-            }
-            else if `cols' == 2 {
-                local racial_minority = "ofcolor othrace"
-                local geofe = "hcity"
-            }
-            else if `cols' == 3 {
-                local racial_minority = "ofcolor othrace"
-                local geofe = "temp_city"
-            }
-
-            // Print the current specification of the model
-            disp as text "Dep. Var. is: " as result "`dependent_var_`d''" 
-            disp as text "Racial Minority specification is: " as result "`racial_minority'"
-            disp as text "City Fixed Effect is: " as result "`geofe'"
-            disp as text "Clustered by: control (a variable representing the trial)"
-
-
-            // ESTIMATE MODELS
-            reghdfe `dependent_var_`d'' `racial_minority' `CONTROL_VARS' `control_var_`d'' if condition_`d', absorb(`ABS_VARS' `geofe') keepsingle cluster(control)
-
-            // Extract number of levels of city variable
-			matrix hdfe = e(dof_table)
-			local num_levels_geofe = hdfe[rowsof(hdfe),1]
-			qui estadd scalar num_cities  =  `num_levels_geofe'
-
-            qui eststo dep_var_`d'_col_`cols'_minority
-            local cols_for_depvar_`d'_minority = " `cols_for_depvar_`d'_minority' dep_var_`d'_col_`cols'_minority "
-
-
-            reghdfe `dependent_var_`d'' i.aprace `CONTROL_VARS' `control_var_`d'' if condition_`d', absorb(`ABS_VARS' `geofe') keepsingle cluster(control)
-
-            // Extract number of levels of city variable
-			matrix hdfe = e(dof_table)
-			local num_levels_geofe = hdfe[rowsof(hdfe),1]
-			qui estadd scalar num_cities  =  `num_levels_geofe'
-
-            qui eststo dep_var_`d'_col_`cols'_categories
-            local cols_for_depvar_`d'_categories = " `cols_for_depvar_`d'_categories' dep_var_`d'_col_`cols'_categories "
-        }
-        disp as text "*******************************************************"
-    }
-
-    /*-------------------------------------*/
-    /*- Export Results to LaTeX and CSV ---*/
-    /*-------------------------------------*/
-
-    forvalues d = 1/2 {
-        // Output the Latex table for the racial minority analyses
-        esttab `cols_for_depvar_`d'_minority' ///
-        using "${OUTPUT}/table`table_number'_dep_var_`d'_minority.tex", ///
-        replace booktabs label ///
-        mgroups("Original Data" "Correct Race Only" "Updated City Name & Correct Race",pattern(1 1 1) ///
-        prefix(\multicolumn{@span}{c}{) suffix(}) span erepeat(\cmidrule(lr){@span})) ///
-        title(Neighbourhood Attributes as `dependent_var_`d'', Clustered at trial) ///
-        alignment(c) page(dcolumn) nomtitle ///
-        cells("b(star fmt(4))" se(par fmt(4)) ci(fmt(4) par)) ///
-        starlevels(* 0.10 ** 0.05 *** 0.01) ///
-        stats(N r2_a num_cities, fmt(0 4 0) ///
-        label("Observations" "Adjusted R$^2$" "Number of Cities")) ///
-        keep(`racial_minority')
-
-        // Output the csv file for the racial minority analyses
-        esttab `cols_for_depvar_`d'_minority' ///
-        using "${OUTPUT}/table`table_number'_dep_var_`d'_minority.csv", ///
-        replace csv label ///
-        mgroups("Original Data" "Correct Race Only" "Updated City Name & Correct Race", pattern(1 1 1)) ///
-        cells("b(star fmt(4))" se(par fmt(4)) ci(fmt(4) par)) ///
-        starlevels(* 0.10 ** 0.05 *** 0.01) ///
-        stats(N r2_a num_cities, fmt(0 4 0) ///
-        labels("Observations" "Adjusted R^2" "Number of Cities")) ///
-        keep(`racial_minority')
-
-        // Output the Latex table for the racial categories analyses
-        esttab `cols_for_depvar_`d'_categories' ///
-        using "${OUTPUT}/table`table_number'_dep_var_`d'_categories.tex", ///
-        replace booktabs label ///
-        mgroups("Original Data" "Correct Race Only" "Updated City Name & Correct Race",pattern(1 1 1) ///
-        prefix(\multicolumn{@span}{c}{) suffix(}) span erepeat(\cmidrule(lr){@span})) ///
-        title(Neighbourhood Attributes as `dependent_var_`d'', Clustered at trial) ///
-        alignment(c) page(dcolumn) nomtitle ///
-        cells("b(star fmt(4))" se(par fmt(4)) ci(fmt(4) par)) ///
-        starlevels(* 0.10 ** 0.05 *** 0.01) ///
-        stats(N r2_a num_cities, fmt(0 4 0) ///
-        label("Observations" "Adjusted R$^2$" "Number of Cities")) ///
-        keep(2.aprace 3.aprace 4.aprace 5.aprace)
-
-        // Output the CSV file for the racial categories analyses
-        esttab `cols_for_depvar_`d'_categories' ///
-        using "${OUTPUT}/table`table_number'_dep_var_`d'_categories.csv", ///
-        replace csv label ///
-        mgroups("Original Data" "Correct Race Only" "Updated City Name & Correct Race", pattern(1 1 1)) ///
-        cells("b(star fmt(4))" se(par fmt(4)) ci(fmt(4) par)) ///
-        starlevels(* 0.10 ** 0.05 *** 0.01) ///
-        stats(N r2_a num_cities, fmt(0 4 0) ///
-        labels("Observations" "Adjusted R^2" "Number of Cities")) ///
-        keep(2.aprace 3.aprace 4.aprace 5.aprace)
-    }
-end
-
-
-
 capture program drop correct_table
 program define correct_table, rclass
     args CONTROL_VARS ABS_VARS dependent_vars control_vars_1 control_vars_2 control_vars_3 control_vars_4 control_vars_5 control_vars_6 table_number analysis_type abs_vars_1 abs_vars_2 abs_vars_3 abs_vars_4 abs_vars_5 abs_vars_6 override
@@ -541,6 +410,18 @@ program define correct_table, rclass
     local all_vars "`all_vars' `unique_controls'"
 
     clean_vars "`all_vars'"
+    normalize_aprace_for_regressions
+
+    if "`analysis_type'" == "corrected" {
+        if "`table_number'" == "5" {
+            apply_hds_fixed_race_spec "race_ad"
+            keep if !inlist(hcity, "", ".", "NA") & !inlist(place_name, "", ".", "NA") & !inlist(county_name, "", ".", "NA")
+        }
+        else {
+            apply_hds_fixed_race_spec "race_rec"
+            keep if !inlist(hcityx, "", ".", "NA") & !inlist(hcity_ad, "", ".", "NA") & !inlist(place_name, "", ".", "NA") & !inlist(county_name, "", ".", "NA")
+        }
+    }
 
     // Create empty placeholder to store column names
     local cols_for_all_regressions = " "
@@ -549,26 +430,6 @@ program define correct_table, rclass
     
     local cols_for_minority ""
     local cols_for_categories ""
-
-    // Normalize aprace/apracex to a single aprace variable (avoid ambiguous abbreviations)
-    local allvars ""
-    capture qui ds
-    if !_rc local allvars "`r(varlist)'"
-    local has_aprace = strpos(" `allvars' ", " aprace ") > 0
-    local has_apracex = strpos(" `allvars' ", " apracex ") > 0
-    if `has_apracex' {
-        if `has_aprace' {
-            drop apracex
-            display "Variable apracex dropped (aprace already exists)."
-        }
-        else {
-            rename apracex aprace
-            display "Variable apracex has been renamed to aprace."
-        }
-    }
-    else if !`has_aprace' {
-        display "Neither apracex nor aprace exists in the dataset."
-    }
 
     forvalues i = 1/`num_regressions' {
         local dependent_var : word `i' of `dependent_vars'
@@ -590,7 +451,7 @@ program define correct_table, rclass
             local geofe = "hcity"
         }
         else if "`analysis_type'" == "corrected" {
-            local racial_minority = "ofcolor othrace"
+            local racial_minority = "ofcolor"
             local geofe = "place_name"
         }
 
@@ -599,12 +460,12 @@ program define correct_table, rclass
         disp as text "Control Vars. are: " as result "`CONTROL_VARS' `control_vars'"
         disp as text "Absorbed Vars. are: " as result "`ABS_VARS' `abs_vars'"
         disp as text "City Fixed Effect is: " as result "`geofe'"
-        disp as text "Clustered by: control (a variable representing the trial)"
+        disp as text "Clustered by: ${POOLED_CLUSTER_DESCRIPTION}"
 
         // ESTIMATE MODELS
         if "`override'" != "override" {
             disp as text "Racial Minority specification is: " as result "`racial_minority'"
-            reghdfe `dependent_var' `racial_minority' `CONTROL_VARS' `control_vars' if condition_`i', absorb(`ABS_VARS' `abs_vars' `geofe') keepsingle cluster(control)
+            reghdfe `dependent_var' `racial_minority' `CONTROL_VARS' `control_vars' if condition_`i', absorb(`ABS_VARS' `abs_vars' `geofe') keepsingle cluster(${POOLED_CLUSTER_VAR})
             
             // Extract number of levels of city variable
             matrix hdfe = e(dof_table)
@@ -614,7 +475,7 @@ program define correct_table, rclass
             qui eststo regression_`i'_minority
             local cols_for_minority = "`cols_for_minority' regression_`i'_minority"
 
-            reghdfe `dependent_var' i.aprace `CONTROL_VARS' `control_vars' if condition_`i', absorb(`ABS_VARS' `abs_vars' `geofe') keepsingle cluster(control)
+            reghdfe `dependent_var' i.aprace `CONTROL_VARS' `control_vars' if condition_`i', absorb(`ABS_VARS' `abs_vars' `geofe') keepsingle cluster(${POOLED_CLUSTER_VAR})
             
             // Extract number of levels of city variable
             matrix hdfe = e(dof_table)
@@ -626,7 +487,7 @@ program define correct_table, rclass
         }
         else {
             disp as text "Override option selected. Estimating model with control variables as primary variables of interest."
-            reghdfe `dependent_var' `control_vars' `CONTROL_VARS' if condition_`i', absorb(`ABS_VARS' `abs_vars' `geofe') keepsingle cluster(control)
+            reghdfe `dependent_var' `control_vars' `CONTROL_VARS' if condition_`i', absorb(`ABS_VARS' `abs_vars' `geofe') keepsingle cluster(${POOLED_CLUSTER_VAR})
             
             // Extract number of levels of city variable
             matrix hdfe = e(dof_table)
@@ -655,7 +516,11 @@ program define correct_table, rclass
 
     if "`override'" != "override" {
         // Determine the keep list based on the analysis type
-        local keep_list_minority = cond("`analysis_type'" == "corrected", "ofcolor othrace", "ofcolor")
+        local keep_list_minority "ofcolor"
+        local keep_list_categories "2.aprace 3.aprace 4.aprace"
+        if "`analysis_type'" != "corrected" {
+            local keep_list_categories "`keep_list_categories' 5.aprace"
+        }
         
         // Output the Latex table for the racial minority analyses
         esttab `cols_for_minority' ///
@@ -663,7 +528,7 @@ program define correct_table, rclass
         replace booktabs label ///
         mgroups(`mgroups_titles', pattern(`mgroups_pattern') ///
         prefix(\multicolumn{@span}{c}{) suffix(}) span erepeat(\cmidrule(lr){@span})) ///
-        title(Multiple Regressions Results - Racial Minority, Clustered at trial) ///
+        title(Multiple Regressions Results - Racial Minority, Clustered at ${POOLED_CLUSTER_LABEL}) ///
         alignment(c) page(dcolumn) nomtitle ///
         cells("b(star fmt(4))" se(par fmt(4)) ci(fmt(4) par)) ///
         starlevels(* 0.10 ** 0.05 *** 0.01) ///
@@ -688,13 +553,13 @@ program define correct_table, rclass
         replace booktabs label ///
         mgroups(`mgroups_titles', pattern(`mgroups_pattern') ///
         prefix(\multicolumn{@span}{c}{) suffix(}) span erepeat(\cmidrule(lr){@span})) ///
-        title(Multiple Regressions Results - Racial Categories, Clustered at trial) ///
+        title(Multiple Regressions Results - Racial Categories, Clustered at ${POOLED_CLUSTER_LABEL}) ///
         alignment(c) page(dcolumn) nomtitle ///
         cells("b(star fmt(4))" se(par fmt(4)) ci(fmt(4) par)) ///
         starlevels(* 0.10 ** 0.05 *** 0.01) ///
         stats(N r2_a num_cities, fmt(0 4 0) ///
         label("Observations" "Adjusted R$^2$" "Number of Cities")) ///
-        keep(2.aprace 3.aprace 4.aprace 5.aprace)
+        keep(`keep_list_categories')
 
         // Output the CSV file for the racial categories analyses
         esttab `cols_for_categories' ///
@@ -705,7 +570,7 @@ program define correct_table, rclass
         starlevels(* 0.10 ** 0.05 *** 0.01) ///
         stats(N r2_a num_cities, fmt(0 4 0) ///
         labels("Observations" "Adjusted R^2" "Number of Cities")) ///
-        keep(2.aprace 3.aprace 4.aprace 5.aprace)
+        keep(`keep_list_categories')
     }
     else {
         // Output the Latex table for the override analyses
@@ -714,7 +579,7 @@ program define correct_table, rclass
         replace booktabs label ///
         mgroups(`mgroups_titles', pattern(`mgroups_pattern') ///
         prefix(\multicolumn{@span}{c}{) suffix(}) span erepeat(\cmidrule(lr){@span})) ///
-        title(Multiple Regressions Results - Override, Clustered at trial) ///
+        title(Multiple Regressions Results - Override, Clustered at ${POOLED_CLUSTER_LABEL}) ///
         alignment(c) page(dcolumn) nomtitle ///
         cells("b(star fmt(4))" se(par fmt(4)) ci(fmt(4) par)) ///
         starlevels(* 0.10 ** 0.05 *** 0.01) ///
@@ -733,369 +598,4 @@ program define correct_table, rclass
         labels("Observations" "Adjusted R^2" "Number of Cities")) ///
         keep(`unique_controls')
     }
-end
-
-
-
-capture program drop run_regressions_col1_only
-program define run_regressions_col1_only, rclass
-    args CONTROL_VARS ABS_VARS dependent_var_1 dependent_var_2 control_var_1 control_var_2 table_number
-
-    local all_vars "`CONTROL_VARS' `ABS_VARS' `dependent_var_1' `dependent_var_2' `control_var_1' `control_var_2'"
-
-    clean_vars "`all_vars'"
-
-    // Normalize race variable name to aprace (avoid ambiguous abbreviations)
-    local allvars ""
-    capture qui ds
-    if !_rc local allvars "`r(varlist)'"
-    local has_aprace = strpos(" `allvars' ", " aprace ") > 0
-    local has_apracex = strpos(" `allvars' ", " apracex ") > 0
-    if `has_apracex' {
-        if `has_aprace' {
-            drop apracex
-            display "Variable apracex dropped (aprace already exists)."
-        }
-        else {
-            rename apracex aprace
-            display "Variable apracex has been renamed to aprace."
-        }
-    }
-    else if !`has_aprace' {
-        display "Neither apracex nor aprace exists in the dataset."
-    }
-
-    // Create empty placeholders to store column names
-    local cols_for_depvar_1_minority = " "
-	local cols_for_depvar_1_categories = " "
-    local cols_for_depvar_2_minority = " "
-    local cols_for_depvar_2_categories = " "
-	
-
-    forvalues d = 1/2 {
-		// the local `cols' will be the identifier for later estout
-        forvalues cols = 1/1 {
-			
-                local racial_minority = "ofcolor"
-				if `table_number' == 5 {
-                local geofe = "hcity"
-				}
-				else {
-				local geofe = "hcityx"
-				}
-
-            // Print the current specification of the model
-            disp as text "Dep. Var. is: " as result "`dependent_var_`d''" 
-            disp as text "Racial Minority specification is: " as result "`racial_minority'"
-            disp as text "City Fixed Effect is: " as result "`geofe'"
-            disp as text "Clustered by: control (a variable representing the trial)"
-
-
-            // ESTIMATE MODELS
-			if `table_number' == 13 {
-			reghdfe `dependent_var_`d'' `racial_minority' `CONTROL_VARS' `control_var_`d'' if condition_`d', absorb(`ABS_VARS' `geofe') keepsingle
-			}
-			else {
-            reghdfe `dependent_var_`d'' `racial_minority' `CONTROL_VARS' `control_var_`d'' if condition_`d', absorb(`ABS_VARS' `geofe') keepsingle cluster(control)
-			}
-
-            // Extract number of levels of city variable
-			matrix hdfe = e(dof_table)
-			local num_levels_geofe = hdfe[rowsof(hdfe),1]
-			qui estadd scalar num_cities  =  `num_levels_geofe'
-
-            qui eststo dep_var_`d'_col_`cols'_minority
-            local cols_for_depvar_`d'_minority = " `cols_for_depvar_`d'_minority' dep_var_`d'_col_`cols'_minority "
-			
-			if `table_number' == 13{
-			reghdfe `dependent_var_`d'' i.aprace `CONTROL_VARS' `control_var_`d'' if condition_`d', absorb(`ABS_VARS' `geofe') keepsingle
-			}
-			else {
-            reghdfe `dependent_var_`d'' i.aprace `CONTROL_VARS' `control_var_`d'' if condition_`d', absorb(`ABS_VARS' `geofe') keepsingle cluster(control)
-			}
-
-            // Extract number of levels of city variable
-			matrix hdfe = e(dof_table)
-			local num_levels_geofe = hdfe[rowsof(hdfe),1]
-			qui estadd scalar num_cities  =  `num_levels_geofe'
-
-            qui eststo dep_var_`d'_col_`cols'_categories
-            local cols_for_depvar_`d'_categories = " `cols_for_depvar_`d'_categories' `dep_var_`d'_col_`cols'_categories' "
-
-        }
-        disp as text "*******************************************************"
-    }
-end
-
-
-capture program drop run_regressions_col23_only
-program define run_regressions_col23_only, rclass
-    args CONTROL_VARS ABS_VARS dependent_var_1 dependent_var_2 control_var_1 control_var_2 table_number
-
-    local all_vars "`CONTROL_VARS' `ABS_VARS' `dependent_var_1' `dependent_var_2' `control_var_1' `control_var_2'"
-
-    clean_vars "`all_vars'"
-
-    // Normalize race variable name to aprace (avoid ambiguous abbreviations)
-    local allvars ""
-    capture qui ds
-    if !_rc local allvars "`r(varlist)'"
-    local has_aprace = strpos(" `allvars' ", " aprace ") > 0
-    local has_apracex = strpos(" `allvars' ", " apracex ") > 0
-    if `has_apracex' {
-        if `has_aprace' {
-            drop apracex
-            display "Variable apracex dropped (aprace already exists)."
-        }
-        else {
-            rename apracex aprace
-            display "Variable apracex has been renamed to aprace."
-        }
-    }
-    else if !`has_aprace' {
-        display "Neither apracex nor aprace exists in the dataset."
-    }
-
-	if `table_number' > 5 {
-		keep if !inlist(hcityx, "", ".", "NA") & !inlist(hcity_ad, "", ".", "NA") & !inlist(place_name, "", ".", "NA") & !inlist(county_name, "", ".", "NA")
-	}
-	else {
-		keep if !inlist(hcity, "", ".", "NA") & !inlist(place_name, "", ".", "NA") & !inlist(county_name, "", ".", "NA")
-	}
-	
-    forvalues d = 1/2 {
-		// the local `cols' will be the identifier for later estout
-        forvalues cols = 2/3 {
-			if `cols'==2{
-                local racial_minority = "ofcolor othrace"
-				if `table_number'==5{
-                local geofe = "hcity"
-				}
-				else {
-					local geofe = "hcityx"
-				}
-			}
-			if `cols'==3{
-				local racial_minority = "ofcolor othrace"
-                local geofe = "temp_city"
-			}
-            // Print the current specification of the model
-            disp as text "Dep. Var. is: " as result "`dependent_var_`d''" 
-            disp as text "Racial Minority specification is: " as result "`racial_minority'"
-            disp as text "City Fixed Effect is: " as result "`geofe'"
-            disp as text "Clustered by: control (a variable representing the trial)"
-
-
-            // ESTIMATE MODELS
-            reghdfe `dependent_var_`d'' `racial_minority' `CONTROL_VARS' `control_var_`d'' if condition_`d', absorb(`ABS_VARS' `geofe') keepsingle cluster(control)
-
-            // Extract number of levels of city variable
-			matrix hdfe = e(dof_table)
-			local num_levels_geofe = hdfe[rowsof(hdfe),1]
-			qui estadd scalar num_cities  =  `num_levels_geofe'
-
-            qui eststo dep_var_`d'_col_`cols'_minority
-            local cols_for_depvar_`d'_minority = " `cols_for_depvar_`d'_minority' `dep_var_`d'_col_`cols'_minority' "
-            
-			reghdfe `dependent_var_`d'' i.aprace `CONTROL_VARS' `control_var_`d'' if condition_`d', absorb(`ABS_VARS' `geofe') keepsingle cluster(control)
-
-            // Extract number of levels of city variable
-			matrix hdfe = e(dof_table)
-			local num_levels_geofe = hdfe[rowsof(hdfe),1]
-			qui estadd scalar num_cities  =  `num_levels_geofe'
-
-            qui eststo dep_var_`d'_col_`cols'_categories
-            local cols_for_depvar_`d'_categories = " `cols_for_depvar_`d'_categories' `dep_var_`d'_col_`cols'_categories' "
-        }
-        disp as text "*******************************************************"
-    }
-end
-
-
-capture program drop run_regressions_col456_only
-program define run_regressions_col456_only, rclass
-    args CONTROL_VARS ABS_VARS dependent_var_1 dependent_var_2 control_var_1 control_var_2 table_number
-
-    local all_vars "`CONTROL_VARS' `ABS_VARS' `dependent_var_1' `dependent_var_2' `control_var_1' `control_var_2'"
-
-    clean_vars "`all_vars'"
-
-    // Normalize race variable name to aprace (avoid ambiguous abbreviations)
-    local allvars ""
-    capture qui ds
-    if !_rc local allvars "`r(varlist)'"
-    local has_aprace = strpos(" `allvars' ", " aprace ") > 0
-    local has_apracex = strpos(" `allvars' ", " apracex ") > 0
-    if `has_apracex' {
-        if `has_aprace' {
-            drop apracex
-            display "Variable apracex dropped (aprace already exists)."
-        }
-        else {
-            rename apracex aprace
-            display "Variable apracex has been renamed to aprace."
-        }
-    }
-    else if !`has_aprace' {
-        display "Neither apracex nor aprace exists in the dataset."
-    }
-
-	if `table_number' > 5 {
-		keep if !inlist(hcityx, "", ".", "NA") & !inlist(hcity_ad, "", ".", "NA") & !inlist(place_name, "", ".", "NA") & !inlist(county_name, "", ".", "NA")
-	}
-	else {
-		keep if !inlist(hcity, "", ".", "NA") & !inlist(place_name, "", ".", "NA") & !inlist(county_name, "", ".", "NA")
-	}
-	
-    forvalues d = 1/2 {
-		// the local `cols' will be the identifier for later estout
-        forvalues cols = 4/6 {
-			if `cols'==4{
-                local racial_minority = "ofcolor othrace"
-                local geofe = "temp_city"
-			}
-			if `cols'==5{
-				local racial_minority = "ofcolor othrace"
-                local geofe = "place_name"
-			}
-			if `cols'==6{
-				local racial_minority = "ofcolor othrace"
-                local geofe = "county_name"
-			}
-            // Print the current specification of the model
-            disp as text "Dep. Var. is: " as result "`dependent_var_`d''" 
-            disp as text "Racial Minority specification is: " as result "`racial_minority'"
-            disp as text "City Fixed Effect is: " as result "`geofe'"
-            disp as text "Clustered by: control (a variable representing the trial)"
-
-
-            // ESTIMATE MODELS
-            reghdfe `dependent_var_`d'' `racial_minority' `CONTROL_VARS' `control_var_`d'' if condition_`d', absorb(`ABS_VARS' `geofe') keepsingle cluster(control)
-
-            // Extract number of levels of city variable
-			matrix hdfe = e(dof_table)
-			local num_levels_geofe = hdfe[rowsof(hdfe),1]
-			qui estadd scalar num_cities  =  `num_levels_geofe'
-			
-            qui eststo dep_var_`d'_col_`cols'_minority
-            local cols_for_depvar_`d'_minority = " `cols_for_depvar_`d'_minority' `dep_var_`d'_col_`cols'_minority' "
-			//di "`cols_for_depvar_`d'_minority'"
-
-            reghdfe `dependent_var_`d'' i.aprace `CONTROL_VARS' `control_var_`d'' if condition_`d', absorb(`ABS_VARS' `geofe') keepsingle cluster(control)
-
-            // Extract number of levels of city variable
-			matrix hdfe = e(dof_table)
-			local num_levels_geofe = hdfe[rowsof(hdfe),1]
-			qui estadd scalar num_cities  =  `num_levels_geofe'
-
-            qui eststo dep_var_`d'_col_`cols'_categories
-            local cols_for_depvar_`d'_categories = " `cols_for_depvar_`d'_categories' `dep_var_`d'_col_`cols'_categories' "
-			//di "`cols_for_depvar_`d'_categories'"
-        }
-        disp as text "*******************************************************"
-    }
-end
-
-
-
-capture program drop run_regressions_export_tables
-program define run_regressions_export_tables, rclass
-	args table_number dep_1 dep_2
-	
-	/*-------------------------------------*/
-    /*- Export Results to LaTeX and CSV ---*/
-    /*-------------------------------------*/
-
-	
-	local racial_minority "ofcolor othrace"
-    forvalues d = 1/2 {
-
-		local dependent_var_`d' `dep_`d''
-	
-        // Output the Latex table for the racial minority analyses
-        esttab ///
-		dep_var_`d'_col_1_minority ///
-		dep_var_`d'_col_2_minority ///
-		dep_var_`d'_col_3_minority ///
-		dep_var_`d'_col_4_minority ///
-		dep_var_`d'_col_5_minority ///
-		dep_var_`d'_col_6_minority ///
-        using "${OUTPUT}/table`table_number'_dep_var_`d'_minority.tex", ///
-        replace booktabs label ///
-        mgroups("Original Data" "Correct Race Only" "Updated City Name \& Correct Race" "Proper City Name \& Correct Race" "Place Name \& Correct Race" "County Name \& Correct Race",pattern(1 1 1 1 1 1) ///
-        prefix(\multicolumn{@span}{c}{) suffix(}) span erepeat(\cmidrule(lr){@span})) ///
-        title(Neighbourhood Attributes as `dependent_var_`d'', Clustered at trial) ///
-        alignment(c) page(dcolumn) nomtitle ///
-        cells("b(star fmt(4))" se(par fmt(4)) ci(fmt(4) par)) ///
-        starlevels(* 0.10 ** 0.05 *** 0.01) ///
-        stats(N r2_a num_cities, fmt(0 4 0) ///
-        label("Observations" "Adjusted R$^2$" "Number of Cities")) ///
-        keep(`racial_minority')
-		
-		
-		// Output the LaTeX table for the racial minority analyses
-		esttab ///
-		dep_var_`d'_col_1_minority ///
-		dep_var_`d'_col_2_minority ///
-		dep_var_`d'_col_3_minority ///
-		dep_var_`d'_col_4_minority ///
-		dep_var_`d'_col_5_minority ///
-		dep_var_`d'_col_6_minority ///
-        using "${OUTPUT}/table`table_number'_dep_var_`d'_minority.csv", ///
-        replace csv label ///
-        mgroups("Original Data" "Correct Race Only" "Updated City Name \& Correct Race" "Proper City Name \& Correct Race" "Place Name \& Correct Race" "County Name \& Correct Race",pattern(1 1 1 1 1 1)) ///
-        cells("b(star fmt(4))" se(par fmt(4)) ci(fmt(4) par)) ///
-        starlevels(* 0.10 ** 0.05 *** 0.01) ///
-        stats(N r2_a num_cities, fmt(0 4 0) ///
-        labels("Observations" "Adjusted R^2" "Number of Cities")) ///
-        keep(`racial_minority')
-		
-		
-        // Output the Latex table for the racial categories analyses
-        esttab ///
-		dep_var_`d'_col_1_categories ///
-		dep_var_`d'_col_2_categories ///
-		dep_var_`d'_col_3_categories ///
-		dep_var_`d'_col_4_categories ///
-		dep_var_`d'_col_5_categories ///
-		dep_var_`d'_col_6_categories ///
-        using "${OUTPUT}/table`table_number'_dep_var_`d'_categories.tex", ///
-        replace booktabs label ///
-        mgroups("Original Data" "Correct Race Only" "Updated City Name \& Correct Race" "Proper City Name \& Correct Race" "Place Name \& Correct Race" "County Name \& Correct Race",pattern(1 1 1 1 1 1) ///
-        prefix(\multicolumn{@span}{c}{) suffix(}) span erepeat(\cmidrule(lr){@span})) ///
-        title(Neighbourhood Attributes as `dependent_var_`d'', Clustered at trial) ///
-        alignment(c) page(dcolumn) nomtitle ///
-        cells("b(star fmt(4))" se(par fmt(4)) ci(fmt(4) par)) ///
-        starlevels(* 0.10 ** 0.05 *** 0.01) ///
-        stats(N r2_a num_cities, fmt(0 4 0) ///
-        label("Observations" "Adjusted R$^2$" "Number of Cities")) ///
-        keep(2.aprace 3.aprace 4.aprace 5.aprace)
-
-		
-		// Ouput the CSV table for the racial categories analyses
-		esttab ///
-		dep_var_`d'_col_1_categories ///
-		dep_var_`d'_col_2_categories ///
-		dep_var_`d'_col_3_categories ///
-		dep_var_`d'_col_4_categories ///
-		dep_var_`d'_col_5_categories ///
-		dep_var_`d'_col_6_categories ///
-        using "${OUTPUT}/table`table_number'_dep_var_`d'_categories.csv", ///
-        replace csv label ///
-        mgroups("Original Data" "Correct Race Only" "Updated City Name \& Correct Race" "Proper City Name \& Correct Race" "Place Name \& Correct Race" "County Name \& Correct Race",pattern(1 1 1 1 1 1)) ///
-        cells("b(star fmt(4))" se(par fmt(4)) ci(fmt(4) par)) ///
-        starlevels(* 0.10 ** 0.05 *** 0.01) ///
-        stats(N r2_a num_cities, fmt(0 4 0) ///
-        labels("Observations" "Adjusted R^2" "Number of Cities")) ///
-        keep(2.aprace 3.aprace 4.aprace 5.aprace)
-    }
-end
-
-
-capture program drop process_data_nodedup
-program define process_data_nodedup
-    // Legacy wrapper retained for compatibility. Non-deduplicated inputs should
-    // now be passed in explicitly as `*_with_duplicates.csv` files.
-    args data_file force_clean corrected hcity_source cleaned_tag
-    process_data "`data_file'" "`force_clean'" "`corrected'" "`hcity_source'" "`cleaned_tag'"
 end

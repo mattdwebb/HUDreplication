@@ -22,10 +22,10 @@ format_num <- function(x, digits = 3) {
 
 write_city_fe_geometry_tex <- function(data, output_path) {
   dataset_labels <- c(
-    adsprocessed = "Advertised-home file (Table 5)",
-    census = "Census",
-    testscores = "Test Scores",
-    names = "Names"
+    adsprocessed = "\\shortstack[l]{Advertised-home file\\\\(Table 5)}",
+    census = "\\shortstack[l]{Census file\\\\(Tables 6--9, 10B--13)}",
+    testscores = "\\shortstack[l]{Test-score file\\\\(Table 10A)}",
+    names = "\\shortstack[l]{Names file\\\\(Table 14)}"
   )
 
   table_data <- data %>%
@@ -35,12 +35,12 @@ write_city_fe_geometry_tex <- function(data, output_path) {
     "\\begin{table}[htbp]",
     "\\centering",
     "\\caption{City fixed-effect geometry before and after city-name cleaning}",
-    "\\resizebox{\\textwidth}{!}{%",
-    "\\begin{tabular}{lrrrrrrrrrrrrr}",
+    "\\label{tab:city_fe_geometry}",
+    "\\footnotesize",
+    "\\setlength{\\tabcolsep}{3pt}",
+    "\\begin{tabular}{lrrrrrr}",
     "\\toprule",
-    " & & \\multicolumn{2}{c}{White Unique FEs} & \\multicolumn{2}{c}{Minority Unique FEs} & \\multicolumn{2}{c}{Mixed FE Groups} & \\multicolumn{2}{c}{White-only FE Groups} & \\multicolumn{2}{c}{Minority-only FE Groups} & \\multicolumn{2}{c}{Rows in Mixed FE Groups}\\\\",
-    "\\cmidrule(lr){3-4}\\cmidrule(lr){5-6}\\cmidrule(lr){7-8}\\cmidrule(lr){9-10}\\cmidrule(lr){11-12}\\cmidrule(lr){13-14}",
-    "Dataset & Rows & Before & After & Before & After & Before & After & Before & After & Before & After & Before & After\\\\",
+    "Dataset & Rows & \\shortstack{Total\\\\FEs} & \\shortstack{No Minority\\\\FEs} & \\shortstack{No White\\\\FEs} & \\shortstack{Mixed\\\\FEs} & \\shortstack{Rows in\\\\Mixed FEs}\\\\",
     "\\midrule"
   )
 
@@ -51,18 +51,11 @@ write_city_fe_geometry_tex <- function(data, output_path) {
       paste(
         row$dataset_label,
         format_int(row$rows),
-        format_int(row$white_unique_fes_before),
-        format_int(row$white_unique_fes_after),
-        format_int(row$minority_unique_fes_before),
-        format_int(row$minority_unique_fes_after),
-        format_int(row$mixed_groups_before),
-        format_int(row$mixed_groups_after),
-        format_int(row$white_only_groups_before),
-        format_int(row$white_only_groups_after),
-        format_int(row$minority_only_groups_before),
-        format_int(row$minority_only_groups_after),
-        format_int(row$rows_in_mixed_groups_before),
-        format_int(row$rows_in_mixed_groups_after),
+        paste0(format_int(row$groups_before), " $\\to$ ", format_int(row$groups_after)),
+        paste0(format_int(row$white_only_groups_before), " $\\to$ ", format_int(row$white_only_groups_after)),
+        paste0(format_int(row$minority_only_groups_before), " $\\to$ ", format_int(row$minority_only_groups_after)),
+        paste0(format_int(row$mixed_groups_before), " $\\to$ ", format_int(row$mixed_groups_after)),
+        paste0(format_int(row$rows_in_mixed_groups_before), " $\\to$ ", format_int(row$rows_in_mixed_groups_after)),
         sep = " & "
       ) |> paste0("\\\\")
     )
@@ -71,8 +64,10 @@ write_city_fe_geometry_tex <- function(data, output_path) {
   lines <- c(
     lines,
     "\\bottomrule",
-    "\\end{tabular}%",
-    "}",
+    "\\end{tabular}",
+    "\\begin{minipage}{0.95\\textwidth}",
+    "\\footnotesize \\textit{Notes:} Entries after the row-count column show before $\\to$ after city-name cleaning. ``No Minority FEs'' are fixed-effect cells containing white testers only; ``No White FEs'' are fixed-effect cells containing minority testers only.",
+    "\\end{minipage}",
     "\\end{table}"
   )
 
@@ -81,22 +76,28 @@ write_city_fe_geometry_tex <- function(data, output_path) {
 
 write_city_mixed_cell_tex <- function(data, output_path) {
   cell_labels <- c(
-    mixed_before_only = "Mixed before cleaning only",
-    mixed_before_plus_newly_attached = "Mixed before cleaning plus newly attached raw labels",
-    purely_newly_mixed_after_cleaning = "Purely newly mixed after cleaning"
+    mixed_before_cleaning = "\\shortstack[l]{Mixed FEs\\\\before cleaning}",
+    retained_mixed_after_cleaning = "\\shortstack[l]{Previously mixed FEs\\\\after cleaning}",
+    newly_mixed_after_cleaning = "\\shortstack[l]{Newly mixed FEs\\\\after cleaning}"
   )
 
   table_data <- data %>%
-    mutate(cell_label = unname(cell_labels[cell_type]))
+    mutate(
+      cell_type = factor(cell_type, levels = names(cell_labels)),
+      cell_label = unname(cell_labels[as.character(cell_type)])
+    ) %>%
+    arrange(cell_type)
 
   lines <- c(
     "\\begin{table}[htbp]",
     "\\centering",
-    "\\caption{Characteristics of mixed city cells in the Census file after city-name cleaning}",
-    "\\resizebox{\\textwidth}{!}{%",
-    "\\begin{tabular}{lrrrrrrrrrrr}",
+    "\\caption{Characteristics of mixed city fixed-effect cells before and after city-name cleaning}",
+    "\\label{tab:mixed_cell_summary}",
+    "\\footnotesize",
+    "\\setlength{\\tabcolsep}{3pt}",
+    "\\begin{tabular}{lrrrrrrr}",
     "\\toprule",
-    "Cell type & Cells & Rows & Median rows / cell & Median raw labels / cell & Median block groups / cell & Share single block group & Median places / cell & Share single place & Share single county & Weighted white-share gap & Weighted income gap\\\\",
+    "Cell group & Cells & Rows & \\shortstack{Median block\\\\groups / FE} & \\shortstack{Share single\\\\place} & \\shortstack{Share single\\\\county} & \\shortstack{White-share\\\\gap} & \\shortstack{Income\\\\gap}\\\\",
     "\\midrule"
   )
 
@@ -108,14 +109,10 @@ write_city_mixed_cell_tex <- function(data, output_path) {
         row$cell_label,
         format_int(row$cells),
         format_int(row$rows),
-        format_int(row$median_rows_per_cell),
-        format_int(row$median_raw_labels_per_cell),
-        format_int(row$median_blockgroups_per_cell),
-        format_pct(row$share_single_blockgroup),
-        format_int(row$median_places_per_cell),
+        format_num(row$median_blockgroups_per_cell, 1),
         format_pct(row$share_single_place),
         format_pct(row$share_single_county),
-        format_num(row$weighted_gap_whitehi_rec, 3),
+        format_num(row$weighted_gap_w2012pc_rec, 3),
         format_int(row$weighted_gap_medincome_rec),
         sep = " & "
       ) |> paste0("\\\\")
@@ -125,14 +122,16 @@ write_city_mixed_cell_tex <- function(data, output_path) {
   lines <- c(
     lines,
     "\\bottomrule",
-    "\\end{tabular}%",
-    "}",
+    "\\end{tabular}",
+    "\\vspace{0.5em}",
+    "\\begin{minipage}{0.95\\textwidth}",
+    "\\footnotesize \\textit{Notes:} White-share and income gaps are weighted averages of minority-minus-white differences within mixed fixed-effect cells, weighted by the number of observations in the cell. White share is measured using \\texttt{w2012pc\\_rec}.",
+    "\\end{minipage}",
     "\\end{table}"
   )
 
   writeLines(lines, output_path)
 }
-
 if (basename(repo_root) != "HUDreplication") {
   stop("Run this script from the HUDreplication repository root")
 }
@@ -726,6 +725,7 @@ canonical_retained_pairs <- canonical_status %>%
   select(CONTROL, TESTERID)
 
 ads_final_rows <- nrow(read.csv(adsprocessed_processed_path, stringsAsFactors = FALSE, check.names = FALSE))
+ads_tester_trial_collapse_drop <- nrow(ads_address_for_dedup) - nrow(pair_meta_for_dedup)
 ads_no_unique_drop <- sum(canonical_status$status == "dropped_unresolved_advertised_home")
 
 duplicate_cleanup_summary <- tibble(
@@ -733,6 +733,7 @@ duplicate_cleanup_summary <- tibble(
   original_rows = nrow(ads_source_for_dedup),
   exact_duplicates_removed = dedup_log_processed$dropped[dedup_log_processed$step == "adsprocessed"],
   key_based_dedup_removed = dedup_log_processed$dropped[dedup_log_processed$step == "adsprocessed address key"],
+  tester_trial_collapse_removed = ads_tester_trial_collapse_drop,
   no_unique_advertised_home = ads_no_unique_drop,
   missing_city_drop = nrow(canonical_retained_pairs) - ads_final_rows,
   final_rows = ads_final_rows
@@ -777,6 +778,7 @@ for (i in seq_len(nrow(hud_dedup_specs))) {
       original_rows = nrow(hud_source),
       exact_duplicates_removed = dedup_log_processed$dropped[dedup_log_processed$step == exact_step],
       key_based_dedup_removed = dedup_log_processed$dropped[dedup_log_processed$step == key_step],
+      tester_trial_collapse_removed = 0L,
       no_unique_advertised_home = no_unique_drop,
       missing_city_drop = nrow(hud_after_key) - no_unique_drop - final_rows,
       final_rows = final_rows
@@ -803,9 +805,9 @@ duplicate_cleanup_lines <- c(
   "\\caption{Rows removed by the corrected pooled-file cleaning procedure}",
   "\\label{tab:duplicate_cleanup_summary}",
   "\\resizebox{\\textwidth}{!}{%",
-  "\\begin{tabular}{lrrrrrr}",
+  "\\begin{tabular}{lrrrrrrr}",
   "\\toprule",
-  "Dataset & Original rows & Exact duplicates removed & Key-based dedup removed & No unique advertised home & Missing city drop & Final rows\\\\",
+  "Dataset & Original rows & Exact duplicates removed & Key-based dedup removed & Tester-trial collapse & No unique advertised home & Missing city drop & Final rows\\\\",
   "\\midrule"
 )
 
@@ -818,6 +820,7 @@ for (i in seq_len(nrow(duplicate_cleanup_summary))) {
       format_int(row$original_rows),
       format_int(row$exact_duplicates_removed),
       format_int(row$key_based_dedup_removed),
+      format_int(row$tester_trial_collapse_removed),
       format_int(row$no_unique_advertised_home),
       format_int(row$missing_city_drop),
       format_int(row$final_rows),
@@ -832,7 +835,7 @@ duplicate_cleanup_lines <- c(
   "\\end{tabular}%",
   "}",
   "\\begin{minipage}{\\textwidth}",
-  "\\footnotesize Notes: Exact duplicates are computed after ignoring index-like columns. Key-based deduplication uses normalized advertised-home addresses for \\texttt{adsprocessed} and recommended-home characteristics for the pooled files. The advertised-home ambiguity column counts unresolved \\texttt{CONTROL}$\\times$\\texttt{TESTERID} pairs for \\texttt{adsprocessed} and rows lost at that step for the pooled files.",
+  "\\footnotesize Notes: Exact duplicates are computed after ignoring index-like columns. Key-based deduplication uses normalized advertised-home addresses for \\texttt{adsprocessed} and recommended-home characteristics for the pooled files. Tester-trial collapse applies to \\texttt{adsprocessed}, where repeated retained advertised-home rows are aggregated to one \\texttt{CONTROL}$\\times$\\texttt{TESTERID} record. The advertised-home ambiguity column counts unresolved \\texttt{CONTROL}$\\times$\\texttt{TESTERID} pairs for \\texttt{adsprocessed} and rows lost at that step for the pooled files.",
   "\\end{minipage}",
   "\\end{table}"
 )
@@ -1084,10 +1087,10 @@ for (dataset_name in c("names", "testscores")) {
     raw_final_rows = sum(pair_row_counts$final_rows),
     expected_source_cross_rows = round(sum(pair_row_counts$expected_source_cross_rows, na.rm = TRUE)),
     total_extra_rows_over_source_cross = round(sum(pair_row_counts$extra_rows_over_source_cross, na.rm = TRUE)),
-    positive_extra_rows_over_source_cross = round(sum(pmax(pair_row_counts$extra_rows_over_source_cross, 0), na.rm = TRUE)),
+    actual_positive_extra_rows_over_source_cross = round(sum(pmax(pair_row_counts$extra_rows_over_source_cross, 0), na.rm = TRUE)),
     extra_rows_from_fourfold_expansion = round(sum(fourfold_pairs$extra_rows_over_source_cross, na.rm = TRUE)),
     share_positive_extra_rows_from_fourfold_expansion =
-      extra_rows_from_fourfold_expansion / positive_extra_rows_over_source_cross
+      extra_rows_from_fourfold_expansion / actual_positive_extra_rows_over_source_cross
   )
 }
 
@@ -1095,7 +1098,7 @@ fourfold_summary <- bind_rows(fourfold_summary)
 
 cat("\n\nFourfold row-expansion check for Names and Test Scores:\n")
 cat("=========================================================\n\n")
-print(fourfold_summary)
+print(as.data.frame(fourfold_summary), row.names = FALSE)
 
 
 # ---- Duplicate-row race balance and treatment-gap diagnostics ----------------
@@ -1847,42 +1850,51 @@ raw_mixed_flags <- census_city_data %>%
   group_by(raw_city) %>%
   summarise(raw_city_mixed = n_distinct(ofcolor) > 1, .groups = "drop")
 
-temp_mixed_flags <- census_city_data %>%
-  group_by(temp_city) %>%
-  summarise(temp_city_mixed = n_distinct(ofcolor) > 1, .groups = "drop")
-
-census_temp_city_components <- census_city_data %>%
+census_raw_mixed_cells <- census_city_data %>%
   left_join(raw_mixed_flags, by = "raw_city") %>%
-  left_join(temp_mixed_flags, by = "temp_city")
+  filter(raw_city_mixed) %>%
+  mutate(
+    cell_type = "mixed_before_cleaning",
+    cell_id = raw_city
+  )
 
-census_temp_city_types <- census_temp_city_components %>%
-  group_by(temp_city, temp_city_mixed) %>%
+temp_city_types <- census_city_data %>%
+  left_join(raw_mixed_flags, by = "raw_city") %>%
+  group_by(temp_city) %>%
   summarise(
+    temp_city_mixed = n_distinct(ofcolor) > 1,
     any_mixed_raw_component = any(raw_city_mixed, na.rm = TRUE),
-    any_unmixed_raw_component = any(!raw_city_mixed, na.rm = TRUE),
     .groups = "drop"
   ) %>%
   mutate(
     cell_type = case_when(
-      !temp_city_mixed ~ "not_identifying_after_cleaning",
-      any_mixed_raw_component & any_unmixed_raw_component ~ "mixed_before_plus_newly_attached",
-      any_mixed_raw_component & !any_unmixed_raw_component ~ "mixed_before_only",
-      !any_mixed_raw_component & any_unmixed_raw_component ~ "purely_newly_mixed_after_cleaning",
+      temp_city_mixed & any_mixed_raw_component ~ "retained_mixed_after_cleaning",
+      temp_city_mixed & !any_mixed_raw_component ~ "newly_mixed_after_cleaning",
       TRUE ~ "not_identifying_after_cleaning"
     )
   )
 
-census_city_cells <- census_temp_city_components %>%
-  select(-temp_city_mixed) %>%
-  left_join(
-    census_temp_city_types %>% select(temp_city, cell_type),
-    by = "temp_city"
-  )
+census_after_mixed_cells <- census_city_data %>%
+  left_join(temp_city_types %>% select(temp_city, cell_type), by = "temp_city") %>%
+  filter(cell_type %in% c(
+    "retained_mixed_after_cleaning",
+    "newly_mixed_after_cleaning"
+  )) %>%
+  mutate(cell_id = temp_city)
+
+census_mixed_cells_for_summary <- bind_rows(
+  census_raw_mixed_cells %>%
+    select(cell_type, cell_id, control, ofcolor, blkgrp, place_name, county_name,
+           w2012pc_rec, medincome_rec),
+  census_after_mixed_cells %>%
+    select(cell_type, cell_id, control, ofcolor, blkgrp, place_name, county_name,
+           w2012pc_rec, medincome_rec)
+)
 
 summarize_weighted_gap <- function(data, outcome_var) {
   outcome_data <- data %>%
     filter(!is.na(.data[[outcome_var]])) %>%
-    group_by(cell_type, temp_city, ofcolor) %>%
+    group_by(cell_type, cell_id, ofcolor) %>%
     summarise(
       outcome_mean = mean(.data[[outcome_var]], na.rm = TRUE),
       rows = n(),
@@ -1908,16 +1920,10 @@ summarize_weighted_gap <- function(data, outcome_var) {
   outcome_data
 }
 
-census_cell_structure <- census_city_cells %>%
-  filter(cell_type %in% c(
-    "mixed_before_only",
-    "mixed_before_plus_newly_attached",
-    "purely_newly_mixed_after_cleaning"
-  )) %>%
-  group_by(cell_type, temp_city) %>%
+census_cell_structure <- census_mixed_cells_for_summary %>%
+  group_by(cell_type, cell_id) %>%
   summarise(
     rows_in_cell = n(),
-    raw_labels_per_cell = n_distinct(raw_city),
     blockgroups_per_cell = n_distinct(blkgrp),
     places_per_cell = n_distinct(place_name),
     counties_per_cell = n_distinct(county_name),
@@ -1927,19 +1933,21 @@ census_cell_structure <- census_city_cells %>%
   summarise(
     cells = n(),
     rows = sum(rows_in_cell),
-    median_rows_per_cell = median(rows_in_cell),
-    median_raw_labels_per_cell = median(raw_labels_per_cell),
     median_blockgroups_per_cell = median(blockgroups_per_cell),
-    share_single_blockgroup = mean(blockgroups_per_cell == 1),
-    median_places_per_cell = median(places_per_cell),
     share_single_place = mean(places_per_cell == 1),
     share_single_county = mean(counties_per_cell == 1),
     .groups = "drop"
   )
 
 census_mixed_cell_summary <- census_cell_structure %>%
-  left_join(summarize_weighted_gap(census_city_cells, "whitehi_rec"), by = "cell_type") %>%
-  left_join(summarize_weighted_gap(census_city_cells, "medincome_rec"), by = "cell_type")
+  left_join(summarize_weighted_gap(census_mixed_cells_for_summary, "w2012pc_rec"), by = "cell_type") %>%
+  left_join(summarize_weighted_gap(census_mixed_cells_for_summary, "medincome_rec"), by = "cell_type") %>%
+  mutate(cell_type = factor(cell_type, levels = c(
+    "mixed_before_cleaning",
+    "retained_mixed_after_cleaning",
+    "newly_mixed_after_cleaning"
+  ))) %>%
+  arrange(cell_type)
 
 write.csv(
   census_mixed_cell_summary,
@@ -1955,27 +1963,20 @@ cat("\n\nCensus mixed-cell comparison before and after city cleaning:\n")
 cat("=========================================================\n\n")
 print(census_mixed_cell_summary)
 
-census_mixed_cell_console_examples <- census_city_cells %>%
-  filter(cell_type %in% c(
-    "mixed_before_only",
-    "mixed_before_plus_newly_attached",
-    "purely_newly_mixed_after_cleaning"
-  )) %>%
-  group_by(cell_type, temp_city) %>%
+census_mixed_cell_console_examples <- census_mixed_cells_for_summary %>%
+  group_by(cell_type, cell_id) %>%
   summarise(
     rows = n(),
-    raw_labels_per_cell = n_distinct(raw_city),
-    raw_labels = paste(head(sort(unique(raw_city)), 8), collapse = " | "),
     blockgroups_per_cell = n_distinct(blkgrp),
     places_per_cell = n_distinct(place_name),
     controls = n_distinct(control),
     .groups = "drop"
   ) %>%
-  arrange(cell_type, desc(rows), desc(raw_labels_per_cell)) %>%
+  arrange(cell_type, desc(rows), desc(blockgroups_per_cell)) %>%
   group_by(cell_type) %>%
   slice_head(n = 8) %>%
   ungroup()
 
-cat("\n\nIllustrative cleaned city cells by overlap type:\n")
-cat("=========================================================\n\n")
+cat("\n\nIllustrative city fixed-effect cells by comparison type:\n")
+cat("========================================================\n\n")
 print(census_mixed_cell_console_examples)

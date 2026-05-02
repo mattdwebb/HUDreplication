@@ -118,6 +118,20 @@ Pooled outputs are written to:
 
 The meta-analysis figure script is separate. After setting the repository root in `Pooled_Analysis/main.do`, run `do "${CODE}/meta_analysis.do"` from Stata if the meta-analysis figure needs to be regenerated. This writes `meta_analysis_p_values.pdf` and `meta_analysis_p_values.png` to `Pooled_Analysis/Output`.
 
+### Optional: market-clustered pooled tables
+
+To regenerate the pooled tables with standard errors clustered at the market level rather than the trial level, run:
+
+- `Pooled_Analysis/market_clustered_tables.do`
+
+This driver re-runs the pooled comparison tables and both sets of full appendix tables using the same point-estimate specifications as the trial-clustered pooled analysis, changing only the clustering level. Outputs are written to:
+
+- `Pooled_Analysis/Output/market_clustered/comparison_tables`
+- `Pooled_Analysis/Output/market_clustered/corrected_full`
+- `Pooled_Analysis/Output/market_clustered/original_full`
+- `Pooled_Analysis/Output/market_clustered/Corrected Tables`
+- `Pooled_Analysis/Output/market_clustered/Original Tables`
+
 ## Paired-Tester Workflow
 
 ### Step 1: Clean and merge paired-tester data
