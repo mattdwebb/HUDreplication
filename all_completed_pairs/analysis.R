@@ -6,15 +6,15 @@ library(haven)
 
 repo_root <- normalizePath(getwd(), winslash = "/", mustWork = TRUE)
 
-# Search upward for a directory containing "Paired_Tester_Analysis"
-while (!dir.exists(file.path(repo_root, "Paired_Tester_Analysis")) && repo_root != dirname(repo_root)) {
+# Search upward for a directory containing "all_completed_pairs"
+while (!dir.exists(file.path(repo_root, "all_completed_pairs")) && repo_root != dirname(repo_root)) {
   repo_root <- dirname(repo_root)
 }
 
 setwd(repo_root)
 
 args <- commandArgs(trailingOnly = TRUE)
-cluster_level <- Sys.getenv("MATCHED_PAIR_CLUSTER", "trial")
+cluster_level <- Sys.getenv("ALL_COMPLETED_PAIRS_CLUSTER", "trial")
 if (cluster_level == "") cluster_level <- "trial"
 if (any(args %in% c("market", "--cluster=market", "--market-clustering"))) {
   cluster_level <- "market"
@@ -29,13 +29,13 @@ cluster_note <- if (cluster_level == "market") {
 }
 
 data_dir <- file.path(repo_root, "Data")
-paired_generated_dir <- file.path(data_dir, "Generated", "Paired_Tester_Analysis")
+all_completed_pairs_generated_dir <- file.path(data_dir, "Generated", "all_completed_pairs")
 if (cluster_level == "market") {
-  tables_dir <- file.path(repo_root, "Paired_Tester_Analysis", "market_clustering", "Tables")
-  appendix_tables_dir <- file.path(repo_root, "Paired_Tester_Analysis", "market_clustering", "Appendix_Tables")
+  tables_dir <- file.path(repo_root, "all_completed_pairs", "market_clustering", "Tables")
+  appendix_tables_dir <- file.path(repo_root, "all_completed_pairs", "market_clustering", "Appendix_Tables")
 } else {
-  tables_dir <- file.path(repo_root, "Paired_Tester_Analysis", "Tables")
-  appendix_tables_dir <- file.path(repo_root, "Paired_Tester_Analysis", "Appendix_Tables")
+  tables_dir <- file.path(repo_root, "all_completed_pairs", "Tables")
+  appendix_tables_dir <- file.path(repo_root, "all_completed_pairs", "Appendix_Tables")
 }
 
 dir.create(tables_dir, showWarnings = FALSE, recursive = TRUE)
@@ -68,22 +68,30 @@ rank_warning_handler <- function(w) {
 }
 
 withCallingHandlers({
+valid_controls <- c(
+    "was_first_visitor", "am_indicator_first", "month", "ARELATE2",
+    "THHEGAI", "TPEGAI", "THIGHEDU", "TCURTENR", "ALGNCUR",
+    "AELNG1", "DPMTEXP", "AMOVERS", "age", "ALEASETP", "ACAROWN"
+)
+valid_controls_fml <- paste(valid_controls, collapse = " + ")
+valid_control_factors <- setdiff(valid_controls, "age")
+
+appointment_valid_controls <- c(
+    "visit_order", "am_indicator", setdiff(valid_controls, c("was_first_visitor", "am_indicator_first"))
+)
+appointment_valid_controls_fml <- paste(appointment_valid_controls, collapse = " + ")
+appointment_valid_control_factors <- setdiff(appointment_valid_controls, "age")
+
 current_table <- "Table 5"
 
 # Import the data
-data <- read.csv(file.path(paired_generated_dir, "sales_and_tester_merged.csv")) %>%
+data <- read.csv(file.path(all_completed_pairs_generated_dir, "sales_and_tester_merged.csv")) %>%
     restrict_to_official_pass() %>%
     filter(
         !is.na(STOTUNIT_TOTAL) & 
         !is.na(SAVLBAD_ANY) &
         !is.na(RACE) &
-        !is.na(was_first_visitor) &
-        !is.na(am_indicator_first) &
-        !is.na(TPEGAI) &
-        !is.na(THHEGAI) &
-        !is.na(TSEX) &
-        !is.na(age) &
-        !is.na(THIGHEDU)
+        if_all(all_of(valid_controls), ~ !is.na(.))
     ) %>%
     group_by(CONTROL) %>%
     filter(n_distinct(TESTERID) == 2) %>%
@@ -91,12 +99,8 @@ data <- read.csv(file.path(paired_generated_dir, "sales_and_tester_merged.csv"))
     mutate(
         RACE = as.factor(RACE),
         CONTROL = as.factor(CONTROL),
-        am_indicator_first = as.factor(am_indicator_first),
-        TPEGAI = as.factor(TPEGAI),
-        THHEGAI = as.factor(THHEGAI),
-        TSEX = as.factor(TSEX),
-        age = as.numeric(age),
-        THIGHEDU = as.factor(THIGHEDU)
+        across(all_of(valid_control_factors), as.factor),
+        age = as.numeric(age)
     ) %>%
     mutate(
         site = as.factor(substr(as.character(CONTROL), 1, 2)),
@@ -109,29 +113,35 @@ data <- read.csv(file.path(paired_generated_dir, "sales_and_tester_merged.csv"))
 summary(data$RACE)
 
 # Run regressions with felm
-recommended_total_races <- felm(STOTUNIT_TOTAL ~ RACE + was_first_visitor + am_indicator_first +
-                         TPEGAI + THHEGAI + TSEX + age + THIGHEDU | 
-                         CONTROL | 0 | cluster_group, data = data)
+recommended_total_races <- felm(
+    as.formula(paste("STOTUNIT_TOTAL ~ RACE +", valid_controls_fml, "| CONTROL | 0 | cluster_group")),
+    data = data
+)
 
-available_any_races <- felm(SAVLBAD_ANY ~ RACE + was_first_visitor + am_indicator_first +
-                         TPEGAI + THHEGAI + TSEX + age + THIGHEDU | 
-                         CONTROL | 0 | cluster_group, data = data)
+available_any_races <- felm(
+    as.formula(paste("SAVLBAD_ANY ~ RACE +", valid_controls_fml, "| CONTROL | 0 | cluster_group")),
+    data = data
+)
 
-recommended_total_ofcolor <- felm(STOTUNIT_TOTAL ~ ofcolor + was_first_visitor + am_indicator_first +
-                         TPEGAI + THHEGAI + TSEX + age + THIGHEDU | 
-                         CONTROL | 0 | cluster_group, data = data)
+recommended_total_ofcolor <- felm(
+    as.formula(paste("STOTUNIT_TOTAL ~ ofcolor +", valid_controls_fml, "| CONTROL | 0 | cluster_group")),
+    data = data
+)
 
-available_any_ofcolor <- felm(SAVLBAD_ANY ~ ofcolor + was_first_visitor + am_indicator_first +
-                         TPEGAI + THHEGAI + TSEX + age + THIGHEDU | 
-                         CONTROL | 0 | cluster_group, data = data)
+available_any_ofcolor <- felm(
+    as.formula(paste("SAVLBAD_ANY ~ ofcolor +", valid_controls_fml, "| CONTROL | 0 | cluster_group")),
+    data = data
+)
 
-second_appointment_races <- felm(got_second_appointment ~ RACE + was_first_visitor + am_indicator_first +
-                         TPEGAI + THHEGAI + TSEX + age + THIGHEDU | 
-                         CONTROL | 0 | cluster_group, data = data)
+second_appointment_races <- felm(
+    as.formula(paste("got_second_appointment ~ RACE +", valid_controls_fml, "| CONTROL | 0 | cluster_group")),
+    data = data
+)
 
-second_appointment_ofcolor <- felm(got_second_appointment ~ ofcolor + was_first_visitor + am_indicator_first +
-                         TPEGAI + THHEGAI + TSEX + age + THIGHEDU | 
-                         CONTROL | 0 | cluster_group, data = data)
+second_appointment_ofcolor <- felm(
+    as.formula(paste("got_second_appointment ~ ofcolor +", valid_controls_fml, "| CONTROL | 0 | cluster_group")),
+    data = data
+)
 
 first_appointment_data <- data %>%
     filter(!is.na(SAVLBAD_FIRST)) %>%
@@ -139,13 +149,15 @@ first_appointment_data <- data %>%
     filter(n_distinct(TESTERID) == 2) %>%
     ungroup()
 
-available_first_races <- felm(SAVLBAD_FIRST ~ RACE + was_first_visitor + am_indicator_first +
-                         TPEGAI + THHEGAI + TSEX + age + THIGHEDU | 
-                         CONTROL | 0 | cluster_group, data = first_appointment_data)
+available_first_races <- felm(
+    as.formula(paste("SAVLBAD_FIRST ~ RACE +", valid_controls_fml, "| CONTROL | 0 | cluster_group")),
+    data = first_appointment_data
+)
 
-available_first_ofcolor <- felm(SAVLBAD_FIRST ~ ofcolor + was_first_visitor + am_indicator_first +
-                         TPEGAI + THHEGAI + TSEX + age + THIGHEDU | 
-                         CONTROL | 0 | cluster_group, data = first_appointment_data)
+available_first_ofcolor <- felm(
+    as.formula(paste("SAVLBAD_FIRST ~ ofcolor +", valid_controls_fml, "| CONTROL | 0 | cluster_group")),
+    data = first_appointment_data
+)
 
 # Display summaries of previous models
 summary(recommended_total_races)
@@ -158,19 +170,13 @@ summary(available_first_races)
 summary(available_first_ofcolor)
 
 # Alternate specification keeping each appointment as a separate row
-appointments_data <- read.csv(file.path(paired_generated_dir, "sales_and_tester_appointments.csv"))  %>%
+appointments_data <- read.csv(file.path(all_completed_pairs_generated_dir, "sales_and_tester_appointments.csv"))  %>%
     restrict_to_official_pass() %>%
     filter(
         !is.na(STOTUNIT) &
         !is.na(SAVLBAD_BINARY) &
         !is.na(RACE) &
-        !is.na(visit_order) &
-        !is.na(am_indicator) &
-        !is.na(TPEGAI) &
-        !is.na(THHEGAI) &
-        !is.na(TSEX) &
-        !is.na(age) &
-        !is.na(THIGHEDU)
+        if_all(all_of(appointment_valid_controls), ~ !is.na(.))
     ) %>%
     group_by(CONTROL) %>%
     filter(n_distinct(TESTERID) == 2) %>%
@@ -178,13 +184,8 @@ appointments_data <- read.csv(file.path(paired_generated_dir, "sales_and_tester_
     mutate(
         RACE = as.factor(RACE),
         CONTROL = as.factor(CONTROL),
-        visit_order = as.factor(visit_order),
-        am_indicator = as.factor(am_indicator),
-        TPEGAI = as.factor(TPEGAI),
-        THHEGAI = as.factor(THHEGAI),
-        TSEX = as.factor(TSEX),
-        age = as.numeric(age),
-        THIGHEDU = as.factor(THIGHEDU)
+        across(all_of(appointment_valid_control_factors), as.factor),
+        age = as.numeric(age)
     ) %>%
     mutate(
         site = as.factor(substr(as.character(CONTROL), 1, 2)),
@@ -194,21 +195,25 @@ appointments_data <- read.csv(file.path(paired_generated_dir, "sales_and_tester_
 
 
 # Run regressions with felm for appointments data
-recommended_apps_races <- felm(STOTUNIT ~ RACE + visit_order + am_indicator +
-                         TPEGAI + THHEGAI + TSEX + age + THIGHEDU | 
-                         CONTROL | 0 | cluster_group, data = appointments_data)
+recommended_apps_races <- felm(
+    as.formula(paste("STOTUNIT ~ RACE +", appointment_valid_controls_fml, "| CONTROL | 0 | cluster_group")),
+    data = appointments_data
+)
 
-available_apps_races <- felm(SAVLBAD_BINARY ~ RACE + visit_order + am_indicator +
-                        TPEGAI + THHEGAI + TSEX + age + THIGHEDU | 
-                        CONTROL | 0 | cluster_group, data = appointments_data)
+available_apps_races <- felm(
+    as.formula(paste("SAVLBAD_BINARY ~ RACE +", appointment_valid_controls_fml, "| CONTROL | 0 | cluster_group")),
+    data = appointments_data
+)
 
-recommended_apps_ofcolor <- felm(STOTUNIT ~ ofcolor + visit_order + am_indicator +
-                         TPEGAI + THHEGAI + TSEX + age + THIGHEDU | 
-                         CONTROL | 0 | cluster_group, data = appointments_data)
+recommended_apps_ofcolor <- felm(
+    as.formula(paste("STOTUNIT ~ ofcolor +", appointment_valid_controls_fml, "| CONTROL | 0 | cluster_group")),
+    data = appointments_data
+)
 
-available_apps_ofcolor <- felm(SAVLBAD_BINARY ~ ofcolor + visit_order + am_indicator +
-                        TPEGAI + THHEGAI + TSEX + age + THIGHEDU | 
-                        CONTROL | 0 | cluster_group, data = appointments_data)
+available_apps_ofcolor <- felm(
+    as.formula(paste("SAVLBAD_BINARY ~ ofcolor +", appointment_valid_controls_fml, "| CONTROL | 0 | cluster_group")),
+    data = appointments_data
+)
 
 # Display results for appointments analysis
 summary(recommended_apps_races)
@@ -217,8 +222,8 @@ summary(recommended_apps_ofcolor)
 summary(available_apps_ofcolor)
 
 sample_summary <- data.frame(
-    paired_rows = nrow(data),
-    paired_controls = length(unique(data$CONTROL)),
+    all_completed_pairs_rows = nrow(data),
+    all_completed_pairs_controls = length(unique(data$CONTROL)),
     appointment_rows = nrow(appointments_data),
     appointment_controls = length(unique(appointments_data$CONTROL))
 )
@@ -282,6 +287,7 @@ table_specs <- list(
         race = get_race_rows(recommended_total_races, race_vars),
         minority_model = recommended_total_ofcolor,
         race_model = recommended_total_races,
+        white_mean = mean(data$STOTUNIT_TOTAL[as.character(data$RACE) == "1"], na.rm = TRUE),
         trials = length(unique(data$CONTROL))
     ),
     list(
@@ -290,6 +296,7 @@ table_specs <- list(
         race = get_race_rows(available_any_races, race_vars),
         minority_model = available_any_ofcolor,
         race_model = available_any_races,
+        white_mean = mean(data$SAVLBAD_ANY[as.character(data$RACE) == "1"], na.rm = TRUE),
         trials = length(unique(data$CONTROL))
     ),
     list(
@@ -298,6 +305,7 @@ table_specs <- list(
         race = get_race_rows(second_appointment_races, race_vars),
         minority_model = second_appointment_ofcolor,
         race_model = second_appointment_races,
+        white_mean = mean(data$got_second_appointment[as.character(data$RACE) == "1"], na.rm = TRUE),
         trials = length(unique(data$CONTROL))
     ),
     list(
@@ -306,14 +314,16 @@ table_specs <- list(
         race = get_race_rows(recommended_apps_races, race_vars),
         minority_model = recommended_apps_ofcolor,
         race_model = recommended_apps_races,
+        white_mean = mean(appointments_data$STOTUNIT[as.character(appointments_data$RACE) == "1"], na.rm = TRUE),
         trials = length(unique(appointments_data$CONTROL))
     ),
     list(
-        label = "Ad Property Available\\\\First Substantive Appointment",
+        label = "Ad Property Available\\\\First Appointment",
         minority = extract_coef_info(available_first_ofcolor, "ofcolor"),
         race = get_race_rows(available_first_races, race_vars),
         minority_model = available_first_ofcolor,
         race_model = available_first_races,
+        white_mean = mean(first_appointment_data$SAVLBAD_FIRST[as.character(first_appointment_data$RACE) == "1"], na.rm = TRUE),
         trials = length(unique(first_appointment_data$CONTROL))
     )
 )
@@ -365,6 +375,8 @@ latex_table <- function(rows) {
         if (row %% 3 == 0 && row < nrow(rows)) cat("[1ex]\n")
     }
     cat("\\midrule\n")
+    cat(sprintf("Comparison mean (white)      &%s\\\\\n",
+        paste(sprintf("%.3f", sapply(table_specs, function(spec) spec$white_mean)), collapse = "&")))
     cat(sprintf("Observations      &%s\\\\\n",
         paste(sapply(table_specs, function(spec) spec$minority_model$N), collapse = "&")))
     cat(sprintf("Adjusted R$^2$ (Minority)      &%s\\\\\n",
@@ -374,6 +386,7 @@ latex_table <- function(rows) {
     cat(sprintf("Number of Trials      &%s\\\\\n",
         paste(sapply(table_specs, function(spec) spec$trials), collapse = "&")))
     cat("\\bottomrule\n")
+    cat("\\multicolumn{6}{l}{\\footnotesize Comparison mean (white) is the raw mean for white testers in the corresponding estimation sample.}\\\\\n")
     cat("\\multicolumn{6}{l}{\\footnotesize ", cluster_note, "}\\\\\n", sep = "")
     cat("\\multicolumn{6}{l}{\\footnotesize \\sym{*} \\(p<0.10\\), \\sym{**} \\(p<0.05\\), \\sym{***} \\(p<0.01\\)}\\\\\n")
     cat("\\end{tabular}\n}\n\\end{table}\n")
@@ -392,18 +405,13 @@ write_table(file.path(tables_dir, "table5.tex"), latex_table(table_rows))
 # TABLES 6–12 (PAIRED-TESTER DESIGN)
 # =================================================================================================== #
 
-cleaned_data <- read.csv(file.path(paired_generated_dir, "cleaned_hds.csv")) %>%
+cleaned_data <- read.csv(file.path(all_completed_pairs_generated_dir, "cleaned_hds.csv")) %>%
   restrict_to_official_pass() %>%
   mutate(
     RACE = as.factor(RACE),
     CONTROL = as.factor(CONTROL),
-    am_indicator_first = as.factor(am_indicator_first),
-    TSEX = as.factor(TSEX),
     TSEX_num = as.numeric(as.character(TSEX)),
-    THHEGAI = as.factor(THHEGAI),
-    TPEGAI = as.factor(TPEGAI),
-    THIGHEDU = as.factor(THIGHEDU),
-    TCURTENR = as.factor(TCURTENR),
+    across(all_of(valid_control_factors), as.factor),
     age = as.numeric(age),
     ofcolor = ifelse(RACE %in% c(2, 3, 4), 1, 0),
     kids = as.numeric(kids),
@@ -412,28 +420,37 @@ cleaned_data <- read.csv(file.path(paired_generated_dir, "cleaned_hds.csv")) %>%
     cluster_group = if (cluster_level == "market") site else CONTROL
   )
 
-base_covariates <- c("was_first_visitor", "am_indicator_first", "TSEX", "THHEGAI", "TPEGAI", "THIGHEDU", "TCURTENR", "age")
+base_covariates <- valid_controls
 base_covariates_fml <- paste(base_covariates, collapse = " + ")
-base_covariates_mom <- setdiff(base_covariates, "TSEX")
+base_covariates_mom <- base_covariates
 base_covariates_mom_fml <- paste(base_covariates_mom, collapse = " + ")
 race_share_controls <- c("percent_white", "percent_black", "percent_hispanic", "percent_asian")
 race_share_controls_fml <- paste(race_share_controls, collapse = " + ")
 
 current_table <- "Table 6"
 
-paired_filter <- function(df) {
+completed_pair_filter <- function(df) {
   df %>%
     group_by(CONTROL) %>%
     filter(n_distinct(TESTERID) == 2) %>%
     ungroup()
 }
 
-prep_table_data <- function(df, outcome_vars, extra_vars = character(), paired = TRUE) {
+prep_table_data <- function(df, outcome_vars, extra_vars = character(), require_completed_pair = TRUE) {
   required_vars <- unique(c(outcome_vars, "RACE", base_covariates, extra_vars))
   out <- df %>%
     filter(if_all(all_of(required_vars), ~ !is.na(.)))
-  if (paired) out <- paired_filter(out)
+  if (require_completed_pair) out <- completed_pair_filter(out)
   out
+}
+
+comparison_mean_note <- "Comparison mean (white) is the raw mean for white testers in the corresponding estimation sample."
+
+comparison_mean_white <- function(outcomes, data_list, transform = identity) {
+  mapply(function(outcome, df) {
+    outcome_values <- transform(df[[outcome]])
+    mean(outcome_values[as.character(df$RACE) == "1"], na.rm = TRUE)
+  }, outcomes, data_list)
 }
 
 star_code <- function(p) {
@@ -564,9 +581,16 @@ build_model_group_rows <- function(model_groups, outcome_labels, coef_names,
 }
 
 latex_table_multi <- function(rows, outcome_labels, caption, label,
-                              models_minority, models_race, n_trials) {
+                              models_minority, models_race, n_trials,
+                              stat_lines = NULL, note_lines = NULL) {
   n_cols <- length(outcome_labels)
   n_trials_vals <- if (length(n_trials) == 1) rep(n_trials, n_cols) else n_trials
+  if (is.null(note_lines)) {
+    note_lines <- c(
+      cluster_note,
+      "\\sym{*} \\(p<0.10\\), \\sym{**} \\(p<0.05\\), \\sym{***} \\(p<0.01\\)"
+    )
+  }
   cat("\\begin{table}[p]\n\\centering\n")
   cat("\\def\\sym#1{\\ifmmode^{#1}\\else\\(^{#1}\\)\\fi}\n")
   cat(sprintf("\\caption{%s}\n", caption))
@@ -582,6 +606,15 @@ latex_table_multi <- function(rows, outcome_labels, caption, label,
   apply(rows, 1, function(r) cat(paste(r, collapse = " & "), " \\\\\n"))
 
   cat("\\midrule\n")
+  if (!is.null(stat_lines) && length(stat_lines) > 0) {
+    for (stat_label in names(stat_lines)) {
+      stat_vals <- stat_lines[[stat_label]]
+      if (length(stat_vals) == 1) stat_vals <- rep(stat_vals, n_cols)
+      cat(stat_label)
+      for (val in stat_vals) cat(sprintf(" & %s", val))
+      cat("\\\\\n")
+    }
+  }
   cat("Observations")
   for (j in seq_along(models_minority)) cat(sprintf(" & %s", fint(models_minority[[j]]$N)))
   cat("\\\\\n")
@@ -595,16 +628,25 @@ latex_table_multi <- function(rows, outcome_labels, caption, label,
   for (j in seq_along(models_minority)) cat(sprintf(" & %s", fint(n_trials_vals[j])))
   cat("\\\\\n")
   cat("\\bottomrule\n")
-  cat("\\multicolumn{", n_cols + 1,
-      "}{l}{\\footnotesize ", cluster_note, "}\\\\\n", sep = "")
-  cat("\\multicolumn{", n_cols + 1,
-      "}{l}{\\footnotesize \\sym{*} \\(p<0.10\\), \\sym{**} \\(p<0.05\\), \\sym{***} \\(p<0.01\\)}\\\\\n", sep = "")
+  if (!is.null(note_lines) && length(note_lines) > 0) {
+    for (note in note_lines) {
+      cat("\\multicolumn{", n_cols + 1,
+          "}{l}{\\footnotesize ", note, "}\\\\\n", sep = "")
+    }
+  }
   cat("\\end{tabular}%\n")
   cat("}\n\\end{table}\n")
 }
 
-latex_table_race_only <- function(rows, outcome_labels, caption, label, models, n_trials) {
+latex_table_race_only <- function(rows, outcome_labels, caption, label, models, n_trials,
+                                  stat_lines = NULL, note_lines = NULL) {
   n_cols <- length(outcome_labels)
+  if (is.null(note_lines)) {
+    note_lines <- c(
+      cluster_note,
+      "\\sym{*} \\(p<0.10\\), \\sym{**} \\(p<0.05\\), \\sym{***} \\(p<0.01\\)"
+    )
+  }
   cat("\\begin{table}[p]\n\\centering\n")
   cat("\\def\\sym#1{\\ifmmode^{#1}\\else\\(^{#1}\\)\\fi}\n")
   cat(sprintf("\\caption{%s}\n", caption))
@@ -620,6 +662,15 @@ latex_table_race_only <- function(rows, outcome_labels, caption, label, models, 
   apply(rows, 1, function(r) cat(paste(r, collapse = " & "), " \\\\\n"))
 
   cat("\\midrule\n")
+  if (!is.null(stat_lines) && length(stat_lines) > 0) {
+    for (stat_label in names(stat_lines)) {
+      stat_vals <- stat_lines[[stat_label]]
+      if (length(stat_vals) == 1) stat_vals <- rep(stat_vals, n_cols)
+      cat(stat_label)
+      for (val in stat_vals) cat(sprintf(" & %s", val))
+      cat("\\\\\n")
+    }
+  }
   cat("Observations")
   for (j in seq_along(models)) cat(sprintf(" & %s", fint(models[[j]]$N)))
   cat("\\\\\n")
@@ -630,10 +681,12 @@ latex_table_race_only <- function(rows, outcome_labels, caption, label, models, 
   for (j in seq_along(models)) cat(sprintf(" & %s", fint(n_trials)))
   cat("\\\\\n")
   cat("\\bottomrule\n")
-  cat("\\multicolumn{", n_cols + 1,
-      "}{l}{\\footnotesize ", cluster_note, "}\\\\\n", sep = "")
-  cat("\\multicolumn{", n_cols + 1,
-      "}{l}{\\footnotesize \\sym{*} \\(p<0.10\\), \\sym{**} \\(p<0.05\\), \\sym{***} \\(p<0.01\\)}\\\\\n", sep = "")
+  if (!is.null(note_lines) && length(note_lines) > 0) {
+    for (note in note_lines) {
+      cat("\\multicolumn{", n_cols + 1,
+          "}{l}{\\footnotesize ", note, "}\\\\\n", sep = "")
+    }
+  }
   cat("\\end{tabular}%\n")
   cat("}\n\\end{table}\n")
 }
@@ -700,6 +753,7 @@ table6_models_minority <- Map(function(outcome, df) {
   felm(fml, data = df)
 }, table6_outcomes, table6_data_list)
 table6_n_trials <- sapply(table6_data_list, function(df) length(unique(df$CONTROL)))
+table6_white_means <- comparison_mean_white(table6_outcomes, table6_data_list)
 
 table6_rows <- build_rows(
   table6_models_minority,
@@ -715,14 +769,20 @@ write_table(
     label = "tab:table6",
     models_minority = table6_models_minority,
     models_race = table6_models_race,
-    n_trials = table6_n_trials
+    n_trials = table6_n_trials,
+    stat_lines = list("Comparison mean (white)" = sprintf("%.3f", table6_white_means)),
+    note_lines = c(
+      comparison_mean_note,
+      cluster_note,
+      "\\sym{*} \\(p<0.10\\), \\sym{**} \\(p<0.05\\), \\sym{***} \\(p<0.01\\)"
+    )
   )
 )
 
 # ----- Table 7: Discriminatory Steering and Neighborhood Racial Composition by Income -----
 current_table <- "Table 7"
 table7_outcomes <- c("WhiteHI_Rec", "WhiteMI_Rec", "WhiteLI_Rec")
-table7_labels <- c("High Income", "Middle Income", "Low Income")
+table7_labels <- c("White High-Income", "White Middle-Income", "White Low-Income")
 table7_data_list <- lapply(table7_outcomes, function(outcome) {
   prep_table_data(cleaned_data, c(outcome))
 })
@@ -736,6 +796,7 @@ table7_models_minority <- Map(function(outcome, df) {
   felm(fml, data = df)
 }, table7_outcomes, table7_data_list)
 table7_n_trials <- sapply(table7_data_list, function(df) length(unique(df$CONTROL)))
+table7_white_means <- comparison_mean_white(table7_outcomes, table7_data_list)
 
 table7_rows <- build_rows(table7_models_minority, table7_models_race, table7_labels)
 write_table(
@@ -747,7 +808,13 @@ write_table(
     label = "tab:table7",
     models_minority = table7_models_minority,
     models_race = table7_models_race,
-    n_trials = table7_n_trials
+    n_trials = table7_n_trials,
+    stat_lines = list("Comparison mean (white)" = sprintf("%.3f", table7_white_means)),
+    note_lines = c(
+      comparison_mean_note,
+      cluster_note,
+      "\\sym{*} \\(p<0.10\\), \\sym{**} \\(p<0.05\\), \\sym{***} \\(p<0.01\\)"
+    )
   )
 )
 
@@ -768,6 +835,7 @@ table8a_models_minority <- Map(function(outcome, df) {
   felm(fml, data = df)
 }, table8a_outcomes, table8a_data_list)
 table8a_n_trials <- sapply(table8a_data_list, function(df) length(unique(df$CONTROL)))
+table8a_white_means <- comparison_mean_white(table8a_outcomes, table8a_data_list)
 
 table8a_rows <- build_rows(table8a_models_minority, table8a_models_race, table8a_labels)
 write_table(
@@ -779,7 +847,13 @@ write_table(
     label = "tab:table8a",
     models_minority = table8a_models_minority,
     models_race = table8a_models_race,
-    n_trials = table8a_n_trials
+    n_trials = table8a_n_trials,
+    stat_lines = list("Comparison mean (white)" = sprintf("%.3f", table8a_white_means)),
+    note_lines = c(
+      comparison_mean_note,
+      cluster_note,
+      "\\sym{*} \\(p<0.10\\), \\sym{**} \\(p<0.05\\), \\sym{***} \\(p<0.01\\)"
+    )
   )
 )
 
@@ -799,6 +873,7 @@ table8b_models_minority <- Map(function(outcome, df) {
   felm(fml, data = df)
 }, table8b_outcomes, table8b_data_list)
 table8b_n_trials <- sapply(table8b_data_list, function(df) length(unique(df$CONTROL)))
+table8b_white_means <- comparison_mean_white(table8b_outcomes, table8b_data_list)
 
 table8b_rows <- build_rows(table8b_models_minority, table8b_models_race, table8b_labels)
 write_table(
@@ -810,7 +885,13 @@ write_table(
     label = "tab:table8b",
     models_minority = table8b_models_minority,
     models_race = table8b_models_race,
-    n_trials = table8b_n_trials
+    n_trials = table8b_n_trials,
+    stat_lines = list("Comparison mean (white)" = sprintf("%.3f", table8b_white_means)),
+    note_lines = c(
+      comparison_mean_note,
+      cluster_note,
+      "\\sym{*} \\(p<0.10\\), \\sym{**} \\(p<0.05\\), \\sym{***} \\(p<0.01\\)"
+    )
   )
 )
 
@@ -831,6 +912,7 @@ table9_models_minority <- Map(function(outcome, df) {
   felm(fml, data = df)
 }, table9_outcomes, table9_data_list)
 table9_n_trials <- sapply(table9_data_list, function(df) length(unique(df$CONTROL)))
+table9_white_means <- comparison_mean_white(table9_outcomes, table9_data_list)
 
 table9_rows <- build_rows(table9_models_minority, table9_models_race, table9_labels)
 write_table(
@@ -842,7 +924,13 @@ write_table(
     label = "tab:table9a",
     models_minority = table9_models_minority,
     models_race = table9_models_race,
-    n_trials = table9_n_trials
+    n_trials = table9_n_trials,
+    stat_lines = list("Comparison mean (white)" = sprintf("%.3f", table9_white_means)),
+    note_lines = c(
+      comparison_mean_note,
+      cluster_note,
+      "\\sym{*} \\(p<0.10\\), \\sym{**} \\(p<0.05\\), \\sym{***} \\(p<0.01\\)"
+    )
   )
 )
 
@@ -850,7 +938,7 @@ current_table <- "Table 9B"
 table9_mom_data_list <- lapply(table9_outcomes, function(outcome) {
   prep_table_data(cleaned_data, c(outcome)) %>%
     filter(mother == 1) %>%
-    paired_filter()
+    completed_pair_filter()
 })
 table9_mom_models_race <- Map(function(outcome, df) {
   fml <- as.formula(paste(outcome, "~ RACE +", base_covariates_mom_fml, "| CONTROL | 0 | cluster_group"))
@@ -861,6 +949,7 @@ table9_mom_models_minority <- Map(function(outcome, df) {
   felm(fml, data = df)
 }, table9_outcomes, table9_mom_data_list)
 table9_mom_n_trials <- sapply(table9_mom_data_list, function(df) length(unique(df$CONTROL)))
+table9_mom_white_means <- comparison_mean_white(table9_outcomes, table9_mom_data_list)
 
 table9_mom_rows <- build_rows(table9_mom_models_minority, table9_mom_models_race, table9_labels)
 write_table(
@@ -872,7 +961,13 @@ write_table(
     label = "tab:table9b",
     models_minority = table9_mom_models_minority,
     models_race = table9_mom_models_race,
-    n_trials = table9_mom_n_trials
+    n_trials = table9_mom_n_trials,
+    stat_lines = list("Comparison mean (white)" = sprintf("%.3f", table9_mom_white_means)),
+    note_lines = c(
+      comparison_mean_note,
+      cluster_note,
+      "\\sym{*} \\(p<0.10\\), \\sym{**} \\(p<0.05\\), \\sym{***} \\(p<0.01\\)"
+    )
   )
 )
 
@@ -883,7 +978,7 @@ table10a_labels <- table8a_labels
 table10a_data_list <- lapply(table10a_outcomes, function(outcome) {
   prep_table_data(cleaned_data, c(outcome)) %>%
     filter(mother == 1) %>%
-    paired_filter()
+    completed_pair_filter()
 })
 
 table10a_models_race <- Map(function(outcome, df) {
@@ -895,6 +990,7 @@ table10a_models_minority <- Map(function(outcome, df) {
   felm(fml, data = df)
 }, table10a_outcomes, table10a_data_list)
 table10a_n_trials <- sapply(table10a_data_list, function(df) length(unique(df$CONTROL)))
+table10a_white_means <- comparison_mean_white(table10a_outcomes, table10a_data_list)
 
 table10a_rows <- build_rows(table10a_models_minority, table10a_models_race, table10a_labels)
 write_table(
@@ -906,7 +1002,13 @@ write_table(
     label = "tab:table10a",
     models_minority = table10a_models_minority,
     models_race = table10a_models_race,
-    n_trials = table10a_n_trials
+    n_trials = table10a_n_trials,
+    stat_lines = list("Comparison mean (white)" = sprintf("%.3f", table10a_white_means)),
+    note_lines = c(
+      comparison_mean_note,
+      cluster_note,
+      "\\sym{*} \\(p<0.10\\), \\sym{**} \\(p<0.05\\), \\sym{***} \\(p<0.01\\)"
+    )
   )
 )
 
@@ -916,7 +1018,7 @@ table10b_labels <- table8b_labels
 table10b_data_list <- lapply(table10b_outcomes, function(outcome) {
   prep_table_data(cleaned_data, c(outcome)) %>%
     filter(mother == 1) %>%
-    paired_filter()
+    completed_pair_filter()
 })
 
 table10b_models_race <- Map(function(outcome, df) {
@@ -928,6 +1030,7 @@ table10b_models_minority <- Map(function(outcome, df) {
   felm(fml, data = df)
 }, table10b_outcomes, table10b_data_list)
 table10b_n_trials <- sapply(table10b_data_list, function(df) length(unique(df$CONTROL)))
+table10b_white_means <- comparison_mean_white(table10b_outcomes, table10b_data_list)
 
 table10b_rows <- build_rows(table10b_models_minority, table10b_models_race, table10b_labels)
 write_table(
@@ -939,7 +1042,13 @@ write_table(
     label = "tab:table10b",
     models_minority = table10b_models_minority,
     models_race = table10b_models_race,
-    n_trials = table10b_n_trials
+    n_trials = table10b_n_trials,
+    stat_lines = list("Comparison mean (white)" = sprintf("%.3f", table10b_white_means)),
+    note_lines = c(
+      comparison_mean_note,
+      cluster_note,
+      "\\sym{*} \\(p<0.10\\), \\sym{**} \\(p<0.05\\), \\sym{***} \\(p<0.01\\)"
+    )
   )
 )
 
@@ -957,6 +1066,11 @@ table12_models <- list(
   felm(as.formula(paste("log(medincome_Rec) ~ RACE +", base_covariates_fml, "| CONTROL | 0 | cluster_group")), data = table12_data_fam),
   felm(as.formula(paste("log(medincome_Rec) ~ RACE +", base_covariates_mom_fml, "| CONTROL | 0 | cluster_group")), data = table12_data_mom)
 )
+table12_white_means <- c(
+  mean(log(table12_data_all$medincome_Rec[as.character(table12_data_all$RACE) == "1"]), na.rm = TRUE),
+  mean(log(table12_data_fam$medincome_Rec[as.character(table12_data_fam$RACE) == "1"]), na.rm = TRUE),
+  mean(log(table12_data_mom$medincome_Rec[as.character(table12_data_mom$RACE) == "1"]), na.rm = TRUE)
+)
 
 table12_labels <- c("All Testers", "Families", "Moms")
 table12_rows <- build_race_only_rows(table12_models, table12_labels)
@@ -968,7 +1082,13 @@ write_table(
     caption = "Discriminatory Steering: Median Income in Neighborhood\\\\[0.5em]\\textit{Table 12, C\\&T 2022}",
     label = "tab:table12",
     models = table12_models,
-    n_trials = length(unique(table12_data_all$CONTROL))
+    n_trials = length(unique(table12_data_all$CONTROL)),
+    stat_lines = list("Comparison mean (white)" = sprintf("%.3f", table12_white_means)),
+    note_lines = c(
+      comparison_mean_note,
+      cluster_note,
+      "\\sym{*} \\(p<0.10\\), \\sym{**} \\(p<0.05\\), \\sym{***} \\(p<0.01\\)"
+    )
   )
 )
 
@@ -1029,7 +1149,7 @@ for (i in seq_along(family_aux_races)) {
   current_table <- paste("Appendix Table", family_aux_table_ids[i])
   race_df <- cleaned_data %>% filter(as.character(RACE) == family_aux_races[i])
   family_data_list <- lapply(family_aux_outcomes, function(outcome) {
-    prep_table_data(race_df, c(outcome), extra_vars = c("kids", "mother"), paired = FALSE)
+    prep_table_data(race_df, c(outcome), extra_vars = c("kids", "mother"), require_completed_pair = FALSE)
   })
 
   kids_models <- Map(function(outcome, df) {
@@ -1283,9 +1403,21 @@ if (cluster_level == "trial") {
   })
   names(site_outcome_data) <- market_sites
 
+  # In a single-market regression, some retained baseline factors can have only
+  # one observed level and are therefore not estimable. Drop only those controls
+  # in this exploratory site-specific appendix output.
+  usable_site_covariates <- function(df, controls) {
+    controls[vapply(controls, function(control) {
+      vals <- df[[control]]
+      vals <- vals[!is.na(vals)]
+      length(unique(vals)) > 1
+    }, logical(1))]
+  }
+
   site_outcome_models <- lapply(market_sites, function(site_code) {
     Map(function(outcome, df) {
-      felm(as.formula(paste(outcome, "~ RACE +", base_covariates_fml, "| CONTROL | 0 | cluster_group")), data = df)
+      site_rhs <- paste(c("RACE", usable_site_covariates(df, base_covariates)), collapse = " + ")
+      felm(as.formula(paste(outcome, "~", site_rhs, "| CONTROL | 0 | cluster_group")), data = df)
     }, market_outcomes, site_outcome_data[[site_code]])
   })
   names(site_outcome_models) <- market_sites
@@ -1345,7 +1477,7 @@ if (cluster_level == "trial") {
       label = "tab:appendixA10",
       stat_lines = NULL,
       note_lines = c(
-        "Rows report the African American coefficient from separate site-specific paired-tester regressions with the full baseline controls and control fixed effects.",
+        "Rows report the African American coefficient from separate site-specific all-completed-pairs regressions with the full baseline controls and control fixed effects; controls with no within-site variation are omitted.",
         "A full site-by-race-by-outcome coefficient file is saved to Appendix\\_Tables/market\\_racial\\_share\\_heterogeneity.csv; site labels are summarized in Appendix\\_Tables/site\\_market\\_lookup.csv.",
         cluster_note,
         "\\sym{*} \\(p<0.10\\), \\sym{**} \\(p<0.05\\), \\sym{***} \\(p<0.01\\)"

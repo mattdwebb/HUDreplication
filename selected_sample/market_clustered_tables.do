@@ -1,6 +1,6 @@
 clear all
 
-// Parallel pooled-analysis run with conventional market-level clustering.
+// Parallel selected-sample run with conventional market-level clustering.
 // This leaves the standard Output folder untouched by writing into
 // Output/market_clustered/{comparison_tables,corrected_full,original_full}.
 
@@ -8,7 +8,7 @@ if "${REPO_ROOT}" == "" {
     global REPO_ROOT "/PATH/TO/HUDreplication"
 }
 if "${CODE}" == "" {
-    global CODE "${REPO_ROOT}/Pooled_Analysis"
+    global CODE "${REPO_ROOT}/selected_sample"
 }
 if "${DATA}" == "" {
     global DATA "${REPO_ROOT}/Data"
@@ -27,13 +27,13 @@ foreach var in `PKG' {
 
 set more off
 
-local OLD_POOLED_CLUSTER_VAR "${POOLED_CLUSTER_VAR}"
-local OLD_POOLED_CLUSTER_LABEL "${POOLED_CLUSTER_LABEL}"
-local OLD_POOLED_CLUSTER_DESCRIPTION "${POOLED_CLUSTER_DESCRIPTION}"
+local OLD_SELECTED_SAMPLE_CLUSTER_VAR "${SELECTED_SAMPLE_CLUSTER_VAR}"
+local OLD_SELECTED_SAMPLE_CLUSTER_LABEL "${SELECTED_SAMPLE_CLUSTER_LABEL}"
+local OLD_SELECTED_SAMPLE_CLUSTER_DESCRIPTION "${SELECTED_SAMPLE_CLUSTER_DESCRIPTION}"
 
-global POOLED_CLUSTER_VAR "market"
-global POOLED_CLUSTER_LABEL "market"
-global POOLED_CLUSTER_DESCRIPTION "market"
+global SELECTED_SAMPLE_CLUSTER_VAR "market"
+global SELECTED_SAMPLE_CLUSTER_LABEL "market"
+global SELECTED_SAMPLE_CLUSTER_DESCRIPTION "market"
 
 cap mkdir "${CODE}/Output"
 cap mkdir "${CODE}/Output/market_clustered"
@@ -91,6 +91,6 @@ log close
 macro drop APPENDIX_OUTPUT_ROOT
 macro drop APPENDIX_TABLE_MODES
 
-global POOLED_CLUSTER_VAR "`OLD_POOLED_CLUSTER_VAR'"
-global POOLED_CLUSTER_LABEL "`OLD_POOLED_CLUSTER_LABEL'"
-global POOLED_CLUSTER_DESCRIPTION "`OLD_POOLED_CLUSTER_DESCRIPTION'"
+global SELECTED_SAMPLE_CLUSTER_VAR "`OLD_SELECTED_SAMPLE_CLUSTER_VAR'"
+global SELECTED_SAMPLE_CLUSTER_LABEL "`OLD_SELECTED_SAMPLE_CLUSTER_LABEL'"
+global SELECTED_SAMPLE_CLUSTER_DESCRIPTION "`OLD_SELECTED_SAMPLE_CLUSTER_DESCRIPTION'"

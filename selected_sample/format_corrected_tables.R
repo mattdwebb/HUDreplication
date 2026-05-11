@@ -1,19 +1,39 @@
 resolve_repo_root <- function() {
   cwd <- normalizePath(getwd(), winslash = "/", mustWork = TRUE)
   if (basename(cwd) == "HUDreplication") return(cwd)
-  if (basename(cwd) == "Pooled_Analysis") return(dirname(cwd))
+  if (basename(cwd) == "selected_sample") return(dirname(cwd))
 
   candidate <- file.path(cwd, "HUDreplication")
   if (dir.exists(candidate)) {
     return(normalizePath(candidate, winslash = "/", mustWork = TRUE))
   }
 
-  stop("Could not infer repo_root. Run from HUDreplication or Pooled_Analysis.")
+  stop("Could not infer repo_root. Run from HUDreplication or selected_sample.")
 }
 
 repo_root <- resolve_repo_root()
-source_dir <- file.path(repo_root, "Pooled_Analysis", "Output")
-output_dir <- file.path(source_dir, "Corrected Tables")
+env_value <- function(name, default = "") {
+  value <- Sys.getenv(name, "")
+  if (nzchar(value)) return(value)
+  default
+}
+
+source_dir <- env_value(
+  "SELECTED_SAMPLE_FORMAT_SOURCE_DIR",
+  file.path(repo_root, "selected_sample", "Output")
+)
+output_dir <- env_value(
+  "SELECTED_SAMPLE_FORMAT_OUTPUT_DIR",
+  file.path(source_dir, "Corrected Tables")
+)
+table_subtitle <- env_value(
+  "SELECTED_SAMPLE_FORMAT_TABLE_SUBTITLE",
+  "Corrected Model-Based Replication"
+)
+label_prefix <- env_value("SELECTED_SAMPLE_FORMAT_LABEL_PREFIX", "corrected_table")
+ad_control_row_mode <- env_value("SELECTED_SAMPLE_FORMAT_AD_CONTROL_ROWS", "corrected")
+exclude_tables <- strsplit(env_value("SELECTED_SAMPLE_FORMAT_EXCLUDE_TABLES"), "[, ]+")[[1]]
+exclude_tables <- exclude_tables[nzchar(exclude_tables)]
 
 dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
 
@@ -22,6 +42,17 @@ standard_note <- c(
   "Cluster-robust standard errors in parentheses; clustered at the trial level. 95\\% confidence intervals in square brackets.",
   "\\sym{*} \\(p<0.10\\), \\sym{**} \\(p<0.05\\), \\sym{***} \\(p<0.01\\)"
 )
+
+ad_control_row <- function(label, values) {
+  if (ad_control_row_mode == "omitted") {
+    return(c(label, rep("No", length(values))))
+  }
+  c(label, values)
+}
+
+table_included <- function(table_number) {
+  !(as.character(table_number) %in% exclude_tables)
+}
 
 table_cache <- new.env(parent = emptyenv())
 
@@ -49,6 +80,7 @@ read_raw_csv <- function(stem) {
   i <- 1L
   while (i <= nrow(raw)) {
     label <- raw[i, 1]
+    if (label == "ofcolor") label <- "Racial Minority"
 
     if (label %in% summary_labels) {
       out$summary[[label]] <- unname(unlist(raw[i, -1]))
@@ -157,10 +189,13 @@ summary_lines <- function(category_stems, minority_stems = NULL, include_minorit
     )
   }
 
-  c(
-    lines,
+  geography_row <- if (ad_control_row_mode == "omitted") {
+    latex_row("Geographic fixed effects", rep("No", length(combine_summary(category_stems, "Number of Cities"))))
+  } else {
     latex_row("Number of Cities", format_counts(combine_summary(category_stems, "Number of Cities")))
-  )
+  }
+
+  c(lines, geography_row)
 }
 
 build_model_panel <- function(panel_title = NULL, header_span = "Dependent Variable",
@@ -190,7 +225,7 @@ build_model_panel <- function(panel_title = NULL, header_span = "Dependent Varia
 
   # The raw appendix exports can include nuisance "Other Race" rows from the
   # legacy APRACE coding. The formatted corrected tables follow the original
-  # and matched-pair table layout and display the substantive HDS race groups.
+  # and all-completed-pairs table layout and display the substantive HDS race groups.
   category_rows <- c("African American", "Hispanic", "Asian")
   for (row_label in category_rows) {
     lines <- c(lines, effect_lines(row_label, combine_blocks(category_stems, row_label)))
@@ -240,6 +275,12 @@ build_table14a_panel <- function() {
     )
   )
 
+  geography_row <- if (ad_control_row_mode == "omitted") {
+    latex_row("Geographic fixed effects", rep("No", length(panel$summary$Observations)))
+  } else {
+    latex_row("Number of Cities", format_counts(panel$summary[["Number of Cities"]]))
+  }
+
   c(
     "\\textbf{Panel A: Buyers upon Sale}\\\\[0.5em]",
     "\\resizebox{\\textwidth}{!}{%",
@@ -251,7 +292,7 @@ build_table14a_panel <- function() {
     "\\midrule",
     latex_row("Observations", format_counts(panel$summary$Observations)),
     latex_row("Adjusted R$^2$", panel$summary[["Adjusted R^2"]]),
-    latex_row("Number of Cities", format_counts(panel$summary[["Number of Cities"]])),
+    geography_row,
     "\\bottomrule",
     "\\end{tabular}",
     "}"
@@ -287,49 +328,49 @@ write_table <- function(file_name, caption, label, panels) {
 
 write_table(
   "table5.tex",
-  "Discriminatory Steering and Availability of Advertised Properties\\\\[0.5em]\\textit{Corrected Model-Based Replication of Table 5, C\\&T 2022}",
-  "tab:corrected_table5",
+  paste0("Discriminatory Steering and Availability of Advertised Properties\\\\[0.5em]\\textit{", table_subtitle, " of Table 5, C\\&T 2022}"),
+  paste0("tab:", label_prefix, "5"),
   list(build_model_panel(
     col_names = c("(1)", "(2)", "(3)", "(4)"),
     category_stems = "table5_categories_corrected",
     minority_stems = "table5_minority_corrected",
     additional_rows = list(
-      c("ln(price) advertised home", "No", "Yes", "No", "Yes"),
-      c("Racial composition advertised home", "No", "Yes", "No", "Yes")
+      ad_control_row("ln(price) advertised home", c("No", "Yes", "No", "Yes")),
+      ad_control_row("Racial composition advertised home", c("No", "Yes", "No", "Yes"))
     )
   ))
 )
 
 write_table(
   "table6.tex",
-  "Discriminatory Steering and Neighborhood Racial Composition\\\\[0.5em]\\textit{Corrected Model-Based Replication of Table 6, C\\&T 2022}",
-  "tab:corrected_table6",
+  paste0("Discriminatory Steering and Neighborhood Racial Composition\\\\[0.5em]\\textit{", table_subtitle, " of Table 6, C\\&T 2022}"),
+  paste0("tab:", label_prefix, "6"),
   list(build_model_panel(
     col_names = c("(1)", "(2)", "(3)", "(4)", "(5)"),
     category_stems = "table6_categories_corrected",
     minority_stems = "table6_minority_corrected",
     additional_rows = list(
-      c("Share white advertised home", "No", "Yes", "Yes", "Yes", "Yes"),
-      c("ln(price) advertised home", "No", "No", "Yes", "Yes", "Yes"),
-      c("Racial composition advertised home", "No", "No", "No", "Yes", "Yes"),
-      c("Poverty share advertised home", "No", "No", "No", "No", "Yes")
+      ad_control_row("Share white advertised home", c("No", "Yes", "Yes", "Yes", "Yes")),
+      ad_control_row("ln(price) advertised home", c("No", "No", "Yes", "Yes", "Yes")),
+      ad_control_row("Racial composition advertised home", c("No", "No", "No", "Yes", "Yes")),
+      ad_control_row("Poverty share advertised home", c("No", "No", "No", "No", "Yes"))
     )
   ))
 )
 
 write_table(
   "table7.tex",
-  "Discriminatory Steering and Neighborhood Racial Composition by Income\\\\[0.5em]\\textit{Corrected Model-Based Replication of Table 7, C\\&T 2022}",
-  "tab:corrected_table7",
+  paste0("Discriminatory Steering and Neighborhood Racial Composition by Income\\\\[0.5em]\\textit{", table_subtitle, " of Table 7, C\\&T 2022}"),
+  paste0("tab:", label_prefix, "7"),
   list(build_model_panel(
     col_names = c("High Income", "Middle Income", "Low Income"),
     category_stems = "table7_categories_corrected",
     minority_stems = "table7_minority_corrected",
     additional_rows = list(
-      c("Share white advertised home", "Yes", "Yes", "Yes"),
-      c("ln(price) advertised home", "Yes", "Yes", "Yes"),
-      c("Racial composition advertised home", "Yes", "Yes", "Yes"),
-      c("Poverty share advertised home", "Yes", "Yes", "Yes")
+      ad_control_row("Share white advertised home", c("Yes", "Yes", "Yes")),
+      ad_control_row("ln(price) advertised home", c("Yes", "Yes", "Yes")),
+      ad_control_row("Racial composition advertised home", c("Yes", "Yes", "Yes")),
+      ad_control_row("Poverty share advertised home", c("Yes", "Yes", "Yes"))
     )
   ))
 )
@@ -342,20 +383,20 @@ school_headers <- c(
 )
 acs_headers <- c("Poverty Rate", "High Skill", "College", "Single-Parent Household", "Ownership Rate")
 school_controls <- list(
-  c("ln(price) advertised home", "Yes", "Yes", "Yes", "Yes"),
-  c("Racial composition advertised home", "Yes", "Yes", "Yes", "Yes"),
-  c("Outcome advertised home", "Yes", "Yes", "Yes", "Yes")
+  ad_control_row("ln(price) advertised home", c("Yes", "Yes", "Yes", "Yes")),
+  ad_control_row("Racial composition advertised home", c("Yes", "Yes", "Yes", "Yes")),
+  ad_control_row("Outcome advertised home", c("Yes", "Yes", "Yes", "Yes"))
 )
 acs_controls <- list(
-  c("ln(price) advertised home", "Yes", "Yes", "Yes", "Yes", "Yes"),
-  c("Racial composition advertised home", "Yes", "Yes", "Yes", "Yes", "Yes"),
-  c("Outcome advertised home", "Yes", "Yes", "Yes", "Yes", "Yes")
+  ad_control_row("ln(price) advertised home", c("Yes", "Yes", "Yes", "Yes", "Yes")),
+  ad_control_row("Racial composition advertised home", c("Yes", "Yes", "Yes", "Yes", "Yes")),
+  ad_control_row("Outcome advertised home", c("Yes", "Yes", "Yes", "Yes", "Yes"))
 )
 
 write_table(
   "table8.tex",
-  "Discriminatory Steering and Neighborhood Effects\\\\[0.5em]\\textit{Corrected Model-Based Replication of Table 8, C\\&T 2022}",
-  "tab:corrected_table8",
+  paste0("Discriminatory Steering and Neighborhood Effects\\\\[0.5em]\\textit{", table_subtitle, " of Table 8, C\\&T 2022}"),
+  paste0("tab:", label_prefix, "8"),
   list(
     build_model_panel(
       panel_title = "Panel A: School Quality and Neighborhood Safety",
@@ -378,15 +419,15 @@ write_table(
 
 pollution_headers <- c("Superfund", "Toxics", "PM")
 pollution_controls <- list(
-  c("ln(price) advertised home", "Yes", "Yes", "Yes"),
-  c("Racial composition advertised home", "Yes", "Yes", "Yes"),
-  c("Outcome advertised home", "Yes", "Yes", "Yes")
+  ad_control_row("ln(price) advertised home", c("Yes", "Yes", "Yes")),
+  ad_control_row("Racial composition advertised home", c("Yes", "Yes", "Yes")),
+  ad_control_row("Outcome advertised home", c("Yes", "Yes", "Yes"))
 )
 
 write_table(
   "table9.tex",
-  "Discriminatory Steering and Local Pollution Exposures\\\\[0.5em]\\textit{Corrected Model-Based Replication of Table 9, C\\&T 2022}",
-  "tab:corrected_table9",
+  paste0("Discriminatory Steering and Local Pollution Exposures\\\\[0.5em]\\textit{", table_subtitle, " of Table 9, C\\&T 2022}"),
+  paste0("tab:", label_prefix, "9"),
   list(
     build_model_panel(
       panel_title = "Panel A: Differences for the Entire Sample",
@@ -407,8 +448,8 @@ write_table(
 
 write_table(
   "table10.tex",
-  "Discriminatory Steering and Neighborhood Effects (Mothers)\\\\[0.5em]\\textit{Corrected Model-Based Replication of Table 10, C\\&T 2022}",
-  "tab:corrected_table10",
+  paste0("Discriminatory Steering and Neighborhood Effects (Mothers)\\\\[0.5em]\\textit{", table_subtitle, " of Table 10, C\\&T 2022}"),
+  paste0("tab:", label_prefix, "10"),
   list(
     build_model_panel(
       panel_title = "Panel A: School Quality and Neighborhood Safety",
@@ -429,8 +470,8 @@ write_table(
 
 write_table(
   "table11.tex",
-  "Discriminatory Steering: Low-Poverty Neighborhoods\\\\[0.5em]\\textit{Corrected Model-Based Replication of Table 11, C\\&T 2022}",
-  "tab:corrected_table11",
+  paste0("Discriminatory Steering: Low-Poverty Neighborhoods\\\\[0.5em]\\textit{", table_subtitle, " of Table 11, C\\&T 2022}"),
+  paste0("tab:", label_prefix, "11"),
   list(build_model_panel(
     col_names = c(
       "Low Poverty",
@@ -447,8 +488,8 @@ write_table(
 
 write_table(
   "table12.tex",
-  "Discriminatory Steering: Median Income in Neighborhood\\\\[0.5em]\\textit{Corrected Model-Based Replication of Table 12, C\\&T 2022}",
-  "tab:corrected_table12",
+  paste0("Discriminatory Steering: Median Income in Neighborhood\\\\[0.5em]\\textit{", table_subtitle, " of Table 12, C\\&T 2022}"),
+  paste0("tab:", label_prefix, "12"),
   list(build_model_panel(
     col_names = c("All Testers", "Families", "Moms"),
     category_stems = "table12_categories_corrected",
@@ -456,32 +497,34 @@ write_table(
   ))
 )
 
-write_table(
-  "table13.tex",
-  "Discriminatory Steering by Implied Preferences for Neighborhood Attributes\\\\[0.5em]\\textit{Corrected Model-Based Replication of Table 13, C\\&T 2022}",
-  "tab:corrected_table13",
-  list(
-    build_model_panel(
-      panel_title = "Panel A: School Quality and Neighborhood Safety",
-      col_names = school_headers,
-      category_stems = c("table13A1_categories_corrected", "table13A2_categories_corrected"),
-      minority_stems = c("table13A1_minority_corrected", "table13A2_minority_corrected"),
-      additional_rows = school_controls
-    ),
-    build_model_panel(
-      panel_title = "Panel B: American Community Survey",
-      col_names = acs_headers,
-      category_stems = "table13B_categories_corrected",
-      minority_stems = "table13B_minority_corrected",
-      additional_rows = acs_controls
+if (table_included(13)) {
+  write_table(
+    "table13.tex",
+    paste0("Discriminatory Steering by Implied Preferences for Neighborhood Attributes\\\\[0.5em]\\textit{", table_subtitle, " of Table 13, C\\&T 2022}"),
+    paste0("tab:", label_prefix, "13"),
+    list(
+      build_model_panel(
+        panel_title = "Panel A: School Quality and Neighborhood Safety",
+        col_names = school_headers,
+        category_stems = c("table13A1_categories_corrected", "table13A2_categories_corrected"),
+        minority_stems = c("table13A1_minority_corrected", "table13A2_minority_corrected"),
+        additional_rows = school_controls
+      ),
+      build_model_panel(
+        panel_title = "Panel B: American Community Survey",
+        col_names = acs_headers,
+        category_stems = "table13B_categories_corrected",
+        minority_stems = "table13B_minority_corrected",
+        additional_rows = acs_controls
+      )
     )
   )
-)
+}
 
 write_table(
   "table14.tex",
-  "Discriminatory Steering and Later Transactions\\\\[0.5em]\\textit{Corrected Model-Based Replication of Table 14, C\\&T 2022}",
-  "tab:corrected_table14",
+  paste0("Discriminatory Steering and Later Transactions\\\\[0.5em]\\textit{", table_subtitle, " of Table 14, C\\&T 2022}"),
+  paste0("tab:", label_prefix, "14"),
   list(
     build_table14a_panel(),
     build_model_panel(
@@ -490,10 +533,10 @@ write_table(
       category_stems = "table14B_categories_corrected",
       minority_stems = "table14B_minority_corrected",
       additional_rows = list(
-        c("Share white advertised home", "No", "Yes", "Yes", "Yes", "Yes"),
-        c("ln(price) advertised home", "No", "No", "Yes", "Yes", "Yes"),
-        c("Racial composition advertised home", "No", "No", "No", "Yes", "Yes"),
-        c("Poverty share advertised home", "No", "No", "No", "No", "Yes"),
+        ad_control_row("Share white advertised home", c("No", "Yes", "Yes", "Yes", "Yes")),
+        ad_control_row("ln(price) advertised home", c("No", "No", "Yes", "Yes", "Yes")),
+        ad_control_row("Racial composition advertised home", c("No", "No", "No", "Yes", "Yes")),
+        ad_control_row("Poverty share advertised home", c("No", "No", "No", "No", "Yes")),
         c("Year", "Yes", "Yes", "Yes", "Yes", "Yes"),
         c("Month of year", "Yes", "Yes", "Yes", "Yes", "Yes")
       )
@@ -501,31 +544,21 @@ write_table(
   )
 )
 
+preview_tables <- c(5:14)
+preview_tables <- preview_tables[vapply(preview_tables, table_included, logical(1))]
+preview_body <- character()
+for (i in seq_along(preview_tables)) {
+  if (i > 1L) preview_body <- c(preview_body, "\\clearpage")
+  preview_body <- c(preview_body, paste0("\\input{table", preview_tables[i], ".tex}"))
+}
+
 preview_lines <- c(
   "\\documentclass[11pt]{article}",
   "\\usepackage[margin=1in]{geometry}",
   "\\usepackage{booktabs}",
   "\\usepackage{graphicx}",
   "\\begin{document}",
-  "\\input{table5.tex}",
-  "\\clearpage",
-  "\\input{table6.tex}",
-  "\\clearpage",
-  "\\input{table7.tex}",
-  "\\clearpage",
-  "\\input{table8.tex}",
-  "\\clearpage",
-  "\\input{table9.tex}",
-  "\\clearpage",
-  "\\input{table10.tex}",
-  "\\clearpage",
-  "\\input{table11.tex}",
-  "\\clearpage",
-  "\\input{table12.tex}",
-  "\\clearpage",
-  "\\input{table13.tex}",
-  "\\clearpage",
-  "\\input{table14.tex}",
+  preview_body,
   "\\end{document}"
 )
 writeLines(preview_lines, file.path(output_dir, "formatted_corrected_tables_preview.tex"), useBytes = TRUE)
@@ -537,7 +570,7 @@ manifest <- c(
   paste("Output directory:", output_dir),
   "",
   "Outputs:",
-  paste0("- table", c(5:14), ".tex"),
+  paste0("- table", preview_tables, ".tex"),
   "- formatted_corrected_tables_preview.tex",
   "",
   "Notes:",

@@ -1,14 +1,14 @@
 resolve_repo_root <- function() {
   cwd <- normalizePath(getwd(), winslash = "/", mustWork = TRUE)
   if (basename(cwd) == "HUDreplication") return(cwd)
-  if (basename(cwd) == "Paired_Tester_Analysis") return(dirname(cwd))
+  if (basename(cwd) == "all_completed_pairs") return(dirname(cwd))
   candidate <- file.path(cwd, "HUDreplication")
   if (dir.exists(candidate)) return(normalizePath(candidate, winslash = "/", mustWork = TRUE))
-  stop("Could not infer repo_root. Run from HUDreplication or Paired_Tester_Analysis.")
+  stop("Could not infer repo_root. Run from HUDreplication or all_completed_pairs.")
 }
 
 repo_root <- resolve_repo_root()
-root <- file.path(repo_root, "Paired_Tester_Analysis")
+root <- file.path(repo_root, "all_completed_pairs")
 source_dir <- file.path(root, "Tables")
 output_dir <- file.path(root, "Tables", "Formatted_Tables")
 
@@ -18,6 +18,7 @@ standard_note <- c(
   "Cluster-robust standard errors in parentheses; clustered at the trial level. 95\\% confidence intervals in square brackets.",
   "\\sym{*} \\(p<0.10\\), \\sym{**} \\(p<0.05\\), \\sym{***} \\(p<0.01\\)"
 )
+comparison_mean_note <- "Comparison mean (white) is the raw mean for white testers in the corresponding estimation sample."
 sym_def <- "\\def\\sym#1{\\ifmmode^{#1}\\else\\(^{#1}\\)\\fi}"
 
 single_tables <- c("table5", "table6", "table7", "table12")
@@ -174,6 +175,7 @@ build_single_table <- function(name) {
   text <- read_text(path)
   caption_parts <- extract_caption_parts(extract_caption(text, path))
   tabular <- tabular_without_notes(extract_outer_tabular(text, path))
+  table_note <- c(comparison_mean_note, standard_note)
 
   c(
     "\\begin{table}[!htbp]",
@@ -186,7 +188,7 @@ build_single_table <- function(name) {
     "}",
     "\\begin{minipage}{\\textwidth}",
     "\\footnotesize",
-    standard_note,
+    table_note,
     "\\end{minipage}",
     "\\end{table}",
     ""
@@ -205,6 +207,7 @@ build_panel_table <- function(output_name, panel_a_name, panel_b_name) {
   panel_b_title <- extract_panel_title(extract_caption_parts(extract_caption(panel_b_text, panel_b_path))$title)
   panel_a_tabular <- tabular_without_notes(extract_outer_tabular(panel_a_text, panel_a_path))
   panel_b_tabular <- tabular_without_notes(extract_outer_tabular(panel_b_text, panel_b_path))
+  table_note <- c(comparison_mean_note, standard_note)
 
   c(
     "\\begin{table}[!htbp]",
@@ -223,7 +226,7 @@ build_panel_table <- function(output_name, panel_a_name, panel_b_name) {
     "}",
     "\\begin{minipage}{\\textwidth}",
     "\\footnotesize",
-    standard_note,
+    table_note,
     "\\end{minipage}",
     "\\end{table}",
     ""

@@ -6,7 +6,7 @@ library(stringr)
 #   cd HUDreplication
 #   Rscript data_description.R
 repo_root <- normalizePath(getwd(), winslash = "/", mustWork = TRUE)
-output_dir <- file.path(repo_root, "Pooled_Analysis", "Output")
+output_dir <- file.path(repo_root, "selected_sample", "Output")
 
 format_int <- function(x) {
   format(round(x), big.mark = ",", trim = TRUE, scientific = FALSE)
@@ -143,18 +143,20 @@ recsprocessed_path <- file.path(repo_root, "Data", "CT2022_Replication_Data", "r
 hudprocessed_names_path <- file.path(repo_root, "Data", "CT2022_Replication_Data", "HUDprocessed_JPE_names_042021.rds")
 hudprocessed_census_path <- file.path(repo_root, "Data", "CT2022_Replication_Data", "HUDprocessed_JPE_census_042021.rds")
 hudprocessed_testscores_path <- file.path(repo_root, "Data", "CT2022_Replication_Data", "HUDprocessed_JPE_testscores_042021.rds")
-hudprocessed_names_duplicates_path <- file.path(repo_root, "Data", "Generated", "Pooled_Analysis", "HUDprocessed_names_correct_cities_with_duplicates.csv")
-hudprocessed_census_duplicates_path <- file.path(repo_root, "Data", "Generated", "Pooled_Analysis", "HUDprocessed_census_correct_cities_with_duplicates.csv")
-hudprocessed_testscores_duplicates_path <- file.path(repo_root, "Data", "Generated", "Pooled_Analysis", "HUDprocessed_testscores_correct_cities_with_duplicates.csv")
-adsprocessed_processed_path <- file.path(repo_root, "Data", "Generated", "Pooled_Analysis", "adsprocessed_correct_cities_processed.csv")
-hudprocessed_names_processed_path <- file.path(repo_root, "Data", "Generated", "Pooled_Analysis", "HUDprocessed_names_correct_cities_processed.csv")
-hudprocessed_census_processed_path <- file.path(repo_root, "Data", "Generated", "Pooled_Analysis", "HUDprocessed_census_correct_cities_processed.csv")
-hudprocessed_testscores_processed_path <- file.path(repo_root, "Data", "Generated", "Pooled_Analysis", "HUDprocessed_testscores_correct_cities_processed.csv")
-dedup_log_processed_path <- file.path(repo_root, "Data", "Generated", "Pooled_Analysis", "dedup_log_processed.csv")
+hudprocessed_names_duplicates_path <- file.path(repo_root, "Data", "Generated", "selected_sample", "HUDprocessed_names_correct_cities_with_duplicates.csv")
+hudprocessed_census_duplicates_path <- file.path(repo_root, "Data", "Generated", "selected_sample", "HUDprocessed_census_correct_cities_with_duplicates.csv")
+hudprocessed_testscores_duplicates_path <- file.path(repo_root, "Data", "Generated", "selected_sample", "HUDprocessed_testscores_correct_cities_with_duplicates.csv")
+adsprocessed_processed_path <- file.path(repo_root, "Data", "Generated", "selected_sample", "adsprocessed_correct_cities_processed.csv")
+hudprocessed_names_processed_path <- file.path(repo_root, "Data", "Generated", "selected_sample", "HUDprocessed_names_correct_cities_processed.csv")
+hudprocessed_census_processed_path <- file.path(repo_root, "Data", "Generated", "selected_sample", "HUDprocessed_census_correct_cities_processed.csv")
+hudprocessed_testscores_processed_path <- file.path(repo_root, "Data", "Generated", "selected_sample", "HUDprocessed_testscores_correct_cities_processed.csv")
+dedup_log_processed_path <- file.path(repo_root, "Data", "Generated", "selected_sample", "dedup_log_processed.csv")
 rechomes_path <- file.path(repo_root, "Data", "HDS2012_Raw_Data", "rechomes.sas7bdat")
 sales_path <- file.path(repo_root, "Data", "HDS2012_Raw_Data", "sales.sas7bdat")
 taf_path <- file.path(repo_root, "Data", "HDS2012_Raw_Data", "taf.sas7bdat")
-tester_path <- file.path(repo_root, "Data", "HDS2012_Raw_Data", "tester_censored.sas7bdat")
+tester_path <- file.path(repo_root, "Data", "HDS2012_Raw_Data", "tester_public.sas7bdat")
+table5_all_completed_pairs_path <- file.path(repo_root, "Data", "Generated", "all_completed_pairs", "sales_and_tester_merged.csv")
+table6_all_completed_pairs_path <- file.path(repo_root, "Data", "Generated", "all_completed_pairs", "cleaned_hds.csv")
 
 
 # ---- Small text-normalization helpers ----------------------------------------
@@ -565,6 +567,304 @@ pair_indicator_breakdown(
 official_sales_pairs <- sales_pairs %>%
   semi_join(official_pass_controls, by = "CONTROL")
 
+# ---- Sample attrition from HDS TAF to analysis samples -----------------------
+
+taf_records <- read_sas(taf_path, col_select = c("CONTROL", "RELEASE", "PASSN", "FCOMPLT", "FPASS")) %>%
+  transmute(
+    CONTROL = as.character(CONTROL),
+    RELEASE = as.character(RELEASE),
+    PASSN = suppressWarnings(as.numeric(PASSN)),
+    FCOMPLT = suppressWarnings(as.numeric(FCOMPLT)),
+    FPASS = suppressWarnings(as.numeric(FPASS))
+  )
+
+taf_controls <- taf_records %>%
+  group_by(CONTROL) %>%
+  summarise(
+    release1 = any(RELEASE == "1", na.rm = TRUE),
+    fpass1 = any(FPASS == 1, na.rm = TRUE),
+    is_sales = any(str_detect(CONTROL, "-S[A-Z]-"), na.rm = TRUE),
+    .groups = "drop"
+  )
+
+taf_raw_rows <- nrow(taf_records)
+taf_raw_controls <- nrow(taf_controls)
+taf_released_controls <- sum(taf_controls$release1)
+taf_passed_controls <- sum(taf_controls$release1 & taf_controls$fpass1)
+taf_passed_sales_controls <- sum(taf_controls$release1 & taf_controls$fpass1 & taf_controls$is_sales)
+sales_file_controls <- n_distinct(official_sales_pairs$CONTROL)
+
+released_taf_profile <- taf_records %>%
+  filter(RELEASE == "1") %>%
+  mutate(
+    control_type = case_when(
+      str_detect(CONTROL, "-S[A-Z]-") ~ "sales",
+      str_detect(CONTROL, "-R[A-Z]-") ~ "rental",
+      TRUE ~ "other"
+    ),
+    profile = case_when(
+      is.na(PASSN) & is.na(FCOMPLT) & is.na(FPASS) ~ "no assignment/completion/pass fields",
+      FPASS == 1 ~ "passed quality review",
+      FCOMPLT == 1 & FPASS != 1 ~ "completed but not quality-passed",
+      FCOMPLT == 0 ~ "not completed",
+      PASSN == 1 ~ "assigned, completion/pass missing or nonstandard",
+      PASSN == 2 ~ "not assigned, completion/pass missing or nonstandard",
+      TRUE ~ "other missing/nonstandard status"
+    )
+  ) %>%
+  count(control_type, profile, name = "n") %>%
+  group_by(control_type) %>%
+  mutate(share_within_control_type = n / sum(n)) %>%
+  ungroup() %>%
+  arrange(control_type, desc(n))
+
+sales_controls_missing_visits <- taf_controls %>%
+  filter(release1, fpass1, is_sales) %>%
+  distinct(CONTROL) %>%
+  anti_join(official_sales_pairs %>% distinct(CONTROL), by = "CONTROL")
+
+table5_required_vars <- c(
+  "STOTUNIT_TOTAL", "SAVLBAD_ANY", "RACE", "was_first_visitor",
+  "am_indicator_first", "TPEGAI", "THHEGAI", "TSEX", "age", "THIGHEDU"
+)
+table5_outcome_vars <- c("STOTUNIT_TOTAL", "SAVLBAD_ANY")
+table5_covariate_vars <- setdiff(table5_required_vars, table5_outcome_vars)
+
+table5_base <- read.csv(table5_all_completed_pairs_path, stringsAsFactors = FALSE, check.names = FALSE) %>%
+  mutate(CONTROL = as.character(CONTROL), TESTERID = as.character(TESTERID)) %>%
+  semi_join(official_pass_controls, by = "CONTROL")
+
+table5_complete_rows <- table5_base %>%
+  filter(if_all(all_of(table5_required_vars), ~ !is.na(.x)))
+
+table5_final <- table5_complete_rows %>%
+  group_by(CONTROL) %>%
+  filter(n_distinct(TESTERID) == 2) %>%
+  ungroup()
+
+table5_missing_controls <- table5_base %>%
+  distinct(CONTROL) %>%
+  anti_join(table5_final %>% distinct(CONTROL), by = "CONTROL")
+
+table5_missing_control_reasons <- table5_base %>%
+  semi_join(table5_missing_controls, by = "CONTROL") %>%
+  mutate(
+    outcome_missing = if_any(all_of(table5_outcome_vars), is.na),
+    covariate_missing = if_any(all_of(table5_covariate_vars), is.na),
+    missing_covariates = apply(
+      select(., all_of(table5_covariate_vars)),
+      1,
+      function(row) paste(table5_covariate_vars[is.na(row)], collapse = "; ")
+    )
+  ) %>%
+  group_by(CONTROL) %>%
+  summarise(
+    n_testers = n_distinct(TESTERID),
+    n_outcome_missing = sum(outcome_missing),
+    n_covariate_missing = sum(covariate_missing),
+    missing_covariates = paste(unique(missing_covariates[missing_covariates != ""]), collapse = "; "),
+    reason = case_when(
+      n_outcome_missing == 2 ~ "both testers missing Table 5 outcome data",
+      n_outcome_missing == 1 & n_covariate_missing == 0 ~ "one tester missing Table 5 outcome data; partner dropped to preserve the completed pair",
+      n_outcome_missing == 0 & n_covariate_missing == 1 ~ "one tester missing a Table 5 covariate; partner dropped to preserve the completed pair",
+      n_outcome_missing == 0 & n_covariate_missing == 2 ~ "both testers missing Table 5 covariates",
+      n_outcome_missing >= 1 & n_covariate_missing >= 1 ~ "mixed Table 5 outcome and covariate missingness",
+      TRUE ~ "removed by exact-pair requirement after complete-case filtering"
+    ),
+    .groups = "drop"
+  )
+
+table5_reason_summary <- table5_missing_control_reasons %>%
+  count(reason, name = "n_trials_removed") %>%
+  arrange(desc(n_trials_removed), reason)
+
+table6_base_covariates <- c(
+  "was_first_visitor", "am_indicator_first", "TSEX", "THHEGAI",
+  "TPEGAI", "THIGHEDU", "TCURTENR", "age"
+)
+table6_outcomes <- c("w2012pc_Rec", "percent_black", "percent_hispanic", "percent_asian")
+
+table6_base <- read.csv(table6_all_completed_pairs_path, stringsAsFactors = FALSE, check.names = FALSE) %>%
+  mutate(
+    CONTROL = as.character(CONTROL),
+    TESTERID = as.character(TESTERID),
+    age = suppressWarnings(as.numeric(age))
+  ) %>%
+  semi_join(official_pass_controls, by = "CONTROL")
+
+table6_outcome_summary <- bind_rows(lapply(table6_outcomes, function(outcome) {
+  required_vars <- unique(c(outcome, "RACE", table6_base_covariates))
+  complete_df <- table6_base %>%
+    filter(if_all(all_of(required_vars), ~ !is.na(.x)))
+  all_completed_pairs_df <- complete_df %>%
+    group_by(CONTROL) %>%
+    filter(n_distinct(TESTERID) == 2) %>%
+    ungroup()
+
+  tibble(
+    outcome = outcome,
+    complete_rows = nrow(complete_df),
+    complete_tester_trial_pairs = nrow(distinct(complete_df, CONTROL, TESTERID)),
+    complete_trials = n_distinct(complete_df$CONTROL),
+    all_completed_pairs_rows = nrow(all_completed_pairs_df),
+    all_completed_pairs_tester_trial_pairs = nrow(distinct(all_completed_pairs_df, CONTROL, TESTERID)),
+    all_completed_pairs_trials = n_distinct(all_completed_pairs_df$CONTROL)
+  )
+}))
+
+# The four Table 6 outcomes currently have identical missingness. Use the first
+# outcome to construct the sample-step readout, matching analysis.R.
+table6_required_vars <- unique(c(table6_outcomes[1], "RACE", table6_base_covariates))
+table6_complete_rows <- table6_base %>%
+  filter(if_all(all_of(table6_required_vars), ~ !is.na(.x)))
+table6_final <- table6_complete_rows %>%
+  group_by(CONTROL) %>%
+  filter(n_distinct(TESTERID) == 2) %>%
+  ungroup()
+table6_final_controls <- table6_final %>%
+  distinct(CONTROL)
+table6_final_pairs <- table6_final %>%
+  distinct(CONTROL, TESTERID)
+
+table6_pairs_in_cleaned <- table6_base %>%
+  distinct(CONTROL, TESTERID)
+table6_complete_pairs <- table6_complete_rows %>%
+  distinct(CONTROL, TESTERID)
+
+table6_trial_coverage <- official_sales_pairs %>%
+  left_join(table6_pairs_in_cleaned %>% mutate(has_recommendation_row = 1), by = c("CONTROL", "TESTERID")) %>%
+  left_join(table6_complete_pairs %>% mutate(has_complete_table6_vars = 1), by = c("CONTROL", "TESTERID")) %>%
+  mutate(
+    has_recommendation_row = ifelse(is.na(has_recommendation_row), 0, has_recommendation_row),
+    has_complete_table6_vars = ifelse(is.na(has_complete_table6_vars), 0, has_complete_table6_vars)
+  ) %>%
+  group_by(CONTROL) %>%
+  summarise(
+    n_testers_with_recommendation_row = sum(has_recommendation_row),
+    n_testers_with_complete_table6_vars = sum(has_complete_table6_vars),
+    in_table5 = CONTROL[1] %in% table5_final$CONTROL,
+    in_table6 = CONTROL[1] %in% table6_final_controls$CONTROL,
+    .groups = "drop"
+  )
+
+table6_trial_coverage_summary <- table6_trial_coverage %>%
+  count(n_testers_with_complete_table6_vars, name = "n_trials")
+
+table6_loss_from_table5_summary <- table6_trial_coverage %>%
+  filter(in_table5, !in_table6) %>%
+  mutate(
+    reason = case_when(
+      n_testers_with_recommendation_row == 0 ~ "no tester has a recommended-home row in cleaned_hds",
+      n_testers_with_recommendation_row == 1 ~ "only one tester has a recommended-home row in cleaned_hds",
+      n_testers_with_complete_table6_vars == 1 ~ "only one tester has complete Table 6 variables",
+      n_testers_with_complete_table6_vars == 0 ~ "recommended-home rows present, but no tester has complete Table 6 variables",
+      TRUE ~ "other"
+    )
+  ) %>%
+  count(reason, name = "n_trials_removed") %>%
+  arrange(desc(n_trials_removed), reason)
+
+table6_pair_attrition_summary <- tibble(
+  stage = c(
+    "Official passed sales tester-trial pairs",
+    "Tester-trial pairs represented in cleaned_hds",
+    "Tester-trial pairs with complete Table 6 variables",
+    "Tester-trial pairs in final all-completed-pairs Table 6 sample"
+  ),
+  unit = "tester-trial pair",
+  remaining_n = c(
+    nrow(official_sales_pairs),
+    nrow(table6_pairs_in_cleaned),
+    nrow(table6_complete_pairs),
+    nrow(table6_final_pairs)
+  ),
+  removed_since_previous = c(
+    NA_integer_,
+    nrow(official_sales_pairs) - nrow(table6_pairs_in_cleaned),
+    nrow(table6_pairs_in_cleaned) - nrow(table6_complete_pairs),
+    nrow(table6_complete_pairs) - nrow(table6_final_pairs)
+  ),
+  reason_for_removal = c(
+    "All tester-trial pairs in official passed sales controls that appear in the raw sales visit file.",
+    "Tester-trial pair has no recommended-home row in the all-completed-pairs workflow's externally merged recommendation file.",
+    "Tester-trial pair has recommended-home rows but missing race, covariate, or Table 6 neighborhood-composition variables.",
+    "Tester-trial pair belongs to a trial where only one tester remains after the Table 6 complete-case filter."
+  )
+)
+
+sample_attrition_summary <- tibble(
+  stage = c(
+    "Raw TAF rows",
+    "Unique TAF controls",
+    "TAF controls with RELEASE == 1",
+    "Released HDS controls with FPASS == 1",
+    "Released and passed sales controls",
+    "Released and passed sales controls present in raw sales visits",
+    "Final all-completed-pairs Table 5 sample",
+    "Final all-completed-pairs Table 6 sample"
+  ),
+  unit = c("row", rep("trial/control", 5), "completed-pair trial", "completed-pair trial"),
+  remaining_n = c(
+    taf_raw_rows,
+    taf_raw_controls,
+    taf_released_controls,
+    taf_passed_controls,
+    taf_passed_sales_controls,
+    sales_file_controls,
+    n_distinct(table5_final$CONTROL),
+    n_distinct(table6_final$CONTROL)
+  ),
+  removed_since_previous = c(
+    NA_integer_,
+    taf_raw_rows - taf_raw_controls,
+    taf_raw_controls - taf_released_controls,
+    taf_released_controls - taf_passed_controls,
+    taf_passed_controls - taf_passed_sales_controls,
+    taf_passed_sales_controls - sales_file_controls,
+    sales_file_controls - n_distinct(table5_final$CONTROL),
+    n_distinct(table5_final$CONTROL) - n_distinct(table6_final$CONTROL)
+  ),
+  reason_for_removal = c(
+    "All rows in the raw TAF file before analysis restrictions.",
+    "Repeated CONTROL rows collapsed to one observation per test/control.",
+    "Controls with RELEASE not equal to 1.",
+    "Released controls not in the final quality-passed sample; most have no assignment/completion/pass fields.",
+    "Rental tests excluded; the comment analyzes the sales-market component.",
+    "Passed sales controls with no corresponding CONTROL in the raw sales visit file.",
+    "Controls with missing Table 5 outcomes/covariates, plus partners dropped to preserve completed pairs.",
+    "Controls where one or both testers lack externally merged recommended-home rows needed for Table 6."
+  )
+)
+
+cat("\n\nSample attrition from HDS TAF to analysis samples:\n")
+cat("=========================================================\n\n")
+print(sample_attrition_summary, width = Inf)
+
+cat("\n\nProfile of TAF rows with RELEASE == 1:\n")
+cat("=========================================================\n\n")
+print(released_taf_profile, width = Inf)
+
+cat("\n\nTable 5 all-completed-pairs omissions by reason:\n")
+cat("=========================================================\n\n")
+print(table5_reason_summary, width = Inf)
+
+cat("\n\nTable 6 all-completed-pairs sample by outcome:\n")
+cat("=========================================================\n\n")
+print(table6_outcome_summary, width = Inf)
+
+cat("\n\nTable 6 all-completed-pairs tester-trial attrition:\n")
+cat("=========================================================\n\n")
+print(table6_pair_attrition_summary, width = Inf)
+
+cat("\n\nFinal Table 6 coverage of official passed sales trials:\n")
+cat("=========================================================\n\n")
+cat("Final Table 6 recommended-home rows:", format(nrow(table6_final), big.mark = ","), "\n")
+print(table6_trial_coverage_summary, width = Inf)
+
+cat("\n\nTable 5 trials removed before Table 6 by reason:\n")
+cat("=========================================================\n\n")
+print(table6_loss_from_table5_summary, width = Inf)
+
 official_pair_summary <- official_sales_pairs %>%
   left_join(ct_pairs %>% mutate(in_ct = 1), by = c("CONTROL", "TESTERID")) %>%
   mutate(in_ct = ifelse(is.na(in_ct), 0, in_ct))
@@ -802,25 +1102,30 @@ dataset_tex_labels <- c(
 duplicate_cleanup_lines <- c(
   "\\begin{table}[htbp]",
   "\\centering",
-  "\\caption{Rows removed by the corrected pooled-file cleaning procedure}",
+  "\\caption{Rows removed by the corrected selected-sample-file cleaning procedure}",
   "\\label{tab:duplicate_cleanup_summary}",
-  "\\resizebox{\\textwidth}{!}{%",
-  "\\begin{tabular}{lrrrrrrr}",
+  "\\setlength{\\tabcolsep}{4pt}",
+  "\\begin{tabular}{lrrrrrr}",
   "\\toprule",
-  "Dataset & Original rows & Exact duplicates removed & Key-based dedup removed & Tester-trial collapse & No unique advertised home & Missing city drop & Final rows\\\\",
+  "Dataset & Original & Exact dupes & Key dedup & Ambiguous ad & Missing city & Final\\\\",
   "\\midrule"
 )
 
 for (i in seq_len(nrow(duplicate_cleanup_summary))) {
   row <- duplicate_cleanup_summary[i, ]
+  key_dedup_display <- row$key_based_dedup_removed + row$tester_trial_collapse_removed
+  key_dedup_tex <- format_int(key_dedup_display)
+  if (row$tester_trial_collapse_removed > 0) {
+    key_dedup_tex <- paste0(key_dedup_tex, "$^*$")
+  }
+
   duplicate_cleanup_lines <- c(
     duplicate_cleanup_lines,
     paste(
       dataset_tex_labels[[row$dataset]],
       format_int(row$original_rows),
       format_int(row$exact_duplicates_removed),
-      format_int(row$key_based_dedup_removed),
-      format_int(row$tester_trial_collapse_removed),
+      key_dedup_tex,
       format_int(row$no_unique_advertised_home),
       format_int(row$missing_city_drop),
       format_int(row$final_rows),
@@ -832,10 +1137,9 @@ for (i in seq_len(nrow(duplicate_cleanup_summary))) {
 duplicate_cleanup_lines <- c(
   duplicate_cleanup_lines,
   "\\bottomrule",
-  "\\end{tabular}%",
-  "}",
+  "\\end{tabular}",
   "\\begin{minipage}{\\textwidth}",
-  "\\footnotesize Notes: Exact duplicates are computed after ignoring index-like columns. Key-based deduplication uses normalized advertised-home addresses for \\texttt{adsprocessed} and recommended-home characteristics for the pooled files. Tester-trial collapse applies to \\texttt{adsprocessed}, where repeated retained advertised-home rows are aggregated to one \\texttt{CONTROL}$\\times$\\texttt{TESTERID} record. The advertised-home ambiguity column counts unresolved \\texttt{CONTROL}$\\times$\\texttt{TESTERID} pairs for \\texttt{adsprocessed} and rows lost at that step for the pooled files.",
+  "\\footnotesize Notes: Exact duplicates are computed after ignoring index-like columns. Key-based deduplication uses normalized advertised-home addresses for \\texttt{adsprocessed} and recommended-home characteristics for the selected-sample files. $^*$For \\texttt{adsprocessed}, key dedup also includes 321 repeated retained advertised-home rows collapsed to one \\texttt{CONTROL}$\\times$\\texttt{TESTERID} record. The ambiguous-ad column counts unresolved advertised-home assignments.",
   "\\end{minipage}",
   "\\end{table}"
 )
@@ -878,16 +1182,16 @@ summarize_retained_ad_duplicates <- function(dataset_label, hud_data, ads_data) 
       .groups = "drop"
     )
 
-  # Because the pooled files are produced by crossing ad rows with recommendation
+  # Because the selected-sample files are produced by crossing ad rows with recommendation
   # rows, each extra retained-ad row expands by the number of final-file rows per
   # source ad row in that tester-trial pair.
   crossing_rows <- hud_data %>%
-    count(CONTROL, TESTERID, name = "pooled_rows") %>%
+    count(CONTROL, TESTERID, name = "selected_sample_rows") %>%
     left_join(
       ads_matched %>% count(CONTROL, TESTERID, name = "source_ad_rows"),
       by = c("CONTROL", "TESTERID")
     ) %>%
-    mutate(recommendation_rows_crossed = pooled_rows / source_ad_rows)
+    mutate(recommendation_rows_crossed = selected_sample_rows / source_ad_rows)
 
   duplicate_rows_by_pair <- duplicate_rows_by_pair %>%
     left_join(crossing_rows, by = c("CONTROL", "TESTERID"))
@@ -906,18 +1210,18 @@ summarize_retained_ad_duplicates <- function(dataset_label, hud_data, ads_data) 
     ),
     share_multi_sequence = multi_sequence_duplicate_rows / duplicate_retained_ad_rows,
     sequence_pattern = if (nrow(duplicate_sequence_rows) == 1) duplicate_sequence_rows$sequence_pattern[[1]] else "multiple",
-    extra_pooled_rows_from_ad_duplicates =
+    extra_selected_sample_rows_from_ad_duplicates =
       round(sum(
         duplicate_rows_by_pair$duplicate_retained_ad_rows * duplicate_rows_by_pair$recommendation_rows_crossed,
         na.rm = TRUE
       )),
-    extra_pooled_rows_from_multi_sequence =
+    extra_selected_sample_rows_from_multi_sequence =
       round(sum(
         duplicate_rows_by_pair$multi_sequence_duplicate_rows * duplicate_rows_by_pair$recommendation_rows_crossed,
         na.rm = TRUE
       )),
     share_extra_rows_multi_sequence =
-      extra_pooled_rows_from_multi_sequence / extra_pooled_rows_from_ad_duplicates
+      extra_selected_sample_rows_from_multi_sequence / extra_selected_sample_rows_from_ad_duplicates
   )
 }
 
@@ -970,8 +1274,8 @@ duplicate_ad_provenance <- bind_rows(
     ),
     share_multi_sequence = multi_sequence_duplicate_rows / duplicate_retained_ad_rows,
     sequence_pattern = if (nrow(full_ads_sequence_rows) == 1) full_ads_sequence_rows$sequence_pattern[[1]] else "multiple",
-    extra_pooled_rows_from_ad_duplicates = NA_real_,
-    extra_pooled_rows_from_multi_sequence = NA_real_,
+    extra_selected_sample_rows_from_ad_duplicates = NA_real_,
+    extra_selected_sample_rows_from_multi_sequence = NA_real_,
     share_extra_rows_multi_sequence = NA_real_
   )
 )
@@ -990,7 +1294,7 @@ duplicate_ad_lines <- c(
   "\\resizebox{\\textwidth}{!}{%",
   "\\begin{tabular}{lrrrrrrr}",
   "\\toprule",
-  "Sample & Duplicate retained-ad rows & Multi-appointment rows & Share multi-appointment & Sequence pattern & Extra pooled rows from ad duplicates & Extra pooled rows from multi-appointment rows & Share from multi-appointment rows\\\\",
+  "Sample & Duplicate retained-ad rows & Multi-appointment rows & Share multi-appointment & Sequence pattern & Extra selected-sample rows from ad duplicates & Extra selected-sample rows from multi-appointment rows & Share from multi-appointment rows\\\\",
   "\\midrule"
 )
 
@@ -1004,8 +1308,8 @@ for (i in seq_len(nrow(duplicate_ad_provenance))) {
       format_int(row$multi_sequence_duplicate_rows),
       format_pct(row$share_multi_sequence),
       row$sequence_pattern,
-      ifelse(is.na(row$extra_pooled_rows_from_ad_duplicates), "--", format_int(row$extra_pooled_rows_from_ad_duplicates)),
-      ifelse(is.na(row$extra_pooled_rows_from_multi_sequence), "--", format_int(row$extra_pooled_rows_from_multi_sequence)),
+      ifelse(is.na(row$extra_selected_sample_rows_from_ad_duplicates), "--", format_int(row$extra_selected_sample_rows_from_ad_duplicates)),
+      ifelse(is.na(row$extra_selected_sample_rows_from_multi_sequence), "--", format_int(row$extra_selected_sample_rows_from_multi_sequence)),
       ifelse(is.na(row$share_extra_rows_multi_sequence), "--", format_pct(row$share_extra_rows_multi_sequence)),
       sep = " & "
     ) |> paste0("\\\\")
@@ -1018,7 +1322,7 @@ duplicate_ad_lines <- c(
   "\\end{tabular}%",
   "}",
   "\\begin{minipage}{\\textwidth}",
-  "\\footnotesize Notes: Retained-ad duplicates are repeated rows in \\texttt{adsprocessed} that are identical on the advertised-home variables retained in the corresponding pooled file. Extra pooled rows are computed by crossing each extra retained-ad row with the number of recommendation rows in the same \\texttt{CONTROL}$\\times$\\texttt{TESTERID} pair.",
+  "\\footnotesize Notes: Retained-ad duplicates are repeated rows in \\texttt{adsprocessed} that are identical on the advertised-home variables retained in the corresponding selected-sample file. Extra selected-sample rows are computed by crossing each extra retained-ad row with the number of recommendation rows in the same \\texttt{CONTROL}$\\times$\\texttt{TESTERID} pair.",
   "\\end{minipage}",
   "\\end{table}"
 )
@@ -1181,7 +1485,7 @@ ads_duplicate_counts <- ads_exact_counts %>%
   ) %>%
   filter(hds_race %in% 1:4)
 
-# The HUD pooled files use the final pooled-data key: one row per distinct
+# The HUD selected-sample files use the final selected-sample-data key: one row per distinct
 # advertised-home x recommended-home combination within CONTROL x TESTERID.
 hud_files <- list(
   "HUDprocessed census" = hudprocessed_census_path,
@@ -1310,8 +1614,8 @@ ct_other_cases <- aprace_rule_check %>%
 
 cat("\n\nHow a simple subgroup-overwrite rule reproduces C&T's APRACE variable:\n")
 cat("=========================================================\n\n")
-cat("Unique C&T testers in pooled files:", format(nrow(ct_aprace_testers), big.mark = ","), "\n")
-cat("Unique C&T testers matched to raw tester_censored:", format(nrow(aprace_rule_check), big.mark = ","), "\n")
+cat("Unique C&T testers in selected-sample files:", format(nrow(ct_aprace_testers), big.mark = ","), "\n")
+cat("Unique C&T testers matched to public tester file:", format(nrow(aprace_rule_check), big.mark = ","), "\n")
 cat(
   "Rule APRACE -> Asian if TASIANG > 0 -> Hispanic if THISPUBG > 0:",
   format(sum(aprace_rule_check$subgroup_rule_match, na.rm = TRUE), big.mark = ","),
@@ -1664,7 +1968,7 @@ for (i in seq_len(nrow(taf_ads_match_summary))) {
 evidence <- taf_ads_evidence_summary[1, ]
 
 cat("Supporting evidence summary (HDS tester-recorded address source):\n\n")
-cat("  Controls in pooled sample:", format(evidence$controls, big.mark = ","), "\n")
+cat("  Controls in selected-sample analysis:", format(evidence$controls, big.mark = ","), "\n")
 cat("  Controls with nonblank TAF street:", format(evidence$taf_nonblank_street, big.mark = ","), "\n")
 cat("  Exact matches:", format(evidence$exact_or_better, big.mark = ","), "\n")
 cat("  Exact or fuzzy matches:", format(evidence$exact_or_any_fuzzy, big.mark = ","), "\n")

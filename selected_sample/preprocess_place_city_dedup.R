@@ -15,9 +15,9 @@ sf_use_s2(FALSE)
 # Set this to the local location of the HUDreplication repository.
 REPO_ROOT <- path.expand("~/PATH/TO/HUDreplication")
 
-# Define the pooled-output folder and shared generated root
+# Define the selected-sample output folder and shared generated root
 generated_root <- file.path(REPO_ROOT, "Data", "Generated")
-output_folder <- file.path(generated_root, "Pooled_Analysis")
+output_folder <- file.path(generated_root, "selected_sample")
 input_folder <- file.path(REPO_ROOT, "Data", "CT2022_Replication_Data")
 
 ensure_output_dir <- function(path) {
@@ -561,7 +561,7 @@ core_ad_vars <- intersect(
 # Resolve each CONTROL x TESTERID pair to one canonical advertised-home record.
 # Priority:
 # 1. If the tester reported one advertised home, keep it.
-# 2. If the paired tester reported exactly one advertised home, use that listing.
+# 2. If the other tester in the completed pair reported exactly one advertised home, use that listing.
 # 3. If the tester's multiple listings agree on the core racial-composition ad controls,
 #    keep one row and average price on the dollar scale before logging again.
 # 4. Otherwise, drop the ambiguous tester-trial pair.
@@ -1095,7 +1095,7 @@ write_hud_outputs(
 )
 write_dedup_log(output_folder, "dedup_log_processed.csv")
 
-cat("\nGenerating non-deduplicated pooled outputs...\n")
+cat("\nGenerating non-deduplicated selected-sample outputs...\n")
 dedup_log <- new_dedup_log()
 
 adsprocessed_data_nodedup <- readRDS(paste0(input_folder, "/adsprocessed_JPE_censor.rds"))

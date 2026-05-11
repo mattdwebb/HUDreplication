@@ -5,7 +5,7 @@ clear all
 	/* Set path to the local location of the HUDreplication repository */
 	global REPO_ROOT "/PATH/TO/HUDreplication"
 
-	global CODE "${REPO_ROOT}/Pooled_Analysis" // set the file path to the pooled analysis directory
+	global CODE "${REPO_ROOT}/selected_sample" // set the file path to the selected-sample analysis directory
 	global DATA "${REPO_ROOT}/Data" // set the file path to the data subdirectory
 
 	cap mkdir "${CODE}/Output" // make an Output folder if it doesn't already exist

@@ -36,10 +36,10 @@ if (skip_geocoding) {
 resolve_repo_root <- function() {
   cwd <- normalizePath(getwd(), winslash = "/", mustWork = TRUE)
   if (basename(cwd) == "HUDreplication") return(cwd)
-  if (basename(cwd) == "Paired_Tester_Analysis") return(dirname(cwd))
+  if (basename(cwd) == "all_completed_pairs") return(dirname(cwd))
   candidate <- file.path(cwd, "HUDreplication")
   if (dir.exists(candidate)) return(normalizePath(candidate, winslash = "/", mustWork = TRUE))
-  stop("Could not infer repo_root. Run from HUDreplication or Paired_Tester_Analysis.")
+  stop("Could not infer repo_root. Run from HUDreplication or all_completed_pairs.")
 }
 
 repo_root <- resolve_repo_root()
@@ -47,12 +47,12 @@ setwd(repo_root)
 
 # Define data paths
 raw_data_path <- "Data/HDS2012_Raw_Data"
-paired_generated_path <- "Data/Generated/Paired_Tester_Analysis"
+all_completed_pairs_generated_path <- "Data/Generated/all_completed_pairs"
 
-dir.create(paired_generated_path, showWarnings = FALSE, recursive = TRUE)
+dir.create(all_completed_pairs_generated_path, showWarnings = FALSE, recursive = TRUE)
 
 generated_file <- function(filename) {
-  file.path(paired_generated_path, filename)
+  file.path(all_completed_pairs_generated_path, filename)
 }
 
 
@@ -79,16 +79,45 @@ cat("=== READING SAS FILES AND FILTERING TO SALES DATA ===\n")
 assignment_raw <- import_sas(file.path(raw_data_path, "assignment.sas7bdat"))
 assignment <- assignment_raw %>%
   filter(grepl("-S[A-Z]-", CONTROL)) %>%  # Filter to sales tests (SA/SB/SH)
-  filter(RELEASE == "1" & !is.na(TESTERID))  # Only released tests with valid tester IDs
-cat("Assignment: ", nrow(assignment_raw), "→", nrow(assignment), "rows after filtering to only sales and released tests\n")
-
-# Build kids indicator from assignment (ARELATE2-5 == 3 indicates child)
-assignment_kids <- assignment %>%
+  filter(RELEASE == "1" & !is.na(TESTERID)) %>%  # Only released tests with valid tester IDs
   mutate(
     has_child = (ARELATE2 == 3) | (ARELATE3 == 3) | (ARELATE4 == 3) | (ARELATE5 == 3),
     all_rel_na = is.na(ARELATE2) & is.na(ARELATE3) & is.na(ARELATE4) & is.na(ARELATE5),
     kids = if_else(all_rel_na, NA_real_, if_else(has_child, 1, 0))
   ) %>%
+  select(CONTROL, TESTERID, kids, SEQUENCE, ARELATE2, AMOVERS, AELNG1, ALGNCUR, ALEASETP, ACAROWN, DPMTEXP)
+cat("Assignment: ", nrow(assignment_raw), "→", nrow(assignment), "rows after filtering to only sales and released tests\n")
+
+# Quick data quality summary of assignment
+cat("\n=== ASSIGNMENT DATA QUALITY SUMMARY ===\n")
+for (col in names(assignment)) {
+  vals <- assignment[[col]]
+  n_total <- length(vals)
+  n_na <- sum(is.na(vals))
+  n_blank <- if (is.character(vals)) sum(vals == "", na.rm = TRUE) else 0
+  n_valid <- n_total - n_na - n_blank
+  pct_missing <- round((n_na + n_blank) / n_total * 100, 1)
+  
+  cat(sprintf("\n  %-12s | Valid: %5d | NA: %5d | Blank: %5d | Missing%%: %5.1f%%",
+              col, n_valid, n_na, n_blank, pct_missing))
+  
+  if (is.numeric(vals)) {
+    cat(sprintf("\n%16s Numeric — Min: %s | Median: %s | Mean: %s | Max: %s | Unique: %d",
+                "", round(min(vals, na.rm = TRUE), 2), round(median(vals, na.rm = TRUE), 2),
+                round(mean(vals, na.rm = TRUE), 2), round(max(vals, na.rm = TRUE), 2),
+                length(unique(na.omit(vals)))))
+  } else if (is.character(vals) || is.factor(vals)) {
+    freq <- sort(table(vals, useNA = "no"), decreasing = TRUE)
+    top <- head(freq, 5)
+    cat(sprintf("\n%16s Character — Unique: %d | Top values: %s",
+                "", length(freq),
+                paste(names(top), paste0("(", top, ")"), sep = "=", collapse = ", ")))
+  }
+}
+cat("\n\n=== END ASSIGNMENT DATA QUALITY SUMMARY ===\n\n")
+
+# Build kids indicator from assignment (ARELATE2-5 == 3 indicates child)
+assignment_kids <- assignment %>%
   select(CONTROL, TESTERID, kids)
 
 # Read taf file and filter to sales
@@ -101,7 +130,7 @@ cat("TAF: ", nrow(taf_raw), "→", nrow(taf), "rows after sales filter\n")
 sales <- import_sas(file.path(raw_data_path, "sales.sas7bdat"))
 
 # Read tester file and standardize variable name
-tester <- import_sas(file.path(raw_data_path, "tester_censored.sas7bdat")) %>% 
+tester <- import_sas(file.path(raw_data_path, "tester_public.sas7bdat")) %>% 
   rename(TESTERID = TesterID)  # Standardize variable name
 
 # Read rhgeo file and filter to sales
@@ -581,6 +610,9 @@ sales_final <- sales_with_time %>%
   ) %>%
   mutate(
     RACE = as.numeric(str_extract(as.character(RACEID), "\\d$")),
+    # Rechomes has no appointment/date key, so recommendation-level data can
+    # only inherit timing from the tester-trial visit record.
+    month = as.integer(format(first_visit_datetime, "%m")),
     first_substantive_visit_order = if_else(is.infinite(first_substantive_visit_order), NA_real_, first_substantive_visit_order)
   ) %>%
   group_by(CONTROL) %>%
@@ -617,8 +649,11 @@ outcome_summary <- sales_final %>%
 sales_appointments <- sales_with_time %>%
   group_by(CONTROL) %>%
   arrange(appointment_datetime) %>%
-  mutate(visit_order = ifelse(is.na(appointment_datetime), NA, row_number()),  # only rows with non-NA datetime will have visit_order, NA values ordered at the end of each CONTROL
-        RACE = as.numeric(str_extract(as.character(RACEID), "\\d$")),) %>% 
+  mutate(
+    visit_order = ifelse(is.na(appointment_datetime), NA, row_number()),  # only rows with non-NA datetime will have visit_order, NA values ordered at the end of each CONTROL
+    month = as.integer(format(appointment_datetime, "%m")),
+    RACE = as.numeric(str_extract(as.character(RACEID), "\\d$"))
+  ) %>% 
   ungroup()
 
 # Export cleaned sales data
@@ -661,7 +696,7 @@ tester_clean %>%
 # Merge sales and tester data
 sales_and_tester <- sales_final %>%
   left_join(tester_clean, by = "TESTERID") %>%
-  left_join(assignment_kids, by = c("CONTROL", "TESTERID")) %>%
+  left_join(assignment, by = c("CONTROL", "TESTERID")) %>%
   mutate(
     mother = if_else(kids == 1 & TSEX == 0, 1, if_else(is.na(kids) | is.na(TSEX), NA_real_, 0))
   )
@@ -672,7 +707,7 @@ cat("Exported merged data to ", generated_file("sales_and_tester_merged.csv"), "
 # Alternate specification keeping each appointment as a separate row
 sales_and_tester_appointments <- sales_appointments %>%
   left_join(tester_clean, by = "TESTERID") %>%
-  left_join(assignment_kids, by = c("CONTROL", "TESTERID")) %>%
+  left_join(assignment, by = c("CONTROL", "TESTERID")) %>%
   mutate(
     mother = if_else(kids == 1 & TSEX == 0, 1, if_else(is.na(kids) | is.na(TSEX), NA_real_, 0))
   )
@@ -994,9 +1029,9 @@ cat("Exported merged data to ", generated_file("sales_tester_rechomes_merged.csv
 # =================================================================================================== #
 
 cat("=== GEOCODING  ===\n")
-source(file.path("Paired_Tester_Analysis", "Cleaning_Scripts", "address_geocoding.R"))
+source(file.path("all_completed_pairs", "Cleaning_Scripts", "address_geocoding.R"))
 manual_geocode_override_path <- file.path(
-  "Paired_Tester_Analysis",
+  "all_completed_pairs",
   "Cleaning_Scripts",
   "manual_geocoded_addresses.csv"
 )
@@ -1020,6 +1055,13 @@ if (skip_geocoding) {
         mutate(
           mother = if_else(kids == 1 & TSEX == 0, 1,
                            if_else(is.na(kids) | is.na(TSEX), NA_real_, 0))
+        )
+    }
+    if (!("month" %in% names(sales_tester_rechomes_geocoded))) {
+      sales_tester_rechomes_geocoded <- sales_tester_rechomes_geocoded %>%
+        left_join(
+          sales_final %>% select(CONTROL, TESTERID, month),
+          by = c("CONTROL", "TESTERID")
         )
     }
   } else {
@@ -1051,6 +1093,23 @@ sales_tester_rechomes_geocoded <- apply_manual_geocode_overrides(
   manual_geocode_override_path
 )
 
+assignment_control_vars <- c("kids", "SEQUENCE", "ARELATE2", "AMOVERS", "AELNG1",
+                             "ALGNCUR", "ALEASETP", "ACAROWN", "DPMTEXP")
+
+# Cached geocoded files can predate newer assignment controls. Refresh these
+# trial-level variables from assignment.sas7bdat before building cleaned_hds.csv.
+sales_tester_rechomes_geocoded <- sales_tester_rechomes_geocoded %>%
+  select(-any_of(c(assignment_control_vars, "month"))) %>%
+  left_join(assignment, by = c("CONTROL", "TESTERID")) %>%
+  left_join(
+    sales_final %>% select(CONTROL, TESTERID, month),
+    by = c("CONTROL", "TESTERID")
+  ) %>%
+  mutate(
+    mother = if_else(kids == 1 & TSEX == 0, 1,
+                     if_else(is.na(kids) | is.na(TSEX), NA_real_, 0))
+  )
+
 sales_tester_rechomes_geocoded <- flag_bad_address_inputs(
   sales_tester_rechomes_geocoded,
   street_col = "HSITEAD"
@@ -1079,12 +1138,12 @@ if (exists("sales_tester_rechomes_geocoded")) {
 }
 
 # Load merge helpers
-source(file.path("Paired_Tester_Analysis", "Cleaning_Scripts", "acs_merging.R"))
-source(file.path("Paired_Tester_Analysis", "Cleaning_Scripts", "superfund_merging.R"))
-source(file.path("Paired_Tester_Analysis", "Cleaning_Scripts", "school_score_merging.R"))
-source(file.path("Paired_Tester_Analysis", "Cleaning_Scripts", "greatschools_crime_merging.R"))
-source(file.path("Paired_Tester_Analysis", "Cleaning_Scripts", "rsei_merging.R"))
-source(file.path("Paired_Tester_Analysis", "Cleaning_Scripts", "pm25_merging.R"))
+source(file.path("all_completed_pairs", "Cleaning_Scripts", "acs_merging.R"))
+source(file.path("all_completed_pairs", "Cleaning_Scripts", "superfund_merging.R"))
+source(file.path("all_completed_pairs", "Cleaning_Scripts", "school_score_merging.R"))
+source(file.path("all_completed_pairs", "Cleaning_Scripts", "greatschools_crime_merging.R"))
+source(file.path("all_completed_pairs", "Cleaning_Scripts", "rsei_merging.R"))
+source(file.path("all_completed_pairs", "Cleaning_Scripts", "pm25_merging.R"))
 
 # Prepare tract GEOID for ACS merging
 merged_external_data <- merged_external_data %>%
@@ -1106,24 +1165,11 @@ merged_external_data <- merged_external_data %>%
     singlefamily_Rec = single_parent_rate,
     ownerocc_Rec = ownership_rate,
     medincome_Rec = median_income,
-    nodad_Rec = nodad_rate
+    nodad_Rec = nodad_rate,
+    WhiteLI_Rec = white_low_income_component,
+    WhiteMI_Rec = white_mid_income_component,
+    WhiteHI_Rec = white_high_income_component
   )
-
-# Create income-tiered white share using tract median income tertiles
-income_cutoffs <- quantile(merged_external_data$medincome_Rec, probs = c(1/3, 2/3), na.rm = TRUE, names = FALSE)
-merged_external_data <- merged_external_data %>%
-  mutate(
-    income_tier = case_when(
-      is.na(medincome_Rec) ~ NA_character_,
-      medincome_Rec <= income_cutoffs[1] ~ "low",
-      medincome_Rec <= income_cutoffs[2] ~ "mid",
-      TRUE ~ "high"
-    ),
-    WhiteLI_Rec = if_else(income_tier == "low", w2012pc_Rec, NA_real_),
-    WhiteMI_Rec = if_else(income_tier == "mid", w2012pc_Rec, NA_real_),
-    WhiteHI_Rec = if_else(income_tier == "high", w2012pc_Rec, NA_real_)
-  ) %>%
-  select(-income_tier)
 
 cat("\n--- Superfund site counts (5 km) ---\n")
 merged_external_data <- merge_superfund_counts(

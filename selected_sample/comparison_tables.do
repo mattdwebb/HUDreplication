@@ -1,4 +1,4 @@
-// This file generates the six-column comparison tables for the pooled replication
+// This file generates the six-column comparison tables for the selected-sample replication
 // using the cleaned `_processed` and `_with_duplicates` generated inputs.
 
 clear all
