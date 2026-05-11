@@ -479,7 +479,7 @@ correct_table "`CONTROL_VARS'" "`ABS_VARS'" ///
     "12" ///
 	"`APPENDIX_ANALYSIS_TYPE'"
 
-if "${SELECTED_SAMPLE_TRIAL_VARYING_ONLY}" == "1" {
+if "${SELECTED_SAMPLE_TRIAL_VARYING}" == "1" {
     display as text "Skipping Table 13 for within-trial-controls-only diagnostic."
 }
 else {

@@ -4,12 +4,48 @@ library(dplyr)
 library(tidyr)
 library(haven)
 
-repo_root <- normalizePath(getwd(), winslash = "/", mustWork = TRUE)
+resolve_repo_root <- function() {
+  cmd_args <- commandArgs(FALSE)
+  file_arg <- grep("^--file=", cmd_args, value = TRUE)
+  start_dirs <- normalizePath(getwd(), winslash = "/", mustWork = TRUE)
 
-# Search upward for a directory containing "all_completed_pairs"
-while (!dir.exists(file.path(repo_root, "all_completed_pairs")) && repo_root != dirname(repo_root)) {
-  repo_root <- dirname(repo_root)
+  if (length(file_arg) == 1) {
+    script_arg <- sub("^--file=", "", file_arg)
+    if (!file.exists(script_arg)) {
+      script_arg <- gsub("~+~", " ", script_arg, fixed = TRUE)
+    }
+    script_path <- normalizePath(script_arg, winslash = "/", mustWork = TRUE)
+    start_dirs <- c(dirname(script_path), start_dirs)
+  }
+
+  source_files <- unlist(
+    lapply(sys.frames(), function(frame) {
+      if (is.character(frame$ofile) && length(frame$ofile) == 1) frame$ofile else NULL
+    }),
+    use.names = FALSE
+  )
+  if (length(source_files) > 0) {
+    source_paths <- normalizePath(source_files, winslash = "/", mustWork = TRUE)
+    start_dirs <- c(dirname(source_paths), start_dirs)
+  }
+
+  for (start_dir in unique(start_dirs)) {
+    repo_root <- start_dir
+    while (repo_root != dirname(repo_root)) {
+      if (
+        dir.exists(file.path(repo_root, "all_completed_pairs")) &&
+        dir.exists(file.path(repo_root, "Data"))
+      ) {
+        return(repo_root)
+      }
+      repo_root <- dirname(repo_root)
+    }
+  }
+
+  stop("Could not infer repo_root. Run from HUDreplication or all_completed_pairs.")
 }
+
+repo_root <- resolve_repo_root()
 
 setwd(repo_root)
 
@@ -41,9 +77,18 @@ if (cluster_level == "market") {
 dir.create(tables_dir, showWarnings = FALSE, recursive = TRUE)
 dir.create(appendix_tables_dir, showWarnings = FALSE, recursive = TRUE)
 
+progress_message <- function(message) {
+  cat(sprintf("[%s] %s\n", format(Sys.time(), "%H:%M:%S"), message))
+  flush.console()
+}
+
+progress_message(paste0("Running all_completed_pairs/analysis.R from ", repo_root))
+progress_message(paste0("Cluster level: ", cluster_level))
+
 rank_warn_log <- list()
 current_table <- "startup"
 
+progress_message("Loading official-pass trial list from taf.sas7bdat")
 official_pass_controls <- read_sas(file.path(data_dir, "HDS2012_Raw_Data", "taf.sas7bdat")) %>%
   filter(grepl("-S[A-Z]-", CONTROL)) %>%
   group_by(CONTROL) %>%
@@ -54,6 +99,7 @@ official_pass_controls <- read_sas(file.path(data_dir, "HDS2012_Raw_Data", "taf.
   ) %>%
   filter(release1, fpass1) %>%
   select(CONTROL)
+progress_message(sprintf("Official-pass controls retained: %s", length(unique(official_pass_controls$CONTROL))))
 
 restrict_to_official_pass <- function(df) {
   semi_join(df, official_pass_controls, by = "CONTROL")
@@ -85,6 +131,7 @@ appointment_valid_control_factors <- setdiff(appointment_valid_controls, "age")
 current_table <- "Table 5"
 
 # Import the data
+progress_message("Table 5: loading sales/tester data")
 data <- read.csv(file.path(all_completed_pairs_generated_dir, "sales_and_tester_merged.csv")) %>%
     restrict_to_official_pass() %>%
     filter(
@@ -113,6 +160,7 @@ data <- read.csv(file.path(all_completed_pairs_generated_dir, "sales_and_tester_
 summary(data$RACE)
 
 # Run regressions with felm
+progress_message(sprintf("Table 5: running tester-level models (%s rows, %s trials)", nrow(data), n_distinct(data$CONTROL)))
 recommended_total_races <- felm(
     as.formula(paste("STOTUNIT_TOTAL ~ RACE +", valid_controls_fml, "| CONTROL | 0 | cluster_group")),
     data = data
@@ -149,6 +197,7 @@ first_appointment_data <- data %>%
     filter(n_distinct(TESTERID) == 2) %>%
     ungroup()
 
+progress_message(sprintf("Table 5: running first-appointment models (%s rows, %s trials)", nrow(first_appointment_data), n_distinct(first_appointment_data$CONTROL)))
 available_first_races <- felm(
     as.formula(paste("SAVLBAD_FIRST ~ RACE +", valid_controls_fml, "| CONTROL | 0 | cluster_group")),
     data = first_appointment_data
@@ -170,6 +219,7 @@ summary(available_first_races)
 summary(available_first_ofcolor)
 
 # Alternate specification keeping each appointment as a separate row
+progress_message("Table 5: loading appointment-level data")
 appointments_data <- read.csv(file.path(all_completed_pairs_generated_dir, "sales_and_tester_appointments.csv"))  %>%
     restrict_to_official_pass() %>%
     filter(
@@ -195,6 +245,7 @@ appointments_data <- read.csv(file.path(all_completed_pairs_generated_dir, "sale
 
 
 # Run regressions with felm for appointments data
+progress_message(sprintf("Table 5: running appointment-level models (%s rows, %s trials)", nrow(appointments_data), n_distinct(appointments_data$CONTROL)))
 recommended_apps_races <- felm(
     as.formula(paste("STOTUNIT ~ RACE +", appointment_valid_controls_fml, "| CONTROL | 0 | cluster_group")),
     data = appointments_data
@@ -396,15 +447,18 @@ write_table <- function(path, expr) {
   dir.create(dirname(path), showWarnings = FALSE, recursive = TRUE)
   out <- capture.output(expr)
   writeLines(out, path)
+  progress_message(paste0("Wrote ", path))
 }
 
+progress_message("Table 5: formatting output table")
 write_table(file.path(tables_dir, "table5.tex"), latex_table(table_rows))
 
 
 # =================================================================================================== #
-# TABLES 6–12 (PAIRED-TESTER DESIGN)
+# TABLES 6-12 (PAIRED-TESTER DESIGN)
 # =================================================================================================== #
 
+progress_message("Loading cleaned HDS data for Tables 6-12 and appendix outputs")
 cleaned_data <- read.csv(file.path(all_completed_pairs_generated_dir, "cleaned_hds.csv")) %>%
   restrict_to_official_pass() %>%
   mutate(
@@ -428,6 +482,7 @@ race_share_controls <- c("percent_white", "percent_black", "percent_hispanic", "
 race_share_controls_fml <- paste(race_share_controls, collapse = " + ")
 
 current_table <- "Table 6"
+progress_message("Table 6: running racial-composition outcome models")
 
 completed_pair_filter <- function(df) {
   df %>%
@@ -781,6 +836,7 @@ write_table(
 
 # ----- Table 7: Discriminatory Steering and Neighborhood Racial Composition by Income -----
 current_table <- "Table 7"
+progress_message("Table 7: running racial-composition-by-income outcome models")
 table7_outcomes <- c("WhiteHI_Rec", "WhiteMI_Rec", "WhiteLI_Rec")
 table7_labels <- c("White High-Income", "White Middle-Income", "White Low-Income")
 table7_data_list <- lapply(table7_outcomes, function(outcome) {
@@ -820,6 +876,7 @@ write_table(
 
 # ----- Table 8: Discriminatory Steering and Neighborhood Effects -----
 current_table <- "Table 8A"
+progress_message("Table 8A: running school-quality and safety outcome models")
 table8a_outcomes <- c("elementary_school_score", "middle_school_score", "Assault_Rec", "Elementary_School_Score_Rec")
 table8a_labels <- c("SEDA Elementary", "SEDA Middle", "Assaults", "GreatSchools Elem")
 table8a_data_list <- lapply(table8a_outcomes, function(outcome) {
@@ -858,6 +915,7 @@ write_table(
 )
 
 current_table <- "Table 8B"
+progress_message("Table 8B: running ACS-neighborhood-characteristic outcome models")
 table8b_outcomes <- c("povrate_Rec", "skill_Rec", "college_Rec", "singlefamily_Rec", "ownerocc_Rec")
 table8b_labels <- c("Poverty Rate", "High Skill", "College", "Single Family", "Ownership Rate")
 table8b_data_list <- lapply(table8b_outcomes, function(outcome) {
@@ -897,6 +955,7 @@ write_table(
 
 # ----- Table 9: Discriminatory Steering and Local Pollution Exposures -----
 current_table <- "Table 9A"
+progress_message("Table 9A: running pollution-exposure outcome models")
 table9_outcomes <- c("SFcount_Rec", "RSEI_Rec", "PM25_Rec")
 table9_labels <- c("Superfund", "Toxics (RSEI)", "PM2.5")
 table9_data_list <- lapply(table9_outcomes, function(outcome) {
@@ -935,6 +994,7 @@ write_table(
 )
 
 current_table <- "Table 9B"
+progress_message("Table 9B: running pollution-exposure models for mothers")
 table9_mom_data_list <- lapply(table9_outcomes, function(outcome) {
   prep_table_data(cleaned_data, c(outcome)) %>%
     filter(mother == 1) %>%
@@ -973,6 +1033,7 @@ write_table(
 
 # ----- Table 10: Discriminatory Steering and Neighborhood Effects (Mothers) -----
 current_table <- "Table 10A"
+progress_message("Table 10A: running school-quality and safety models for mothers")
 table10a_outcomes <- table8a_outcomes
 table10a_labels <- table8a_labels
 table10a_data_list <- lapply(table10a_outcomes, function(outcome) {
@@ -1013,6 +1074,7 @@ write_table(
 )
 
 current_table <- "Table 10B"
+progress_message("Table 10B: running ACS-neighborhood-characteristic models for mothers")
 table10b_outcomes <- table8b_outcomes
 table10b_labels <- table8b_labels
 table10b_data_list <- lapply(table10b_outcomes, function(outcome) {
@@ -1056,6 +1118,7 @@ write_table(
 
 # ----- Table 12: Median Income in Neighborhood -----
 current_table <- "Table 12"
+progress_message("Table 12: running median-income models")
 table12_data_all <- prep_table_data(cleaned_data, c("medincome_Rec")) %>%
   filter(medincome_Rec > 0)
 table12_data_fam <- table12_data_all %>% filter(kids == 1)
@@ -1098,6 +1161,7 @@ write_table(
 
 # ----- Appendix Table A1: Expanded Table 6 -----
 current_table <- "Appendix Table A1"
+progress_message("Appendix Table A1: running expanded racial-composition models")
 appendix_a1_outcomes <- c("w2012pc_Rec", "percent_black", "percent_hispanic", "percent_asian")
 appendix_a1_labels <- c("White Share", "Black Share", "Hispanic Share", "Asian Share")
 appendix_a1_data_list <- lapply(appendix_a1_outcomes, function(outcome) {
@@ -1147,6 +1211,7 @@ family_aux_table_ids <- c("A2", "A3", "A4", "A5")
 
 for (i in seq_along(family_aux_races)) {
   current_table <- paste("Appendix Table", family_aux_table_ids[i])
+  progress_message(paste0(current_table, ": running within-race family-status models"))
   race_df <- cleaned_data %>% filter(as.character(RACE) == family_aux_races[i])
   family_data_list <- lapply(family_aux_outcomes, function(outcome) {
     prep_table_data(race_df, c(outcome), extra_vars = c("kids", "mother"), require_completed_pair = FALSE)
@@ -1230,6 +1295,7 @@ run_race_control_table <- function(outcomes, labels, file, caption, table_label)
 }
 
 current_table <- "Appendix Table A6"
+progress_message("Appendix Table A6: running school/safety models with racial-share controls")
 run_race_control_table(
   table8a_outcomes,
   table8a_labels,
@@ -1239,6 +1305,7 @@ run_race_control_table(
 )
 
 current_table <- "Appendix Table A7"
+progress_message("Appendix Table A7: running ACS-neighborhood models with racial-share controls")
 run_race_control_table(
   table8b_outcomes,
   table8b_labels,
@@ -1248,6 +1315,7 @@ run_race_control_table(
 )
 
 current_table <- "Appendix Table A8"
+progress_message("Appendix Table A8: running pollution models with racial-share controls")
 run_race_control_table(
   table9_outcomes,
   table9_labels,
@@ -1258,6 +1326,7 @@ run_race_control_table(
 
 # ----- Appendix Table A9: Median income with racial-share controls -----
 current_table <- "Appendix Table A9"
+progress_message("Appendix Table A9: running median-income model with racial-share controls")
 appendix_a9_data <- prep_table_data(cleaned_data, c("medincome_Rec"), extra_vars = race_share_controls) %>%
   filter(medincome_Rec > 0)
 appendix_a9_model <- felm(
@@ -1278,6 +1347,7 @@ write_table(
 )
 
 # ----- Hispanic tester subgroup exploration outputs -----
+progress_message("Writing Hispanic tester subgroup diagnostic outputs")
 hispanic_appearances <- cleaned_data %>%
   filter(as.character(RACE) == "3") %>%
   distinct(CONTROL, TESTERID, .keep_all = TRUE)
@@ -1375,6 +1445,7 @@ writeLines(hispanic_note_lines, file.path(appendix_tables_dir, "hispanic_tester_
 # These site-specific regressions have only one market by construction, so market
 # clustering is undefined. Keep them only in the standard trial-clustered run.
 if (cluster_level == "trial") {
+  progress_message("Writing market heterogeneity diagnostic outputs")
   site_market_lookup <- cleaned_data %>%
     mutate(site = substr(as.character(CONTROL), 1, 2)) %>%
     group_by(site, HSTATE, HCITY) %>%
@@ -1393,6 +1464,7 @@ if (cluster_level == "trial") {
   write.csv(site_market_lookup, file.path(appendix_tables_dir, "site_market_lookup.csv"), row.names = FALSE)
 
   current_table <- "Appendix Table A10"
+  progress_message("Appendix Table A10: running site-specific racial-composition models")
   market_sites <- site_market_lookup$site
   market_outcomes <- appendix_a1_outcomes
   market_labels <- appendix_a1_labels
@@ -1487,6 +1559,7 @@ if (cluster_level == "trial") {
 }
 
 if (length(rank_warn_log) > 0) {
+  progress_message("Writing rank-deficiency warning logs")
   dir.create(tables_dir, showWarnings = FALSE, recursive = TRUE)
   warn_tables <- vapply(rank_warn_log, `[[`, "", "table")
   warn_msgs <- vapply(rank_warn_log, `[[`, "", "message")
@@ -1557,4 +1630,6 @@ if (FALSE) {
   cat("Number who got second appointment:", white_callback_info$white_got_callback, "\n")
   cat("Average callback rate for white testers:", white_callback_info$avg_white_callbacks, "\n")
 }
+
+progress_message("analysis.R finished")
 }, warning = rank_warning_handler)

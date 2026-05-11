@@ -4,8 +4,8 @@ if "${SELECTED_SAMPLE_CLUSTER_VAR}" == "" {
 if "${SELECTED_SAMPLE_CLUSTER_LABEL}" == "" {
     global SELECTED_SAMPLE_CLUSTER_LABEL "trial"
 }
-if "${SELECTED_SAMPLE_CLUSTER_DESCRIPTION}" == "" {
-    global SELECTED_SAMPLE_CLUSTER_DESCRIPTION "${SELECTED_SAMPLE_CLUSTER_VAR}"
+if "${SELECTED_SAMPLE_CLUSTER_DESC}" == "" {
+    global SELECTED_SAMPLE_CLUSTER_DESC "${SELECTED_SAMPLE_CLUSTER_VAR}"
 }
 
 capture program drop clean_vars
@@ -349,7 +349,7 @@ program define run_comparison_regressions, rclass
             disp as text "Dep. Var. is: " as result "`dependent_var_`d''"
             disp as text "Racial Minority specification is: " as result "`racial_minority'"
             disp as text "City Fixed Effect is: " as result "`geofe'"
-            disp as text "Clustered by: ${SELECTED_SAMPLE_CLUSTER_DESCRIPTION}"
+            disp as text "Clustered by: ${SELECTED_SAMPLE_CLUSTER_DESC}"
 
             if "`table_number'" == "13" & `cols' == 1 & "${SELECTED_SAMPLE_CLUSTER_VAR}" == "control" {
                 reghdfe `dependent_var_`d'' `racial_minority' `CONTROL_VARS' `control_var_`d'' if condition_`d', absorb(`ABS_VARS' `geofe') keepsingle
@@ -470,7 +470,7 @@ program define correct_table, rclass
 		local full_sample_abs_vars_`full_sample_i' "`abs_vars_`full_sample_i''"
 	}
 
-	if "${SELECTED_SAMPLE_TRIAL_VARYING_ONLY}" == "1" {
+	if "${SELECTED_SAMPLE_TRIAL_VARYING}" == "1" {
 		// Diagnostic specification: keep the trial fixed effect and the
 		// tester/appointment controls used in the all-completed-pairs design. In this
         // mode, use the same retained baseline controls across all tables
@@ -509,7 +509,7 @@ program define correct_table, rclass
 	// Extract all unique control variables
 	local unique_controls "`control_vars_1' `control_vars_2' `control_vars_3' `control_vars_4' `control_vars_5' `control_vars_6'"
 	local all_vars "`all_vars' `unique_controls'"
-	if "${SELECTED_SAMPLE_TRIAL_VARYING_ONLY}" == "1" & "`analysis_type'" == "corrected" {
+	if "${SELECTED_SAMPLE_TRIAL_VARYING}" == "1" & "`analysis_type'" == "corrected" {
 		local all_vars "`all_vars' `full_sample_CONTROL_VARS' `full_sample_ABS_VARS'"
 		forvalues full_sample_i = 1/6 {
 			local all_vars "`all_vars' `full_sample_control_vars_`full_sample_i'' `full_sample_abs_vars_`full_sample_i''"
@@ -561,7 +561,7 @@ program define correct_table, rclass
             local racial_minority = "ofcolor"
             local geofe = "place_name"
         }
-        if "${SELECTED_SAMPLE_TRIAL_VARYING_ONLY}" == "1" {
+        if "${SELECTED_SAMPLE_TRIAL_VARYING}" == "1" {
             local geofe ""
         }
 
@@ -570,9 +570,9 @@ program define correct_table, rclass
         disp as text "Control Vars. are: " as result "`CONTROL_VARS' `control_vars'"
         disp as text "Absorbed Vars. are: " as result "`ABS_VARS' `abs_vars'"
         disp as text "City Fixed Effect is: " as result "`geofe'"
-	        disp as text "Clustered by: ${SELECTED_SAMPLE_CLUSTER_DESCRIPTION}"
+	        disp as text "Clustered by: ${SELECTED_SAMPLE_CLUSTER_DESC}"
 
-	        if "${SELECTED_SAMPLE_TRIAL_VARYING_ONLY}" == "1" & "`analysis_type'" == "corrected" {
+	        if "${SELECTED_SAMPLE_TRIAL_VARYING}" == "1" & "`analysis_type'" == "corrected" {
 	            tempvar full_control_complete_case
 	            local fs_same_ctrl ""
 	            local fs_same_abs ""
