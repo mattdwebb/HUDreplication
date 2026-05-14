@@ -140,7 +140,7 @@ Run:
 
 - `Rscript all_completed_pairs/data_cleaning.R`
 
-This script reads the HDS raw files from `Data/HDS2012_Raw_Data`, performs the internal merges and cleaning, geocodes recommended properties, pulls ACS data, merges the external datasets, and writes all-completed-pairs intermediates to `Data/Generated/all_completed_pairs`.
+This script reads the HDS raw files from `Data/HDS2012_Raw_Data`, performs the internal merges and cleaning, geocodes recommended properties, pulls ACS data, merges the external datasets, and writes all-completed-pairs intermediates to `Data/Generated/all_completed_pairs`. This script takes about 30 minutes to run on a M1 Macbook Pro, with the majority of the time spent in geocoding particularly the address-by-address fallback geocoding methods. 
 
 Key outputs include:
 

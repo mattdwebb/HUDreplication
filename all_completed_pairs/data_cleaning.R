@@ -9,12 +9,13 @@
 
 # Required packages
 packages <- c(
-  "haven",     # Reading SAS files (.sas7bdat format)
-  "dplyr",     # Data manipulation and transformation
-  "readr",     # Reading and writing CSV files
-  "stringr",   # String manipulation and regex operations
-  "purrr",     # For map functions
-  "readxl"     # Reading Excel files (Superfund data)
+  "haven",      # Reading SAS files (.sas7bdat format)
+  "dplyr",      # Data manipulation and transformation
+  "readr",      # Reading and writing CSV files
+  "stringr",    # String manipulation and regex operations
+  "purrr",      # For map functions
+  "readxl",     # Reading Excel files (Superfund data)
+  "stringdist"  # Fuzzy string matching for address deduplication
 )
 
 # Install missing packages and load all
@@ -28,9 +29,13 @@ for (pkg in packages) {
 # Parse command-line arguments
 args <- commandArgs(trailingOnly = TRUE)
 skip_geocoding <- "--skip-geocoding" %in% args
+stop_before_geocoding <- "--stop-before-geocoding" %in% args
 
 if (skip_geocoding) {
   cat("=== GEOCODING WILL BE SKIPPED (--skip-geocoding flag detected) ===\n")
+}
+if (stop_before_geocoding) {
+  cat("=== SCRIPT WILL STOP BEFORE GEOCODING (--stop-before-geocoding flag detected) ===\n")
 }
 
 resolve_repo_root <- function() {
@@ -87,38 +92,6 @@ assignment <- assignment_raw %>%
   ) %>%
   select(CONTROL, TESTERID, kids, SEQUENCE, ARELATE2, AMOVERS, AELNG1, ALGNCUR, ALEASETP, ACAROWN, DPMTEXP)
 cat("Assignment: ", nrow(assignment_raw), "→", nrow(assignment), "rows after filtering to only sales and released tests\n")
-
-# Quick data quality summary of assignment
-cat("\n=== ASSIGNMENT DATA QUALITY SUMMARY ===\n")
-for (col in names(assignment)) {
-  vals <- assignment[[col]]
-  n_total <- length(vals)
-  n_na <- sum(is.na(vals))
-  n_blank <- if (is.character(vals)) sum(vals == "", na.rm = TRUE) else 0
-  n_valid <- n_total - n_na - n_blank
-  pct_missing <- round((n_na + n_blank) / n_total * 100, 1)
-  
-  cat(sprintf("\n  %-12s | Valid: %5d | NA: %5d | Blank: %5d | Missing%%: %5.1f%%",
-              col, n_valid, n_na, n_blank, pct_missing))
-  
-  if (is.numeric(vals)) {
-    cat(sprintf("\n%16s Numeric — Min: %s | Median: %s | Mean: %s | Max: %s | Unique: %d",
-                "", round(min(vals, na.rm = TRUE), 2), round(median(vals, na.rm = TRUE), 2),
-                round(mean(vals, na.rm = TRUE), 2), round(max(vals, na.rm = TRUE), 2),
-                length(unique(na.omit(vals)))))
-  } else if (is.character(vals) || is.factor(vals)) {
-    freq <- sort(table(vals, useNA = "no"), decreasing = TRUE)
-    top <- head(freq, 5)
-    cat(sprintf("\n%16s Character — Unique: %d | Top values: %s",
-                "", length(freq),
-                paste(names(top), paste0("(", top, ")"), sep = "=", collapse = ", ")))
-  }
-}
-cat("\n\n=== END ASSIGNMENT DATA QUALITY SUMMARY ===\n\n")
-
-# Build kids indicator from assignment (ARELATE2-5 == 3 indicates child)
-assignment_kids <- assignment %>%
-  select(CONTROL, TESTERID, kids)
 
 # Read taf file and filter to sales
 taf_raw <- import_sas(file.path(raw_data_path, "taf.sas7bdat"))
@@ -505,6 +478,484 @@ first_by_order <- function(value, order) {
   if (length(idx) == 0) return(value[NA_integer_][1])
   value[idx[which.min(order[idx])]]
 }
+
+# --- Address normalization and fuzzy deduplication functions ---
+
+normalize_address_field <- function(x) {
+  x <- iconv(as.character(x), from = "", to = "UTF-8", sub = "")
+  x <- toupper(trimws(x))
+  x <- gsub("[.,#'\"()]+", "", x)
+  x <- gsub("\\s+", " ", x)
+  ifelse(x == "" | x == "NA", NA_character_, x)
+}
+
+normalize_street <- function(x) {
+  x <- normalize_address_field(x)
+  x <- gsub("\\bSTREET\\b", "ST", x)
+  x <- gsub("\\bAVENUE\\b", "AVE", x)
+  x <- gsub("\\bDRIVE\\b", "DR", x)
+  x <- gsub("\\bBOULEVARD\\b", "BLVD", x)
+  x <- gsub("\\bROAD\\b", "RD", x)
+  x <- gsub("\\bLANE\\b", "LN", x)
+  x <- gsub("\\bCOURT\\b", "CT", x)
+  x <- gsub("\\bCIRCLE\\b", "CIR", x)
+  x <- gsub("\\bPLACE\\b", "PL", x)
+  x <- gsub("\\bTERRACE\\b", "TER", x)
+  x <- gsub("\\bPARKWAY\\b", "PKWY", x)
+  x <- gsub("\\bHIGHWAY\\b", "HWY", x)
+  x <- gsub("\\bAPARTMENT\\b", "APT", x)
+  x <- gsub("\\bSUITE\\b", "STE", x)
+  x <- gsub("\\bNORTH\\b", "N", x)
+  x <- gsub("\\bSOUTH\\b", "S", x)
+  x <- gsub("\\bEAST\\b", "E", x)
+  x <- gsub("\\bWEST\\b", "W", x)
+  x
+}
+
+# Build a composite normalized address string from all address fields for fuzzy comparison
+build_composite_addr <- function(norm_street, norm_sitetyp, norm_unitno, norm_city, norm_state, norm_zip) {
+  df <- data.frame(norm_street, norm_sitetyp, norm_unitno, norm_city, norm_state, norm_zip,
+                   stringsAsFactors = FALSE)
+  apply(df, 1, function(row) {
+    parts <- row[!is.na(row)]
+    if (length(parts) == 0) return(NA_character_)
+    paste(parts, collapse = " | ")
+  })
+}
+
+# Compute a row-level quality score for choosing which row to keep during dedup.
+# Higher = better: not-deleted >> more complete overall >> later sequence number.
+compute_row_quality <- function(df) {
+  not_deleted <- if ("DELREC" %in% names(df)) {
+    is.na(df$DELREC) | df$DELREC != 1
+  } else {
+    rep(TRUE, nrow(df))
+  }
+  seqrh <- if ("SEQRH" %in% names(df)) {
+    coalesce(as.numeric(df$SEQRH), 0)
+  } else {
+    rep(0, nrow(df))
+  }
+
+  (as.numeric(not_deleted) * 1000) +
+    rowSums(!is.na(df) & df != "") +
+    seqrh / 100
+}
+
+extract_house_number <- function(street) {
+  str_extract(street, "^\\s*[0-9]+[A-Z]?(?:-[0-9]+[A-Z]?)?") %>%
+    str_squish()
+}
+
+strip_house_number <- function(street) {
+  str_remove(street, "^\\s*[0-9]+[A-Z]?(?:-[0-9]+[A-Z]?)?\\s*") %>%
+    str_squish()
+}
+
+same_present_value <- function(x, y) {
+  !is.na(x) && !is.na(y) && identical(x, y)
+}
+
+same_optional_value <- function(x, y) {
+  (is.na(x) && is.na(y)) || (!is.na(x) && !is.na(y) && identical(x, y))
+}
+
+is_bad_normalized_street <- function(x) {
+  is.na(x) |
+    x %in% c("UNKNOWN", "DID NOT PROVIDE", "MODEL HOME") |
+    str_detect(
+      x,
+      regex("\\b(UNKNOWN|NOT PROVIDE(?:D)?|N/?A|MODEL HOME|NO ADDRESS|NONE|BLANK|MISSING|REFUSE|DID NOT GET)\\b")
+    ) |
+    str_detect(x, "^\\s*$|^-+$|^0+$") |
+    str_detect(x, "^\\d*\\s*AVAILABLE$") |
+    str_detect(x, "^\\d+$") |
+    nchar(trimws(x)) <= 3
+}
+
+bad_normalized_street_reason <- function(x) {
+  case_when(
+    is.na(x) ~ "missing street address",
+    x %in% c("UNKNOWN", "DID NOT PROVIDE", "MODEL HOME") |
+      str_detect(
+        x,
+        regex("\\b(UNKNOWN|NOT PROVIDE(?:D)?|N/?A|MODEL HOME|NO ADDRESS|NONE|BLANK|MISSING|REFUSE|DID NOT GET)\\b")
+      ) ~ "placeholder street address",
+    str_detect(x, "^\\s*$|^-+$|^0+$") ~ "empty street address",
+    str_detect(x, "^\\d*\\s*AVAILABLE$") ~ "availability placeholder",
+    str_detect(x, "^\\d+$") ~ "numeric-only street address",
+    nchar(trimws(x)) <= 3 ~ "overly short street address",
+    TRUE ~ NA_character_
+  )
+}
+
+drop_bad_rechomes_addresses <- function(df) {
+  df <- df %>%
+    mutate(
+      norm_HSITEAD = normalize_street(HSITEAD),
+      bad_rechomes_address = is_bad_normalized_street(norm_HSITEAD),
+      bad_rechomes_address_reason = bad_normalized_street_reason(norm_HSITEAD)
+    )
+
+  dropped <- df %>% filter(bad_rechomes_address)
+  write_csv(
+    dropped %>%
+      select(CONTROL, TESTERID, SEQRH, HSITEAD, HSITETYP, HUNITNO,
+             HCITY, HSTATE, HZIP, bad_rechomes_address_reason),
+    generated_file("bad_rechomes_address_drop_log.csv")
+  )
+
+  cat("Dropped rechomes rows with bad street-address inputs:", nrow(dropped), "\n")
+  if (nrow(dropped) > 0) {
+    cat("Bad rechomes address reasons:\n")
+    print(dropped %>% count(bad_rechomes_address_reason, sort = TRUE))
+  }
+
+  df %>%
+    filter(!bad_rechomes_address) %>%
+    select(-norm_HSITEAD, -bad_rechomes_address, -bad_rechomes_address_reason)
+}
+
+has_address_field_conflict <- function(x) {
+  dplyr::n_distinct(x, na.rm = FALSE) > 1
+}
+
+compatible_except_missing_address_fields <- function(x, y) {
+  same_present_value(x[["norm_HSITEAD"]], y[["norm_HSITEAD"]]) &&
+    !is_bad_normalized_street(x[["norm_HSITEAD"]]) &&
+    !is_bad_normalized_street(y[["norm_HSITEAD"]]) &&
+    all(is.na(x) | is.na(y) | x == y) &&
+    any((is.na(x) & !is.na(y)) | (!is.na(x) & is.na(y)))
+}
+
+partial_missing_address_dedup <- function(df, source_name = "rechomes") {
+  norm_cols <- c("norm_HSITEAD", "norm_HSITETYP", "norm_HUNITNO",
+                 "norm_HCITY", "norm_HSTATE", "norm_HZIP")
+
+  df$norm_HSITEAD  <- normalize_street(df$HSITEAD)
+  df$norm_HSITETYP <- normalize_address_field(df$HSITETYP)
+  df$norm_HUNITNO  <- normalize_address_field(df$HUNITNO)
+  df$norm_HCITY    <- normalize_address_field(df$HCITY)
+  df$norm_HSTATE   <- normalize_address_field(df$HSTATE)
+  df$norm_HZIP     <- normalize_address_field(df$HZIP)
+  df$composite_addr <- build_composite_addr(
+    df$norm_HSITEAD, df$norm_HSITETYP, df$norm_HUNITNO,
+    df$norm_HCITY, df$norm_HSTATE, df$norm_HZIP
+  )
+  df$addr_completeness <- rowSums(!is.na(df[, norm_cols, drop = FALSE]))
+  df$row_quality <- compute_row_quality(df)
+
+  rows_before <- nrow(df)
+  log_entries <- list()
+
+  df <- df %>%
+    group_by(CONTROL, TESTERID) %>%
+    group_modify(function(grp, key) {
+      if (nrow(grp) <= 1) return(grp)
+
+      candidates <- list()
+      norm_mat <- grp[, norm_cols, drop = FALSE]
+
+      for (i in seq_len(nrow(grp) - 1)) {
+        for (j in (i + 1):nrow(grp)) {
+          x <- as.character(unlist(norm_mat[i, ], use.names = FALSE))
+          y <- as.character(unlist(norm_mat[j, ], use.names = FALSE))
+          names(x) <- norm_cols
+          names(y) <- norm_cols
+
+          if (!compatible_except_missing_address_fields(x, y)) next
+
+          if (grp$addr_completeness[i] > grp$addr_completeness[j]) {
+            candidates[[length(candidates) + 1]] <- tibble(drop_idx = j, keep_idx = i)
+          } else if (grp$addr_completeness[j] > grp$addr_completeness[i]) {
+            candidates[[length(candidates) + 1]] <- tibble(drop_idx = i, keep_idx = j)
+          }
+        }
+      }
+
+      if (length(candidates) == 0) return(grp)
+
+      candidates <- bind_rows(candidates) %>%
+        mutate(
+          keep_addr_completeness = grp$addr_completeness[keep_idx],
+          max_keep_addr_completeness = ave(keep_addr_completeness, drop_idx, FUN = max)
+        ) %>%
+        filter(keep_addr_completeness == max_keep_addr_completeness)
+
+      unambiguous <- candidates %>%
+        group_by(drop_idx) %>%
+        filter(n_distinct(keep_idx) == 1) %>%
+        slice(1) %>%
+        ungroup()
+
+      if (nrow(unambiguous) == 0) return(grp)
+
+      drop_idx <- unique(unambiguous$drop_idx)
+
+      for (row in seq_len(nrow(unambiguous))) {
+        to_drop <- unambiguous$drop_idx[row]
+        kept <- unambiguous$keep_idx[row]
+        log_entries[[length(log_entries) + 1]] <<- tibble(
+          source          = source_name,
+          CONTROL         = key$CONTROL,
+          TESTERID        = key$TESTERID,
+          match_type      = "partial_missing_address_fields_keep_more_complete",
+          kept_addr       = grp$composite_addr[kept],
+          dropped_addr    = grp$composite_addr[to_drop],
+          kept_quality    = grp$row_quality[kept],
+          dropped_quality = grp$row_quality[to_drop],
+          kept_addr_completeness = grp$addr_completeness[kept],
+          dropped_addr_completeness = grp$addr_completeness[to_drop],
+          street_distance = NA_real_,
+          kept_unit       = grp$norm_HUNITNO[kept],
+          dropped_unit    = grp$norm_HUNITNO[to_drop],
+          kept_HSITEAD    = grp$HSITEAD[kept],
+          dropped_HSITEAD = grp$HSITEAD[to_drop],
+          kept_HCITY      = grp$HCITY[kept],
+          dropped_HCITY   = grp$HCITY[to_drop],
+          kept_HSTATE     = grp$HSTATE[kept],
+          dropped_HSTATE  = grp$HSTATE[to_drop],
+          kept_HZIP       = grp$HZIP[kept],
+          dropped_HZIP    = grp$HZIP[to_drop]
+        )
+      }
+
+      grp[-drop_idx, ]
+    }) %>%
+    ungroup()
+
+  if (length(log_entries) > 0) {
+    new_log <- bind_rows(log_entries)
+    if (exists("fuzzy_match_log", envir = .GlobalEnv)) {
+      existing <- get("fuzzy_match_log", envir = .GlobalEnv)
+      assign("fuzzy_match_log", bind_rows(existing, new_log), envir = .GlobalEnv)
+    } else {
+      assign("fuzzy_match_log", new_log, envir = .GlobalEnv)
+    }
+  }
+
+  df <- df %>%
+    select(-composite_addr, -row_quality, -addr_completeness, -all_of(norm_cols))
+
+  cat(source_name, "partial-missing address deduplication:",
+      rows_before, "->", nrow(df), "rows (", rows_before - nrow(df), "removed)\n")
+  df
+}
+
+latest_rechomes_position <- function(grp) {
+  seqrh <- if ("SEQRH" %in% names(grp)) {
+    suppressWarnings(as.numeric(grp$SEQRH))
+  } else {
+    rep(NA_real_, nrow(grp))
+  }
+
+  if (any(!is.na(seqrh))) {
+    latest_seqrh <- max(seqrh, na.rm = TRUE)
+    candidates <- which(!is.na(seqrh) & seqrh == latest_seqrh)
+  } else {
+    candidates <- seq_len(nrow(grp))
+  }
+
+  candidates[which.max(grp$source_row_order[candidates])]
+}
+
+# When the same tester/trial records the same street/type/unit but conflicting
+# city/state/ZIP, treat the later recommendation-home record as the corrected
+# one. This is rechomes-only because rechomes is the merge spine.
+same_actual_address_conflict_dedup <- function(df, source_name = "rechomes") {
+  norm_cols <- c("norm_HSITEAD", "norm_HSITETYP", "norm_HUNITNO",
+                 "norm_HCITY", "norm_HSTATE", "norm_HZIP")
+
+  df$source_row_order <- seq_len(nrow(df))
+  df$norm_HSITEAD  <- normalize_street(df$HSITEAD)
+  df$norm_HSITETYP <- normalize_address_field(df$HSITETYP)
+  df$norm_HUNITNO  <- normalize_address_field(df$HUNITNO)
+  df$norm_HCITY    <- normalize_address_field(df$HCITY)
+  df$norm_HSTATE   <- normalize_address_field(df$HSTATE)
+  df$norm_HZIP     <- normalize_address_field(df$HZIP)
+  df$composite_addr <- build_composite_addr(
+    df$norm_HSITEAD, df$norm_HSITETYP, df$norm_HUNITNO,
+    df$norm_HCITY, df$norm_HSTATE, df$norm_HZIP
+  )
+  df$row_quality <- compute_row_quality(df)
+
+  rows_before <- nrow(df)
+  log_entries <- list()
+
+  df <- df %>%
+    group_by(CONTROL, TESTERID, norm_HSITEAD, norm_HSITETYP, norm_HUNITNO) %>%
+    group_modify(function(grp, key) {
+      if (nrow(grp) <= 1) return(grp)
+      if (is.na(key$norm_HSITEAD)) return(grp)
+      if (is_bad_normalized_street(key$norm_HSITEAD)) return(grp)
+
+      location_conflict <- has_address_field_conflict(grp$norm_HCITY) ||
+        has_address_field_conflict(grp$norm_HSTATE) ||
+        has_address_field_conflict(grp$norm_HZIP)
+
+      if (!location_conflict) return(grp)
+
+      keep_idx <- latest_rechomes_position(grp)
+      drop_idx <- setdiff(seq_len(nrow(grp)), keep_idx)
+
+      for (to_drop in drop_idx) {
+        log_entries[[length(log_entries) + 1]] <<- tibble(
+          source          = source_name,
+          CONTROL         = key$CONTROL,
+          TESTERID        = key$TESTERID,
+          match_type      = "same_address_city_state_zip_conflict_keep_latest_seqrh",
+          kept_addr       = grp$composite_addr[keep_idx],
+          dropped_addr    = grp$composite_addr[to_drop],
+          kept_quality    = grp$row_quality[keep_idx],
+          dropped_quality = grp$row_quality[to_drop],
+          street_distance = NA_real_,
+          kept_unit       = grp$norm_HUNITNO[keep_idx],
+          dropped_unit    = grp$norm_HUNITNO[to_drop],
+          kept_HSITEAD    = grp$HSITEAD[keep_idx],
+          dropped_HSITEAD = grp$HSITEAD[to_drop],
+          kept_HCITY      = grp$HCITY[keep_idx],
+          dropped_HCITY   = grp$HCITY[to_drop],
+          kept_HSTATE     = grp$HSTATE[keep_idx],
+          dropped_HSTATE  = grp$HSTATE[to_drop],
+          kept_HZIP       = grp$HZIP[keep_idx],
+          dropped_HZIP    = grp$HZIP[to_drop]
+        )
+      }
+
+      grp[keep_idx, ]
+    }) %>%
+    ungroup()
+
+  if (length(log_entries) > 0) {
+    new_log <- bind_rows(log_entries)
+    if (exists("fuzzy_match_log", envir = .GlobalEnv)) {
+      existing <- get("fuzzy_match_log", envir = .GlobalEnv)
+      assign("fuzzy_match_log", bind_rows(existing, new_log), envir = .GlobalEnv)
+    } else {
+      assign("fuzzy_match_log", new_log, envir = .GlobalEnv)
+    }
+  }
+
+  df <- df %>%
+    select(-source_row_order, -composite_addr, -row_quality, -all_of(norm_cols))
+
+  cat(source_name, "same-address city/state/ZIP conflict deduplication:",
+      rows_before, "->", nrow(df), "rows (", rows_before - nrow(df), "removed)\n")
+  df
+}
+
+# Strict fuzzy deduplication within each (CONTROL, TESTERID) group.
+# This intentionally catches only apparent street spelling/abbreviation errors:
+# same house number, same city/state/ZIP, same unit/type fields, and a small
+# edit distance in the remaining street text. It does not collapse different
+# units, different house numbers, or rows that merely have missing address data.
+strict_street_spelling_dedup_within_tester <- function(df, max_street_dist = 2, source_name = "unknown") {
+  addr_fields <- c("HSITEAD", "HSITETYP", "HUNITNO", "HCITY", "HSTATE", "HZIP")
+  norm_cols   <- paste0("norm_", addr_fields)
+
+  # Add normalized columns
+  df$norm_HSITEAD  <- normalize_street(df$HSITEAD)
+  df$norm_HSITETYP <- normalize_address_field(df$HSITETYP)
+  df$norm_HUNITNO  <- normalize_address_field(df$HUNITNO)
+  df$norm_HCITY    <- normalize_address_field(df$HCITY)
+  df$norm_HSTATE   <- normalize_address_field(df$HSTATE)
+  df$norm_HZIP     <- normalize_address_field(df$HZIP)
+
+  df$composite_addr <- build_composite_addr(
+    df$norm_HSITEAD, df$norm_HSITETYP, df$norm_HUNITNO,
+    df$norm_HCITY, df$norm_HSTATE, df$norm_HZIP
+  )
+  df$street_number <- extract_house_number(df$norm_HSITEAD)
+  df$street_name <- strip_house_number(df$norm_HSITEAD)
+  df$addr_completeness <- rowSums(!is.na(df[, norm_cols, drop = FALSE]))
+  df$row_quality <- compute_row_quality(df)
+
+  rows_before <- nrow(df)
+  log_entries <- list()
+
+  df <- df %>%
+    group_by(CONTROL, TESTERID) %>%
+    group_modify(function(grp, key) {
+      if (nrow(grp) <= 1) return(grp)
+      n <- nrow(grp)
+      drop_idx <- integer(0)
+
+      for (i in seq_len(n - 1)) {
+        if (i %in% drop_idx) next
+        for (j in (i + 1):n) {
+          if (j %in% drop_idx) next
+          if (is.na(grp$composite_addr[i]) || is.na(grp$composite_addr[j])) next
+
+          match_type <- NA_character_
+          to_drop <- NA_integer_
+          street_dist <- NA_real_
+
+          same_required_address <- same_present_value(grp$street_number[i], grp$street_number[j]) &&
+            same_present_value(grp$norm_HCITY[i], grp$norm_HCITY[j]) &&
+            same_present_value(grp$norm_HSTATE[i], grp$norm_HSTATE[j]) &&
+            same_present_value(grp$norm_HZIP[i], grp$norm_HZIP[j]) &&
+            same_optional_value(grp$norm_HSITETYP[i], grp$norm_HSITETYP[j]) &&
+            same_optional_value(grp$norm_HUNITNO[i], grp$norm_HUNITNO[j]) &&
+            !is.na(grp$street_name[i]) &&
+            !is.na(grp$street_name[j]) &&
+            grp$street_name[i] != grp$street_name[j]
+
+          if (same_required_address) {
+            street_dist <- stringdist::stringdist(grp$street_name[i], grp$street_name[j], method = "lv")
+            if (street_dist > 0 && street_dist <= max_street_dist) {
+              match_type <- paste0("street_spelling_lv_", street_dist)
+              to_drop <- if (grp$row_quality[i] >= grp$row_quality[j]) j else i
+            }
+          }
+
+          if (!is.na(match_type)) {
+            kept <- if (to_drop == i) j else i
+            log_entries[[length(log_entries) + 1]] <<- tibble(
+              source        = source_name,
+              CONTROL       = key$CONTROL,
+              TESTERID      = key$TESTERID,
+              match_type    = match_type,
+              kept_addr     = grp$composite_addr[kept],
+              dropped_addr  = grp$composite_addr[to_drop],
+              kept_quality  = grp$row_quality[kept],
+              dropped_quality = grp$row_quality[to_drop],
+              street_distance = street_dist,
+              kept_unit = grp$norm_HUNITNO[kept],
+              dropped_unit = grp$norm_HUNITNO[to_drop],
+              kept_HSITEAD  = grp$HSITEAD[kept],
+              dropped_HSITEAD = grp$HSITEAD[to_drop],
+              kept_HCITY    = grp$HCITY[kept],
+              dropped_HCITY = grp$HCITY[to_drop],
+              kept_HSTATE   = grp$HSTATE[kept],
+              dropped_HSTATE = grp$HSTATE[to_drop],
+              kept_HZIP     = grp$HZIP[kept],
+              dropped_HZIP  = grp$HZIP[to_drop]
+            )
+            drop_idx <- c(drop_idx, to_drop)
+          }
+        }
+      }
+      if (length(drop_idx) > 0) grp[-unique(drop_idx), ] else grp
+    }) %>%
+    ungroup()
+
+  # Append log entries to global accumulator
+  if (length(log_entries) > 0) {
+    new_log <- bind_rows(log_entries)
+    if (exists("fuzzy_match_log", envir = .GlobalEnv)) {
+      existing <- get("fuzzy_match_log", envir = .GlobalEnv)
+      assign("fuzzy_match_log", bind_rows(existing, new_log), envir = .GlobalEnv)
+    } else {
+      assign("fuzzy_match_log", new_log, envir = .GlobalEnv)
+    }
+  }
+
+  df <- df %>% select(-composite_addr, -street_number, -street_name, -row_quality, -addr_completeness, -all_of(norm_cols))
+  cat(source_name, "strict street-spelling deduplication:", rows_before, "->", nrow(df), "rows (",
+      rows_before - nrow(df), "removed)\n")
+  df
+}
+
 # =================================================================================================== #
 # SALES DATA CLEANING
 # =================================================================================================== #
@@ -661,7 +1112,7 @@ write_csv(sales_final, generated_file("sales_cleaned.csv"))
 cat("Exported cleaned sales data to ", generated_file("sales_cleaned.csv"), "\n", sep = "")
 
 # =================================================================================================== #
-# TESTER DATA CLEANING
+# TESTER & ASSIGNMENT DATA CLEANING
 # =================================================================================================== #
 
 cat("=== CLEANING TESTER DATA ===\n")
@@ -717,21 +1168,44 @@ cat("Exported sales and tester appointments data to ", generated_file("sales_and
 # =================================================================================================== #
 # MERGE SALES, TESTER AND RECHOMES DATA
 # =================================================================================================== #
-cat("=== CHECKING RECHOMES FOR DUPLICATES ===\n")
 
-# Prefer rows that are not flagged for deletion, carry the most information,
-# and appear later in sequence when duplicate address rows appear in rechomes.
+# Initialize global fuzzy match log
+fuzzy_match_log <- tibble(
+  source = character(), CONTROL = character(), TESTERID = character(),
+  match_type = character(), kept_addr = character(), dropped_addr = character(),
+  kept_quality = numeric(), dropped_quality = numeric(),
+  street_distance = numeric(),
+  kept_unit = character(), dropped_unit = character(),
+  kept_HSITEAD = character(), dropped_HSITEAD = character(),
+  kept_HCITY = character(), dropped_HCITY = character(),
+  kept_HSTATE = character(), dropped_HSTATE = character(),
+  kept_HZIP = character(), dropped_HZIP = character()
+)
+
+# --- STEP 1: Rechomes deduplication (exact on normalized keys, then fuzzy) ---
+cat("=== DEDUPLICATING RECHOMES ===\n")
+
 rechomes_completeness_score <- function(df) {
   rowSums(!is.na(df) & df != "")
 }
 
-# Check for duplicates in rechomes by address variables and deduplicate in one step
 rechomes_deduplicated <- rechomes %>%
   {
     cat("Initial rechomes rows:", nrow(.), "\n")
     .
   } %>%
-  group_by(CONTROL, TESTERID, HSITEAD, HSITETYP, HUNITNO, HCITY, HSTATE, HZIP) %>%
+  # Add normalized address columns for grouping
+  mutate(
+    norm_HSITEAD  = normalize_street(HSITEAD),
+    norm_HSITETYP = normalize_address_field(HSITETYP),
+    norm_HUNITNO  = normalize_address_field(HUNITNO),
+    norm_HCITY    = normalize_address_field(HCITY),
+    norm_HSTATE   = normalize_address_field(HSTATE),
+    norm_HZIP     = normalize_address_field(HZIP)
+  ) %>%
+  # Exact dedup on normalized keys (keeps best row per group)
+  group_by(CONTROL, TESTERID, norm_HSITEAD, norm_HSITETYP, norm_HUNITNO,
+           norm_HCITY, norm_HSTATE, norm_HZIP) %>%
   mutate(
     prefer_not_deleted = is.na(DELREC) | DELREC != 1,
     completeness_score = rechomes_completeness_score(across(everything())),
@@ -744,17 +1218,38 @@ rechomes_deduplicated <- rechomes %>%
     .by_group = TRUE
   ) %>%
   slice(1) %>%
-  select(-prefer_not_deleted, -completeness_score, -seqrh_order) %>%
   ungroup() %>%
+  select(-prefer_not_deleted, -completeness_score, -seqrh_order,
+         -norm_HSITEAD, -norm_HSITETYP, -norm_HUNITNO,
+         -norm_HCITY, -norm_HSTATE, -norm_HZIP) %>%
   {
     rows_lost <- nrow(rechomes) - nrow(.)
-    cat("After deduplication by address variables:", nrow(.), "rows\n")
-    cat("Rows lost due to address duplicates:", rows_lost, "\n")
+    cat("After exact dedup on normalized address keys:", nrow(.), "rows\n")
+    cat("Rows collapsed by normalization:", rows_lost, "\n")
     .
   }
 
-# Check for duplicate rows in rhgeo by key variables
-cat("=== CHECKING FOR DUPLICATES IN RHGEO DATA ===\n")
+rechomes_deduplicated <- partial_missing_address_dedup(
+  rechomes_deduplicated, source_name = "rechomes"
+)
+
+# If the tester/trial has the same street/type/unit but conflicting
+# city/state/ZIP, keep the later rechomes recommendation record.
+rechomes_deduplicated <- same_actual_address_conflict_dedup(
+  rechomes_deduplicated, source_name = "rechomes"
+)
+
+# Strict fuzzy dedup: only collapse apparent street spelling errors within each
+# CONTROL x TESTERID, never different unit numbers or different house numbers.
+rechomes_deduplicated <- strict_street_spelling_dedup_within_tester(
+  rechomes_deduplicated, max_street_dist = 2, source_name = "rechomes"
+)
+
+rechomes_deduplicated <- drop_bad_rechomes_addresses(rechomes_deduplicated)
+
+# --- STEP 2: Rhgeo deduplication (exact on normalized keys, then fuzzy) ---
+cat("=== DEDUPLICATING RHGEO ===\n")
+
 rhgeo_deduplicated <- rhgeo %>%
   {
     cat("Initial rhgeo rows:", nrow(.), "\n")
@@ -790,48 +1285,97 @@ rhgeo_deduplicated <- rhgeo %>%
       pull(HSITEAD) %>%
       unique() %>%
       sort()
-    
+
     cat("After removing misformed addresses:", nrow(.), "rows\n")
     cat("Filtered addresses:", paste(filtered_addresses, collapse = ", "), "\n")
     .
   } %>%
-  group_by(CONTROL, TESTERID, HSITEAD, HSITETYP, HUNITNO, HCITY, HSTATE, HZIP) %>%
+  # Exact dedup on normalized keys
+  mutate(
+    norm_HSITEAD  = normalize_street(HSITEAD),
+    norm_HSITETYP = normalize_address_field(HSITETYP),
+    norm_HUNITNO  = normalize_address_field(HUNITNO),
+    norm_HCITY    = normalize_address_field(HCITY),
+    norm_HSTATE   = normalize_address_field(HSTATE),
+    norm_HZIP     = normalize_address_field(HZIP)
+  ) %>%
+  group_by(CONTROL, TESTERID, norm_HSITEAD, norm_HSITETYP, norm_HUNITNO,
+           norm_HCITY, norm_HSTATE, norm_HZIP) %>%
   slice(1) %>%
   ungroup() %>%
+  select(-norm_HSITEAD, -norm_HSITETYP, -norm_HUNITNO,
+         -norm_HCITY, -norm_HSTATE, -norm_HZIP) %>%
   {
-    cat("After keeping first entry for remaining duplicates:", nrow(.), "rows\n")
+    cat("After exact dedup on normalized keys:", nrow(.), "rows\n")
     .
   }
-  # Merge rechomes with rhgeo data to identify missing geographical information
-  rechomes_rhgeo <- rechomes_deduplicated %>%
-    left_join(select(rhgeo_deduplicated, -SEQRH, -RACEID), 
-              by = c("CONTROL", "TESTERID", "HSITEAD", "HSITETYP", "HUNITNO", 
-                     "HCITY", "HSTATE", "HZIP")) %>%
-    {
-      # Count rows in rechomes that are missing in rhgeo
-      rechomes_missing_in_rhgeo <- rechomes_deduplicated %>%
-        anti_join(rhgeo_deduplicated, 
-                  by = c("CONTROL", "TESTERID", "HSITEAD", "HSITETYP", "HUNITNO", 
-                         "HCITY", "HSTATE", "HZIP"))
 
-      # Count rows in rhgeo that are missing in rechomes  
-      rhgeo_missing_in_rechomes <- rhgeo_deduplicated %>%
-        anti_join(rechomes_deduplicated, 
-                  by = c("CONTROL", "TESTERID", "HSITEAD", "HSITETYP", "HUNITNO", 
-                         "HCITY", "HSTATE", "HZIP"))
+cat("Skipping fuzzy deduplication for rhgeo; rechomes is the row-preserving merge spine.\n")
 
-      cat("=== RECHOMES-RHGEO MERGE ANALYSIS ===\n")
-      cat("Rechomes deduplicated rows:", nrow(rechomes_deduplicated), "\n")
-      cat("Rhgeo deduplicated rows:", nrow(rhgeo_deduplicated), "\n")
-      cat("Merged rows:", nrow(.), "\n")
-      cat("Rechomes rows missing in rhgeo:", nrow(rechomes_missing_in_rhgeo), "\n")
-      cat("Rhgeo rows missing in rechomes:", nrow(rhgeo_missing_in_rechomes), "\n")
-      cat("Percentage of rechomes missing in rhgeo:", round(nrow(rechomes_missing_in_rhgeo) / nrow(rechomes_deduplicated) * 100, 2), "%\n")
-      cat("Percentage of rhgeo missing in rechomes:", round(nrow(rhgeo_missing_in_rechomes) / nrow(rhgeo_deduplicated) * 100, 2), "%\n")
-      
-      # Return the merged data
-      .
-    }
+# --- STEP 3: Merge rechomes with rhgeo, ensuring at most one rhgeo row per rechomes row ---
+cat("=== MERGING RECHOMES WITH RHGEO (1:1) ===\n")
+
+# Add normalized keys to both sides for matching
+rechomes_for_merge <- rechomes_deduplicated %>%
+  mutate(
+    norm_HSITEAD  = normalize_street(HSITEAD),
+    norm_HSITETYP = normalize_address_field(HSITETYP),
+    norm_HUNITNO  = normalize_address_field(HUNITNO),
+    norm_HCITY    = normalize_address_field(HCITY),
+    norm_HSTATE   = normalize_address_field(HSTATE),
+    norm_HZIP     = normalize_address_field(HZIP),
+    rechomes_row_id = row_number()
+  )
+
+rhgeo_for_merge <- rhgeo_deduplicated %>%
+  select(-SEQRH, -RACEID) %>%
+  mutate(
+    norm_HSITEAD  = normalize_street(HSITEAD),
+    norm_HSITETYP = normalize_address_field(HSITETYP),
+    norm_HUNITNO  = normalize_address_field(HUNITNO),
+    norm_HCITY    = normalize_address_field(HCITY),
+    norm_HSTATE   = normalize_address_field(HSTATE),
+    norm_HZIP     = normalize_address_field(HZIP)
+  )
+
+# Exact join on normalized address keys, including type and unit.
+merge_keys <- c("CONTROL", "TESTERID", "norm_HSITEAD", "norm_HSITETYP",
+                "norm_HUNITNO", "norm_HCITY", "norm_HSTATE", "norm_HZIP")
+
+# Identify rhgeo columns that would conflict with rechomes columns.
+rhgeo_only_cols <- setdiff(names(rhgeo_for_merge),
+                           c(names(rechomes_for_merge), merge_keys))
+
+rechomes_rhgeo <- rechomes_for_merge %>%
+  left_join(
+    rhgeo_for_merge %>% select(all_of(merge_keys), all_of(rhgeo_only_cols)),
+    by = merge_keys
+  ) %>%
+  # If a rechomes row matched multiple rhgeo rows, keep the first one (most complete)
+  group_by(rechomes_row_id) %>%
+  slice(1) %>%
+  ungroup() %>%
+  select(-rechomes_row_id, -all_of(setdiff(merge_keys, c("CONTROL", "TESTERID")))) %>%
+  {
+    rechomes_missing_in_rhgeo <- rechomes_for_merge %>%
+      anti_join(rhgeo_for_merge, by = merge_keys)
+    rhgeo_missing_in_rechomes <- rhgeo_for_merge %>%
+      anti_join(rechomes_for_merge, by = merge_keys)
+
+    cat("Rechomes deduplicated rows:", nrow(rechomes_deduplicated), "\n")
+    cat("Rhgeo deduplicated rows:", nrow(rhgeo_deduplicated), "\n")
+    cat("Merged rows (1:1):", nrow(.), "\n")
+    cat("Rechomes rows missing in rhgeo:", nrow(rechomes_missing_in_rhgeo), "\n")
+    cat("Rhgeo rows missing in rechomes:", nrow(rhgeo_missing_in_rechomes), "\n")
+    cat("Pct rechomes missing in rhgeo:", round(nrow(rechomes_missing_in_rhgeo) / nrow(rechomes_deduplicated) * 100, 2), "%\n")
+    cat("Pct rhgeo missing in rechomes:", round(nrow(rhgeo_missing_in_rechomes) / nrow(rhgeo_deduplicated) * 100, 2), "%\n")
+    .
+  }
+
+# Export the fuzzy match log for later review
+write_csv(fuzzy_match_log, generated_file("fuzzy_dedup_log.csv"))
+cat("Exported fuzzy dedup log to ", generated_file("fuzzy_dedup_log.csv"),
+    " (", nrow(fuzzy_match_log), " matches)\n", sep = "")
 
 cat("=== MERGING SALES, TESTER, RECHOMES & RHGEO DATA ===\n")
 
@@ -1023,6 +1567,10 @@ sales_tester_rechomes <- analytic_sales_tester %>%
 write_csv(sales_tester_rechomes, generated_file("sales_tester_rechomes_merged.csv"))
 cat("Exported merged data to ", generated_file("sales_tester_rechomes_merged.csv"), "\n", sep = "")
 
+if (stop_before_geocoding) {
+  cat("Stopping before geocoding as requested.\n")
+  quit(save = "no", status = 0)
+}
 
 # =================================================================================================== #
 # GEOCODING 

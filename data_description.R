@@ -1337,6 +1337,176 @@ cat("\n\nRetained advertised-home duplicate provenance:\n")
 cat("=========================================================\n\n")
 print(duplicate_ad_provenance)
 
+# Check whether the Census duplicate rows can be traced to source-side duplicate
+# advertised-home and recommended-home records in the same tester-trial cells.
+raw_recs_for_duplicate_check <- readRDS(recsprocessed_path) %>%
+  mutate(CONTROL = as.character(CONTROL), TESTERID = as.character(TESTERID))
+
+duplicate_index_cols <- c("X.x", "X.y", "X.x.1", "X.y.1", "SEQRH")
+census_ad_key <- intersect(
+  unique(c("CONTROL", "TESTERID", grep("_Ad$", names(raw_hud_census), value = TRUE), "AdPrice", "logAdPrice")),
+  names(raw_ads_for_provenance)
+)
+census_rec_key <- intersect(
+  unique(c("CONTROL", "TESTERID", grep("_Rec$", names(raw_hud_census), value = TRUE), "RecPrice", "logRecPrice")),
+  names(raw_recs_for_duplicate_check)
+)
+census_exact_key <- setdiff(names(raw_hud_census), intersect(duplicate_index_cols, names(raw_hud_census)))
+
+census_source_ad_counts <- raw_ads_for_provenance %>%
+  count(across(all_of(census_ad_key)), name = "source_ad_rows")
+census_source_rec_counts <- raw_recs_for_duplicate_check %>%
+  count(across(all_of(census_rec_key)), name = "source_rec_rows")
+
+census_exact_cells <- raw_hud_census %>%
+  group_by(across(all_of(census_exact_key))) %>%
+  summarize(observed_rows = n(), exact_duplicate_rows = observed_rows - 1L, .groups = "drop") %>%
+  left_join(census_source_ad_counts, by = census_ad_key) %>%
+  left_join(census_source_rec_counts, by = census_rec_key) %>%
+  mutate(
+    source_ad_rows = coalesce(source_ad_rows, 0L),
+    source_rec_rows = coalesce(source_rec_rows, 0L),
+    source_product = source_ad_rows * source_rec_rows,
+    expected_duplicate_rows = pmax(source_product - 1L, 0L),
+    source_mechanism = case_when(
+      source_ad_rows > 1 & source_rec_rows > 1 ~ "ad and recommended-home duplicates",
+      source_ad_rows > 1 ~ "ad duplicates only",
+      source_rec_rows > 1 ~ "recommended-home duplicates only",
+      TRUE ~ "no source duplicate detected"
+    ),
+    product_matches_observed = source_product == observed_rows,
+    product_at_least_observed = source_product >= observed_rows
+  )
+
+census_exact_duplicate_groups <- census_exact_cells %>%
+  filter(exact_duplicate_rows > 0)
+
+census_exact_source_breakdown <- census_exact_duplicate_groups %>%
+  mutate(duplicate_rows_for_summary = exact_duplicate_rows) %>%
+  group_by(source_mechanism) %>%
+  summarize(
+    duplicate_groups = n(),
+    exact_duplicate_rows = sum(duplicate_rows_for_summary),
+    product_matched_duplicate_rows = sum(duplicate_rows_for_summary[product_matches_observed], na.rm = TRUE),
+    product_at_least_observed_rows = sum(duplicate_rows_for_summary[product_at_least_observed], na.rm = TRUE),
+    .groups = "drop"
+  )
+
+census_cross_product_summary <- census_exact_cells %>%
+  summarize(
+    exact_cells = n(),
+    cells_where_product_equals_observed = sum(product_matches_observed),
+    cells_where_product_exceeds_observed = sum(source_product > observed_rows),
+    cells_where_product_below_observed = sum(source_product < observed_rows),
+    observed_rows = sum(observed_rows),
+    expected_rows_from_source_cross_product = sum(source_product),
+    exact_duplicate_rows = sum(exact_duplicate_rows),
+    expected_duplicate_rows_from_source_cross_product = sum(expected_duplicate_rows),
+    expected_minus_observed_duplicate_rows =
+      expected_duplicate_rows_from_source_cross_product - exact_duplicate_rows
+  )
+
+census_product_mismatch_patterns <- census_exact_cells %>%
+  filter(!product_matches_observed) %>%
+  group_by(observed_rows, source_product) %>%
+  summarize(
+    exact_cells = n(),
+    exact_duplicate_rows = sum(exact_duplicate_rows),
+    expected_duplicate_rows = sum(expected_duplicate_rows),
+    expected_minus_observed_duplicate_rows = expected_duplicate_rows - exact_duplicate_rows,
+    .groups = "drop"
+  ) %>%
+  arrange(desc(exact_duplicate_rows), observed_rows, source_product)
+
+raw_hud_census_after_exact <- raw_hud_census %>%
+  distinct(across(all_of(census_exact_key)), .keep_all = TRUE)
+raw_recs_after_exact <- raw_recs_for_duplicate_check %>%
+  distinct(across(-any_of(duplicate_index_cols)), .keep_all = TRUE)
+census_source_rec_counts_after_exact <- raw_recs_after_exact %>%
+  count(across(all_of(census_rec_key)), name = "source_rec_rows_after_exact")
+census_rec_key <- intersect(census_rec_key, names(raw_hud_census_after_exact))
+
+census_rec_key_duplicate_groups <- raw_hud_census_after_exact %>%
+  group_by(across(all_of(census_rec_key))) %>%
+  summarize(observed_rows_after_exact = n(), rec_key_duplicate_rows = observed_rows_after_exact - 1L, .groups = "drop") %>%
+  filter(rec_key_duplicate_rows > 0) %>%
+  left_join(census_source_rec_counts_after_exact, by = census_rec_key) %>%
+  left_join(
+    raw_hud_census_after_exact %>%
+      distinct(across(all_of(c(census_ad_key, census_rec_key)))) %>%
+      group_by(across(all_of(census_rec_key))) %>%
+      summarize(distinct_ad_keys_in_census = n(), .groups = "drop"),
+    by = census_rec_key
+  ) %>%
+  mutate(
+    source_rec_rows_after_exact = coalesce(source_rec_rows_after_exact, 0L),
+    distinct_ad_keys_in_census = coalesce(distinct_ad_keys_in_census, 0L),
+    source_mechanism = case_when(
+      source_rec_rows_after_exact > 1 & distinct_ad_keys_in_census > 1 ~ "both rec duplicates and multiple ads",
+      source_rec_rows_after_exact > 1 ~ "recommended-home duplicates only",
+      distinct_ad_keys_in_census > 1 ~ "multiple ads attached to same rec key",
+      TRUE ~ "no source duplicate detected"
+    )
+  )
+
+census_rec_key_source_breakdown <- census_rec_key_duplicate_groups %>%
+  group_by(source_mechanism) %>%
+  summarize(
+    duplicate_groups = n(),
+    rec_key_duplicate_rows = sum(rec_key_duplicate_rows),
+    .groups = "drop"
+  )
+
+census_duplicate_source_summary <- tibble(
+  metric = c(
+    "exact duplicate rows removed",
+    "rec-key duplicate rows removed after exact dedup",
+    "total exact or rec-key duplicate rows removed",
+    "exact duplicate rows with source ad/rec multiplicity",
+    "rec-key duplicate rows with source mechanism",
+    "total duplicate rows accounted for by source mechanisms",
+    "expected exact rows from source cross product",
+    "expected exact duplicate rows from source cross product",
+    "expected minus observed exact duplicate rows",
+    "exact duplicate rows where source product matches observed",
+    "exact duplicate rows where source product is at least observed"
+  ),
+  value = c(
+    sum(census_exact_duplicate_groups$exact_duplicate_rows),
+    sum(census_rec_key_duplicate_groups$rec_key_duplicate_rows),
+    sum(census_exact_duplicate_groups$exact_duplicate_rows) +
+      sum(census_rec_key_duplicate_groups$rec_key_duplicate_rows),
+    sum(census_exact_duplicate_groups$exact_duplicate_rows[census_exact_duplicate_groups$source_product > 1]),
+    sum(census_rec_key_duplicate_groups$rec_key_duplicate_rows[
+      census_rec_key_duplicate_groups$source_rec_rows_after_exact > 1 |
+        census_rec_key_duplicate_groups$distinct_ad_keys_in_census > 1
+    ]),
+    sum(census_exact_duplicate_groups$exact_duplicate_rows[census_exact_duplicate_groups$source_product > 1]) +
+      sum(census_rec_key_duplicate_groups$rec_key_duplicate_rows[
+        census_rec_key_duplicate_groups$source_rec_rows_after_exact > 1 |
+          census_rec_key_duplicate_groups$distinct_ad_keys_in_census > 1
+      ]),
+    census_cross_product_summary$expected_rows_from_source_cross_product,
+    census_cross_product_summary$expected_duplicate_rows_from_source_cross_product,
+    census_cross_product_summary$expected_minus_observed_duplicate_rows,
+    sum(census_exact_duplicate_groups$exact_duplicate_rows[census_exact_duplicate_groups$product_matches_observed]),
+    sum(census_exact_duplicate_groups$exact_duplicate_rows[census_exact_duplicate_groups$product_at_least_observed])
+  )
+)
+
+cat("\n\nCensus duplicate source-mechanism check:\n")
+cat("=========================================================\n\n")
+cat("Exact duplicate rows by source mechanism:\n")
+print(census_exact_source_breakdown)
+cat("\nCell-by-cell source cross-product check:\n")
+print(census_cross_product_summary)
+cat("\nObserved rows vs. source ad-by-rec product for discrepant cells:\n")
+print(census_product_mismatch_patterns)
+cat("\nRecommendation-key duplicate rows after exact dedup by source mechanism:\n")
+print(census_rec_key_source_breakdown)
+cat("\nSummary:\n")
+print(census_duplicate_source_summary)
+
 # The Names and Test Scores files contain more duplicate rows than can be
 # explained by retained advertised-home duplicates alone. This check compares
 # the raw final-file row count in each CONTROL x TESTERID pair with the row

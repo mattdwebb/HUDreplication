@@ -91,7 +91,7 @@ flag_bad_address_inputs <- function(df, street_col = "HSITEAD") {
   short_flag <- nchar(street_trim) <= 3 & street_trim != ""
   numeric_only_flag <- grepl("^\\d+$", street_trim)
 
-  df$bad_address_input <- empty_flag | unknown_flag | question_flag | available_flag | short_flag
+  df$bad_address_input <- empty_flag | unknown_flag | question_flag | available_flag | numeric_only_flag | short_flag
   df$bad_address_input_reason <- dplyr::case_when(
     empty_flag ~ "empty street address",
     unknown_flag ~ "placeholder street address",
