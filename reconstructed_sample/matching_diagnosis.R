@@ -27,10 +27,10 @@ resolve_repo_root <- function(repo_root_arg = NULL) {
 
   cwd <- normalizePath(getwd(), winslash = "/", mustWork = TRUE)
   if (basename(cwd) == "HUDreplication") return(cwd)
-  if (basename(cwd) == "all_completed_pairs") return(dirname(cwd))
+  if (basename(cwd) == "reconstructed_sample") return(dirname(cwd))
   candidate <- file.path(cwd, "HUDreplication")
   if (dir.exists(candidate)) return(normalizePath(candidate, winslash = "/", mustWork = TRUE))
-  stop("Could not infer repo_root. Run from HUDreplication or all_completed_pairs, set HUD_REPLICATION_ROOT, or pass --repo-root=/path/to/HUDreplication.")
+  stop("Could not infer repo_root. Run from HUDreplication or reconstructed_sample, set HUD_REPLICATION_ROOT, or pass --repo-root=/path/to/HUDreplication.")
 }
 
 repo_root <- resolve_repo_root(get_arg_value("--repo-root="))
@@ -39,19 +39,19 @@ setwd(repo_root)
 data_dir <- file.path(repo_root, "Data")
 ct_data_dir <- file.path(data_dir, "CT2022_Replication_Data")
 non_hds_data_dir <- file.path(data_dir, "Non_HDS_Data")
-all_completed_pairs_generated_dir <- file.path(data_dir, "Generated", "all_completed_pairs")
-cleaning_scripts_dir <- file.path(repo_root, "all_completed_pairs", "Cleaning_Scripts")
+reconstructed_sample_generated_dir <- file.path(data_dir, "Generated", "reconstructed_sample")
+cleaning_scripts_dir <- file.path(repo_root, "reconstructed_sample", "Cleaning_Scripts")
 
 appendix_table_dir <- get_arg_value("--output-dir=")
 if (is.null(appendix_table_dir) || !nzchar(appendix_table_dir)) {
-  appendix_table_dir <- file.path(repo_root, "all_completed_pairs", "Appendix_Tables")
+  appendix_table_dir <- file.path(repo_root, "reconstructed_sample", "Appendix_Tables")
 }
 
 if (!dir.exists(appendix_table_dir)) {
   dir.create(appendix_table_dir, recursive = TRUE)
 }
-if (!dir.exists(all_completed_pairs_generated_dir)) {
-  dir.create(all_completed_pairs_generated_dir, recursive = TRUE)
+if (!dir.exists(reconstructed_sample_generated_dir)) {
+  dir.create(reconstructed_sample_generated_dir, recursive = TRUE)
 }
 
 cat("Repository root:", repo_root, "\n")
@@ -279,7 +279,7 @@ matching_summary <- matching_summary %>%
   )
 
 # Save detailed school comparison results
-school_validation_path <- file.path(all_completed_pairs_generated_dir, "school_matching_validation.csv")
+school_validation_path <- file.path(reconstructed_sample_generated_dir, "school_matching_validation.csv")
 write_csv(comparison, school_validation_path)
 cat("Detailed school validation results saved to:", school_validation_path, "\n")
 
@@ -289,7 +289,7 @@ cat("Detailed school validation results saved to:", school_validation_path, "\n"
 
 cat("\n=== GREATSCHOOLS + CRIME COVERAGE ===\n")
 
-our_path <- file.path(all_completed_pairs_generated_dir, "sales_tester_rechomes_merged.csv")
+our_path <- file.path(reconstructed_sample_generated_dir, "sales_tester_rechomes_merged.csv")
 ct_recs_path <- file.path(ct_data_dir, "recsprocessed_JPE.rds")
 
 if (!file.exists(our_path)) {
@@ -682,7 +682,7 @@ comparison_rsei <- best_matched %>%
   select(CONTROL, TESTERID, SEQRH, RSEI,
          our_rsei = all_of(best_value))
 
-rsei_validation_path <- file.path(all_completed_pairs_generated_dir, "rsei_matching_validation.csv")
+rsei_validation_path <- file.path(reconstructed_sample_generated_dir, "rsei_matching_validation.csv")
 write_csv(comparison_rsei, rsei_validation_path)
 cat("Detailed RSEI validation results saved to:", rsei_validation_path, "\n")
 
@@ -871,7 +871,7 @@ write_latex_table(
 # ==============================================================================
 
 cat("\n=== COORDINATE VALIDATION (OPTIONAL) ===\n")
-geocode_path <- file.path(all_completed_pairs_generated_dir, "sales_tester_rechomes_geocoded.csv")
+geocode_path <- file.path(reconstructed_sample_generated_dir, "sales_tester_rechomes_geocoded.csv")
 
 if (file.exists(geocode_path)) {
   geo <- read_csv(geocode_path, show_col_types = FALSE)

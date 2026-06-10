@@ -1,5 +1,5 @@
-# Market-level all-completed-pairs heterogeneity for key outcomes.
-# This script is standalone and is also sourced by all_completed_pairs/analysis.R.
+# Market-level reconstructed-sample heterogeneity for key outcomes.
+# This script is standalone and is also sourced by reconstructed_sample/analysis.R.
 
 library(lfe)
 library(dplyr)
@@ -8,14 +8,14 @@ library(haven)
 library(ggplot2)
 
 repo_root <- normalizePath(getwd(), winslash = "/", mustWork = TRUE)
-while (!dir.exists(file.path(repo_root, "all_completed_pairs")) && repo_root != dirname(repo_root)) {
+while (!dir.exists(file.path(repo_root, "reconstructed_sample")) && repo_root != dirname(repo_root)) {
   repo_root <- dirname(repo_root)
 }
 setwd(repo_root)
 
 data_dir <- file.path(repo_root, "Data")
-all_completed_pairs_generated_dir <- file.path(data_dir, "Generated", "all_completed_pairs")
-market_output_dir <- file.path(repo_root, "all_completed_pairs", "Market_Heterogeneity")
+reconstructed_sample_generated_dir <- file.path(data_dir, "Generated", "reconstructed_sample")
+market_output_dir <- file.path(repo_root, "reconstructed_sample", "Market_Heterogeneity")
 dir.create(market_output_dir, showWarnings = FALSE, recursive = TRUE)
 
 target_races <- data.frame(
@@ -69,7 +69,7 @@ estimate_race_pair_model <- function(data, outcome_name, outcome_label,
     return(NULL)
   }
 
-  # Market-race cells are small, so the figure uses the design-based all-completed-pairs
+  # Market-race cells are small, so the figure uses the design-based reconstructed-sample
   # specification: trial fixed effects and clustered standard errors, without
   # tester controls that can overfit within-market cells. The input samples still
   # impose the same nonmissing covariate restrictions as Tables 5 and 6.
@@ -102,7 +102,7 @@ estimate_race_pair_model <- function(data, outcome_name, outcome_label,
   if (!is.finite(estimate) || !is.finite(se) || !is.finite(tcrit)) return(NULL)
 
   data.frame(
-    model_spec = "design_based_all_completed_pairs",
+    model_spec = "design_based_reconstructed_sample",
     outcome = outcome_name,
     outcome_label = outcome_label,
     site = site_code,
@@ -218,7 +218,7 @@ plot_market_estimates <- function(market_estimates, overall_estimates, outcome_n
   p
 }
 
-site_lookup_source <- read.csv(file.path(all_completed_pairs_generated_dir, "cleaned_hds.csv")) %>%
+site_lookup_source <- read.csv(file.path(reconstructed_sample_generated_dir, "cleaned_hds.csv")) %>%
   restrict_to_official_pass() %>%
   mutate(site = substr(as.character(CONTROL), 1, 2))
 
@@ -236,7 +236,7 @@ site_market_lookup <- site_lookup_source %>%
   select(site, dominant_city, dominant_state, market_label)
 
 # Table 5 outcome: total number of recommendations.
-table5_data <- read.csv(file.path(all_completed_pairs_generated_dir, "sales_and_tester_merged.csv")) %>%
+table5_data <- read.csv(file.path(reconstructed_sample_generated_dir, "sales_and_tester_merged.csv")) %>%
   restrict_to_official_pass() %>%
   filter(
     !is.na(STOTUNIT_TOTAL),
@@ -267,7 +267,7 @@ table5_data <- read.csv(file.path(all_completed_pairs_generated_dir, "sales_and_
   left_join(site_market_lookup, by = "site")
 
 # Table 6 outcome: white household share of recommended homes.
-table6_data <- read.csv(file.path(all_completed_pairs_generated_dir, "cleaned_hds.csv")) %>%
+table6_data <- read.csv(file.path(reconstructed_sample_generated_dir, "cleaned_hds.csv")) %>%
   restrict_to_official_pass() %>%
   filter(
     !is.na(w2012pc_Rec),
@@ -323,12 +323,12 @@ market_counts <- bind_rows(
 
 write.csv(site_market_lookup, file.path(market_output_dir, "site_market_lookup.csv"), row.names = FALSE)
 write.csv(market_counts, file.path(market_output_dir, "market_race_counts.csv"), row.names = FALSE)
-write.csv(overall_estimates, file.path(market_output_dir, "overall_all_completed_pairs_estimates.csv"), row.names = FALSE)
-write.csv(market_estimates, file.path(market_output_dir, "market_all_completed_pairs_estimates.csv"), row.names = FALSE)
+write.csv(overall_estimates, file.path(market_output_dir, "overall_reconstructed_sample_estimates.csv"), row.names = FALSE)
+write.csv(market_estimates, file.path(market_output_dir, "market_reconstructed_sample_estimates.csv"), row.names = FALSE)
 
 plot_market_estimates(table5_results$market, table5_results$overall, "STOTUNIT_TOTAL", "Total Number of Recommendations")
 plot_market_estimates(table6_results$market, table6_results$overall, "w2012pc_Rec", "White Household Share")
 
 cat("Market heterogeneity estimates written to:", market_output_dir, "\n")
 cat("Market-level estimate rows:", nrow(market_estimates), "\n")
-cat("Overall race-specific estimates written to:", file.path(market_output_dir, "overall_all_completed_pairs_estimates.csv"), "\n")
+cat("Overall race-specific estimates written to:", file.path(market_output_dir, "overall_reconstructed_sample_estimates.csv"), "\n")

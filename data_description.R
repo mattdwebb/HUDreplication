@@ -6,7 +6,7 @@ library(stringr)
 #   cd HUDreplication
 #   Rscript data_description.R
 repo_root <- normalizePath(getwd(), winslash = "/", mustWork = TRUE)
-output_dir <- file.path(repo_root, "selected_sample", "Output")
+output_dir <- file.path(repo_root, "ct_sample", "Output")
 
 format_int <- function(x) {
   format(round(x), big.mark = ",", trim = TRUE, scientific = FALSE)
@@ -143,20 +143,20 @@ recsprocessed_path <- file.path(repo_root, "Data", "CT2022_Replication_Data", "r
 hudprocessed_names_path <- file.path(repo_root, "Data", "CT2022_Replication_Data", "HUDprocessed_JPE_names_042021.rds")
 hudprocessed_census_path <- file.path(repo_root, "Data", "CT2022_Replication_Data", "HUDprocessed_JPE_census_042021.rds")
 hudprocessed_testscores_path <- file.path(repo_root, "Data", "CT2022_Replication_Data", "HUDprocessed_JPE_testscores_042021.rds")
-hudprocessed_names_duplicates_path <- file.path(repo_root, "Data", "Generated", "selected_sample", "HUDprocessed_names_correct_cities_with_duplicates.csv")
-hudprocessed_census_duplicates_path <- file.path(repo_root, "Data", "Generated", "selected_sample", "HUDprocessed_census_correct_cities_with_duplicates.csv")
-hudprocessed_testscores_duplicates_path <- file.path(repo_root, "Data", "Generated", "selected_sample", "HUDprocessed_testscores_correct_cities_with_duplicates.csv")
-adsprocessed_processed_path <- file.path(repo_root, "Data", "Generated", "selected_sample", "adsprocessed_correct_cities_processed.csv")
-hudprocessed_names_processed_path <- file.path(repo_root, "Data", "Generated", "selected_sample", "HUDprocessed_names_correct_cities_processed.csv")
-hudprocessed_census_processed_path <- file.path(repo_root, "Data", "Generated", "selected_sample", "HUDprocessed_census_correct_cities_processed.csv")
-hudprocessed_testscores_processed_path <- file.path(repo_root, "Data", "Generated", "selected_sample", "HUDprocessed_testscores_correct_cities_processed.csv")
-dedup_log_processed_path <- file.path(repo_root, "Data", "Generated", "selected_sample", "dedup_log_processed.csv")
+hudprocessed_names_duplicates_path <- file.path(repo_root, "Data", "Generated", "ct_sample", "HUDprocessed_names_correct_cities_with_duplicates.csv")
+hudprocessed_census_duplicates_path <- file.path(repo_root, "Data", "Generated", "ct_sample", "HUDprocessed_census_correct_cities_with_duplicates.csv")
+hudprocessed_testscores_duplicates_path <- file.path(repo_root, "Data", "Generated", "ct_sample", "HUDprocessed_testscores_correct_cities_with_duplicates.csv")
+adsprocessed_processed_path <- file.path(repo_root, "Data", "Generated", "ct_sample", "adsprocessed_correct_cities_processed.csv")
+hudprocessed_names_processed_path <- file.path(repo_root, "Data", "Generated", "ct_sample", "HUDprocessed_names_correct_cities_processed.csv")
+hudprocessed_census_processed_path <- file.path(repo_root, "Data", "Generated", "ct_sample", "HUDprocessed_census_correct_cities_processed.csv")
+hudprocessed_testscores_processed_path <- file.path(repo_root, "Data", "Generated", "ct_sample", "HUDprocessed_testscores_correct_cities_processed.csv")
+dedup_log_processed_path <- file.path(repo_root, "Data", "Generated", "ct_sample", "dedup_log_processed.csv")
 rechomes_path <- file.path(repo_root, "Data", "HDS2012_Raw_Data", "rechomes.sas7bdat")
 sales_path <- file.path(repo_root, "Data", "HDS2012_Raw_Data", "sales.sas7bdat")
 taf_path <- file.path(repo_root, "Data", "HDS2012_Raw_Data", "taf.sas7bdat")
 tester_path <- file.path(repo_root, "Data", "HDS2012_Raw_Data", "tester_public.sas7bdat")
-table5_all_completed_pairs_path <- file.path(repo_root, "Data", "Generated", "all_completed_pairs", "sales_and_tester_merged.csv")
-table6_all_completed_pairs_path <- file.path(repo_root, "Data", "Generated", "all_completed_pairs", "cleaned_hds.csv")
+table5_reconstructed_sample_path <- file.path(repo_root, "Data", "Generated", "reconstructed_sample", "sales_and_tester_merged.csv")
+table6_reconstructed_sample_path <- file.path(repo_root, "Data", "Generated", "reconstructed_sample", "cleaned_hds.csv")
 
 
 # ---- Small text-normalization helpers ----------------------------------------
@@ -630,7 +630,7 @@ table5_required_vars <- c(
 table5_outcome_vars <- c("STOTUNIT_TOTAL", "SAVLBAD_ANY")
 table5_covariate_vars <- setdiff(table5_required_vars, table5_outcome_vars)
 
-table5_base <- read.csv(table5_all_completed_pairs_path, stringsAsFactors = FALSE, check.names = FALSE) %>%
+table5_base <- read.csv(table5_reconstructed_sample_path, stringsAsFactors = FALSE, check.names = FALSE) %>%
   mutate(CONTROL = as.character(CONTROL), TESTERID = as.character(TESTERID)) %>%
   semi_join(official_pass_controls, by = "CONTROL")
 
@@ -684,7 +684,7 @@ table6_base_covariates <- c(
 )
 table6_outcomes <- c("w2012pc_Rec", "percent_black", "percent_hispanic", "percent_asian")
 
-table6_base <- read.csv(table6_all_completed_pairs_path, stringsAsFactors = FALSE, check.names = FALSE) %>%
+table6_base <- read.csv(table6_reconstructed_sample_path, stringsAsFactors = FALSE, check.names = FALSE) %>%
   mutate(
     CONTROL = as.character(CONTROL),
     TESTERID = as.character(TESTERID),
@@ -696,7 +696,7 @@ table6_outcome_summary <- bind_rows(lapply(table6_outcomes, function(outcome) {
   required_vars <- unique(c(outcome, "RACE", table6_base_covariates))
   complete_df <- table6_base %>%
     filter(if_all(all_of(required_vars), ~ !is.na(.x)))
-  all_completed_pairs_df <- complete_df %>%
+  reconstructed_sample_df <- complete_df %>%
     group_by(CONTROL) %>%
     filter(n_distinct(TESTERID) == 2) %>%
     ungroup()
@@ -706,9 +706,9 @@ table6_outcome_summary <- bind_rows(lapply(table6_outcomes, function(outcome) {
     complete_rows = nrow(complete_df),
     complete_tester_trial_pairs = nrow(distinct(complete_df, CONTROL, TESTERID)),
     complete_trials = n_distinct(complete_df$CONTROL),
-    all_completed_pairs_rows = nrow(all_completed_pairs_df),
-    all_completed_pairs_tester_trial_pairs = nrow(distinct(all_completed_pairs_df, CONTROL, TESTERID)),
-    all_completed_pairs_trials = n_distinct(all_completed_pairs_df$CONTROL)
+    reconstructed_sample_rows = nrow(reconstructed_sample_df),
+    reconstructed_sample_tester_trial_pairs = nrow(distinct(reconstructed_sample_df, CONTROL, TESTERID)),
+    reconstructed_sample_trials = n_distinct(reconstructed_sample_df$CONTROL)
   )
 }))
 
@@ -769,7 +769,7 @@ table6_pair_attrition_summary <- tibble(
     "Official passed sales tester-trial pairs",
     "Tester-trial pairs represented in cleaned_hds",
     "Tester-trial pairs with complete Table 6 variables",
-    "Tester-trial pairs in final all-completed-pairs Table 6 sample"
+    "Tester-trial pairs in final reconstructed-sample Table 6 sample"
   ),
   unit = "tester-trial pair",
   remaining_n = c(
@@ -786,7 +786,7 @@ table6_pair_attrition_summary <- tibble(
   ),
   reason_for_removal = c(
     "All tester-trial pairs in official passed sales controls that appear in the raw sales visit file.",
-    "Tester-trial pair has no recommended-home row in the all-completed-pairs workflow's externally merged recommendation file.",
+    "Tester-trial pair has no recommended-home row in the reconstructed-sample workflow's externally merged recommendation file.",
     "Tester-trial pair has recommended-home rows but missing race, covariate, or Table 6 neighborhood-composition variables.",
     "Tester-trial pair belongs to a trial where only one tester remains after the Table 6 complete-case filter."
   )
@@ -800,8 +800,8 @@ sample_attrition_summary <- tibble(
     "Released HDS controls with FPASS == 1",
     "Released and passed sales controls",
     "Released and passed sales controls present in raw sales visits",
-    "Final all-completed-pairs Table 5 sample",
-    "Final all-completed-pairs Table 6 sample"
+    "Final reconstructed-sample Table 5 sample",
+    "Final reconstructed-sample Table 6 sample"
   ),
   unit = c("row", rep("trial/control", 5), "completed-pair trial", "completed-pair trial"),
   remaining_n = c(
@@ -844,15 +844,15 @@ cat("\n\nProfile of TAF rows with RELEASE == 1:\n")
 cat("=========================================================\n\n")
 print(released_taf_profile, width = Inf)
 
-cat("\n\nTable 5 all-completed-pairs omissions by reason:\n")
+cat("\n\nTable 5 reconstructed-sample omissions by reason:\n")
 cat("=========================================================\n\n")
 print(table5_reason_summary, width = Inf)
 
-cat("\n\nTable 6 all-completed-pairs sample by outcome:\n")
+cat("\n\nTable 6 reconstructed-sample sample by outcome:\n")
 cat("=========================================================\n\n")
 print(table6_outcome_summary, width = Inf)
 
-cat("\n\nTable 6 all-completed-pairs tester-trial attrition:\n")
+cat("\n\nTable 6 reconstructed-sample tester-trial attrition:\n")
 cat("=========================================================\n\n")
 print(table6_pair_attrition_summary, width = Inf)
 
@@ -1185,7 +1185,7 @@ duplicate_cleanup_lines <- c(
   "\\bottomrule",
   "\\end{tabular*}",
   "\\begin{minipage}{\\textwidth}",
-  "\\footnotesize Notes: Exact duplicates are computed after ignoring index-like columns. $^\\dagger$The duplicate-address column uses normalized advertised-home addresses for \\texttt{adsprocessed} and the recommendation-record key for the selected-sample files; the latter includes the recommended-home address and associated recommendation characteristics. $^*$For \\texttt{adsprocessed}, duplicate-address removals also include 164 resolvable repeated advertised-home rows collapsed to one \\texttt{CONTROL}$\\times$\\texttt{TESTERID} record. The ambiguous-ad column counts rows removed because no unique advertised-home assignment can be recovered; tester-trial pair counts are shown below row counts. Tables 8A and 10A use \\texttt{testscores} for columns 1--2 and \\texttt{census} for columns 3--4.",
+  "\\footnotesize Notes: Exact duplicates are computed after ignoring index-like columns. $^\\dagger$The duplicate-address column uses normalized advertised-home addresses for \\texttt{adsprocessed} and the recommendation-record key for the C\\&T-sample files; the latter includes the recommended-home address and associated recommendation characteristics. $^*$For \\texttt{adsprocessed}, duplicate-address removals also include 164 resolvable repeated advertised-home rows collapsed to one \\texttt{CONTROL}$\\times$\\texttt{TESTERID} record. The ambiguous-ad column counts rows removed because no unique advertised-home assignment can be recovered; tester-trial pair counts are shown below row counts. Tables 8A and 10A use \\texttt{testscores} for columns 1--2 and \\texttt{census} for columns 3--4.",
   "\\end{minipage}",
   "\\end{table}"
 )
@@ -1228,16 +1228,16 @@ summarize_retained_ad_duplicates <- function(dataset_label, hud_data, ads_data) 
       .groups = "drop"
     )
 
-  # Because the selected-sample files are produced by crossing ad rows with recommendation
+  # Because the C&T-sample files are produced by crossing ad rows with recommendation
   # rows, each extra retained-ad row expands by the number of final-file rows per
   # source ad row in that tester-trial pair.
   crossing_rows <- hud_data %>%
-    count(CONTROL, TESTERID, name = "selected_sample_rows") %>%
+    count(CONTROL, TESTERID, name = "ct_sample_rows") %>%
     left_join(
       ads_matched %>% count(CONTROL, TESTERID, name = "source_ad_rows"),
       by = c("CONTROL", "TESTERID")
     ) %>%
-    mutate(recommendation_rows_crossed = selected_sample_rows / source_ad_rows)
+    mutate(recommendation_rows_crossed = ct_sample_rows / source_ad_rows)
 
   duplicate_rows_by_pair <- duplicate_rows_by_pair %>%
     left_join(crossing_rows, by = c("CONTROL", "TESTERID"))
@@ -1256,18 +1256,18 @@ summarize_retained_ad_duplicates <- function(dataset_label, hud_data, ads_data) 
     ),
     share_multi_sequence = multi_sequence_duplicate_rows / duplicate_retained_ad_rows,
     sequence_pattern = if (nrow(duplicate_sequence_rows) == 1) duplicate_sequence_rows$sequence_pattern[[1]] else "multiple",
-    extra_selected_sample_rows_from_ad_duplicates =
+    extra_ct_sample_rows_from_ad_duplicates =
       round(sum(
         duplicate_rows_by_pair$duplicate_retained_ad_rows * duplicate_rows_by_pair$recommendation_rows_crossed,
         na.rm = TRUE
       )),
-    extra_selected_sample_rows_from_multi_sequence =
+    extra_ct_sample_rows_from_multi_sequence =
       round(sum(
         duplicate_rows_by_pair$multi_sequence_duplicate_rows * duplicate_rows_by_pair$recommendation_rows_crossed,
         na.rm = TRUE
       )),
     share_extra_rows_multi_sequence =
-      extra_selected_sample_rows_from_multi_sequence / extra_selected_sample_rows_from_ad_duplicates
+      extra_ct_sample_rows_from_multi_sequence / extra_ct_sample_rows_from_ad_duplicates
   )
 }
 
@@ -1320,8 +1320,8 @@ duplicate_ad_provenance <- bind_rows(
     ),
     share_multi_sequence = multi_sequence_duplicate_rows / duplicate_retained_ad_rows,
     sequence_pattern = if (nrow(full_ads_sequence_rows) == 1) full_ads_sequence_rows$sequence_pattern[[1]] else "multiple",
-    extra_selected_sample_rows_from_ad_duplicates = NA_real_,
-    extra_selected_sample_rows_from_multi_sequence = NA_real_,
+    extra_ct_sample_rows_from_ad_duplicates = NA_real_,
+    extra_ct_sample_rows_from_multi_sequence = NA_real_,
     share_extra_rows_multi_sequence = NA_real_
   )
 )
@@ -1340,7 +1340,7 @@ duplicate_ad_lines <- c(
   "\\resizebox{\\textwidth}{!}{%",
   "\\begin{tabular}{lrrrrrrr}",
   "\\toprule",
-  "Sample & Duplicate retained-ad rows & Multi-appointment rows & Share multi-appointment & Sequence pattern & Extra selected-sample rows from ad duplicates & Extra selected-sample rows from multi-appointment rows & Share from multi-appointment rows\\\\",
+  "Sample & Duplicate retained-ad rows & Multi-appointment rows & Share multi-appointment & Sequence pattern & Extra C\\&T-sample rows from ad duplicates & Extra C\\&T-sample rows from multi-appointment rows & Share from multi-appointment rows\\\\",
   "\\midrule"
 )
 
@@ -1354,8 +1354,8 @@ for (i in seq_len(nrow(duplicate_ad_provenance))) {
       format_int(row$multi_sequence_duplicate_rows),
       format_pct(row$share_multi_sequence),
       row$sequence_pattern,
-      ifelse(is.na(row$extra_selected_sample_rows_from_ad_duplicates), "--", format_int(row$extra_selected_sample_rows_from_ad_duplicates)),
-      ifelse(is.na(row$extra_selected_sample_rows_from_multi_sequence), "--", format_int(row$extra_selected_sample_rows_from_multi_sequence)),
+      ifelse(is.na(row$extra_ct_sample_rows_from_ad_duplicates), "--", format_int(row$extra_ct_sample_rows_from_ad_duplicates)),
+      ifelse(is.na(row$extra_ct_sample_rows_from_multi_sequence), "--", format_int(row$extra_ct_sample_rows_from_multi_sequence)),
       ifelse(is.na(row$share_extra_rows_multi_sequence), "--", format_pct(row$share_extra_rows_multi_sequence)),
       sep = " & "
     ) |> paste0("\\\\")
@@ -1368,7 +1368,7 @@ duplicate_ad_lines <- c(
   "\\end{tabular}%",
   "}",
   "\\begin{minipage}{\\textwidth}",
-  "\\footnotesize Notes: Retained-ad duplicates are repeated rows in \\texttt{adsprocessed} that are identical on the advertised-home variables retained in the corresponding selected-sample file. Extra selected-sample rows are computed by crossing each extra retained-ad row with the number of recommendation rows in the same \\texttt{CONTROL}$\\times$\\texttt{TESTERID} pair.",
+  "\\footnotesize Notes: Retained-ad duplicates are repeated rows in \\texttt{adsprocessed} that are identical on the advertised-home variables retained in the corresponding C\\&T-sample file. Extra C\\&T-sample rows are computed by crossing each extra retained-ad row with the number of recommendation rows in the same \\texttt{CONTROL}$\\times$\\texttt{TESTERID} pair.",
   "\\end{minipage}",
   "\\end{table}"
 )
@@ -1701,7 +1701,7 @@ ads_duplicate_counts <- ads_exact_counts %>%
   ) %>%
   filter(hds_race %in% 1:4)
 
-# The HUD selected-sample files use the final selected-sample-data key: one row per distinct
+# The HUD C&T-sample files use the final C&T-sample-data key: one row per distinct
 # advertised-home x recommended-home combination within CONTROL x TESTERID.
 hud_files <- list(
   "HUDprocessed census" = hudprocessed_census_path,
@@ -1830,7 +1830,7 @@ ct_other_cases <- aprace_rule_check %>%
 
 cat("\n\nHow a simple subgroup-overwrite rule reproduces C&T's APRACE variable:\n")
 cat("=========================================================\n\n")
-cat("Unique C&T testers in selected-sample files:", format(nrow(ct_aprace_testers), big.mark = ","), "\n")
+cat("Unique C&T testers in C&T-sample files:", format(nrow(ct_aprace_testers), big.mark = ","), "\n")
 cat("Unique C&T testers matched to public tester file:", format(nrow(aprace_rule_check), big.mark = ","), "\n")
 cat(
   "Rule APRACE -> Asian if TASIANG > 0 -> Hispanic if THISPUBG > 0:",
@@ -2184,7 +2184,7 @@ for (i in seq_len(nrow(taf_ads_match_summary))) {
 evidence <- taf_ads_evidence_summary[1, ]
 
 cat("Supporting evidence summary (HDS tester-recorded address source):\n\n")
-cat("  Controls in selected-sample analysis:", format(evidence$controls, big.mark = ","), "\n")
+cat("  Controls in C&T-sample analysis:", format(evidence$controls, big.mark = ","), "\n")
 cat("  Controls with nonblank TAF street:", format(evidence$taf_nonblank_street, big.mark = ","), "\n")
 cat("  Exact matches:", format(evidence$exact_or_better, big.mark = ","), "\n")
 cat("  Exact or fuzzy matches:", format(evidence$exact_or_any_fuzzy, big.mark = ","), "\n")

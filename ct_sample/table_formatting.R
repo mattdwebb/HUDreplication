@@ -5,14 +5,14 @@ generate_corrected_table <- function(table_title, subtitle, table_number, panel_
                    additional_rows = list(c())) {
 
   output_file <- if (corrected) {
-  paste0(output_dir, "/Corrected Tables/corrected_table", table_number, ".tex")
+  file.path(output_dir, "corrected", "formatted", paste0("corrected_table", table_number, ".tex"))
   } else {
-  paste0(output_dir, "/Replicated Tables/replicated_table", table_number, ".tex")
+  file.path(output_dir, "original", "formatted", paste0("replicated_table", table_number, ".tex"))
   }
 
-  # Create directories for Corrected and Replicated Tables if they don't exist
-  corrected_dir <- file.path(output_dir, "Corrected Tables")
-  replicated_dir <- file.path(output_dir, "Replicated Tables")
+  # Create directories for formatted corrected and original tables if they don't exist
+  corrected_dir <- file.path(output_dir, "corrected", "formatted")
+  replicated_dir <- file.path(output_dir, "original", "formatted")
   
   if (!dir.exists(corrected_dir)) {
   dir.create(corrected_dir, recursive = TRUE)

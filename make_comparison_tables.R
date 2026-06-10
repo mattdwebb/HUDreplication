@@ -4,12 +4,13 @@
 #   Rscript make_comparison_tables.R
 #   Rscript make_comparison_tables.R /absolute/output/dir
 #
-# The script reads selected-sample Stata LaTeX outputs from selected_sample/Output,
-# within-trial-control Stata CSV outputs from selected_sample/Output/Within-Trial-Control Tables,
-# and all-completed-pairs LaTeX outputs from all_completed_pairs/Tables/Formatted_Tables.
+# The script reads C&T-sample comparison-estimate outputs from
+# ct_sample/Output/comparison_table_estimates, corrected C&T-sample appendix CSVs
+# from ct_sample/Output/corrected, and reconstructed-sample LaTeX outputs from
+# reconstructed_sample/Tables/Formatted_Tables.
 
 args <- commandArgs(trailingOnly = TRUE)
-output_dir <- if (length(args) == 0) "Comparison_Tables" else args[[1]]
+output_dir <- if (length(args) == 0) "comparison_tables" else args[[1]]
 
 cmd_args <- commandArgs(FALSE)
 file_arg <- grep("^--file=", cmd_args, value = TRUE)
@@ -21,11 +22,9 @@ script_dir <- if (length(file_arg) == 1) {
 setwd(script_dir)
 dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 
-selected_sample_dir <- file.path("selected_sample", "Output")
-within_trial_dir <- file.path(
-  "selected_sample", "Output", "Within-Trial-Control Tables", "corrected_full"
-)
-all_completed_pairs_dir <- file.path("all_completed_pairs", "Tables", "Formatted_Tables")
+ct_comparison_estimates_dir <- file.path("ct_sample", "Output", "comparison_table_estimates")
+ct_corrected_dir <- file.path("ct_sample", "Output", "corrected")
+reconstructed_formatted_dir <- file.path("reconstructed_sample", "Tables", "Formatted_Tables")
 
 mark_no <- "--"
 spec_yes <- "Yes"
@@ -218,7 +217,7 @@ extract_result_column <- function(lines, source_col) {
 }
 
 extract_csv_column <- function(stem, source_col) {
-  rows <- read_esttab_csv(file.path(within_trial_dir, paste0(stem, ".csv")))
+  rows <- read_esttab_csv(file.path(ct_corrected_dir, paste0(stem, ".csv")))
   row_blocks <- list()
   scalar_rows <- list()
 
@@ -267,14 +266,14 @@ select_display <- function(vals, display_cols) {
   vals[display_cols]
 }
 
-block_lines <- function(label, source_block, copy_cols, display_cols, within_block = NULL, all_completed_pairs_block = NULL) {
+block_lines <- function(label, source_block, copy_cols, display_cols, within_block = NULL, reconstructed_sample_block = NULL) {
   defaults <- if (label == "Other Race") rep("", 6) else rep(mark_no, 6)
 
   out <- character()
   for (i in seq_along(source_block)) {
     vals <- copy_values(defaults, source_block[[i]], copy_cols)
     if (!is.null(within_block)) vals[[5]] <- within_block[[i]]
-    if (!is.null(all_completed_pairs_block)) vals[[6]] <- all_completed_pairs_block[[i]]
+    if (!is.null(reconstructed_sample_block)) vals[[6]] <- reconstructed_sample_block[[i]]
     out <- c(out, latex_row(c(if (i == 1) label else "", select_display(vals, display_cols))))
   }
   out
@@ -392,7 +391,7 @@ spec_rows <- function(style, display_cols, table_id) {
       c("Reconstructed Sample", spec_no, spec_no, spec_no, mark_no, spec_no, spec_yes)
     )
   } else {
-    completed_pair_col <- if (style == "all_completed_pairs") spec_yes else mark_no
+    completed_pair_col <- if (style == "reconstructed_sample") spec_yes else mark_no
     rows <- list(
       c("HDS Race Definition", spec_no, spec_yes, spec_yes, spec_yes, spec_yes, completed_pair_col),
       c("Duplicate Rows Removed", spec_no, spec_yes, spec_yes, spec_yes, spec_yes, completed_pair_col),
@@ -406,7 +405,7 @@ spec_rows <- function(style, display_cols, table_id) {
   vapply(rows, function(row) latex_row(c(row[[1]], select_display(row[-1], display_cols))), character(1))
 }
 
-panel_lines <- function(panel, all_completed_pairs, within, panel_index, single_panel) {
+panel_lines <- function(panel, reconstructed_sample, within, panel_index, single_panel) {
   minority <- read_source_table(panel$minority)
   categories <- read_source_table(panel$categories)
   copy_cols <- panel$copy_cols
@@ -424,12 +423,12 @@ panel_lines <- function(panel, all_completed_pairs, within, panel_index, single_
     lines <- c("\\addlinespace[1.0em]", lines)
   }
 
-  minority_all_completed_pairs_block <- if (isTRUE(panel$all_completed_pairs_no_minority)) {
+  minority_reconstructed_sample_block <- if (isTRUE(panel$reconstructed_sample_no_minority)) {
     rep(mark_no, 3)
-  } else if (is.null(all_completed_pairs)) {
+  } else if (is.null(reconstructed_sample)) {
     NULL
   } else {
-    all_completed_pairs$row_blocks[["Racial Minority"]]
+    reconstructed_sample$row_blocks[["Racial Minority"]]
   }
   minority_within_block <- if (is.null(within)) NULL else within$minority$row_blocks[["Racial Minority"]]
   lines <- c(lines, block_lines(
@@ -438,12 +437,12 @@ panel_lines <- function(panel, all_completed_pairs, within, panel_index, single_
     copy_cols,
     display_cols,
     minority_within_block,
-    minority_all_completed_pairs_block
+    minority_reconstructed_sample_block
   ))
   lines <- c(lines, "\\midrule")
 
   for (label in c("African American", "Hispanic", "Asian", "Other Race")) {
-    all_completed_pairs_block <- if (!is.null(all_completed_pairs)) all_completed_pairs$row_blocks[[label]] else NULL
+    reconstructed_sample_block <- if (!is.null(reconstructed_sample)) reconstructed_sample$row_blocks[[label]] else NULL
     within_block <- if (!is.null(within)) within$categories$row_blocks[[label]] else NULL
     lines <- c(lines, block_lines(
       label,
@@ -451,7 +450,7 @@ panel_lines <- function(panel, all_completed_pairs, within, panel_index, single_
       copy_cols,
       display_cols,
       within_block,
-      all_completed_pairs_block
+      reconstructed_sample_block
     ))
   }
 
@@ -459,15 +458,15 @@ panel_lines <- function(panel, all_completed_pairs, within, panel_index, single_
 
   obs <- summary_value(minority, "Observations", copy_cols)
   obs <- add_model_summary(obs, if (is.null(within)) NULL else within$minority, "Observations", 5)
-  obs <- add_model_summary(obs, all_completed_pairs, "Observations", 6)
+  obs <- add_model_summary(obs, reconstructed_sample, "Observations", 6)
 
   adj_cat <- summary_value(categories, "Adjusted R$^2$", copy_cols)
   adj_cat <- add_model_summary(adj_cat, if (is.null(within)) NULL else within$categories, "Adjusted R$^2$", 5)
-  if (!is.null(all_completed_pairs)) {
-    if (!is.null(all_completed_pairs$scalar_rows[["Adjusted R$^2$"]])) {
-      adj_cat <- add_model_summary(adj_cat, all_completed_pairs, "Adjusted R$^2$", 6)
-    } else if (!isTRUE(panel$all_completed_pairs_no_minority)) {
-      adj_cat <- add_model_summary(adj_cat, all_completed_pairs, "Adjusted R$^2$ (Category)", 6)
+  if (!is.null(reconstructed_sample)) {
+    if (!is.null(reconstructed_sample$scalar_rows[["Adjusted R$^2$"]])) {
+      adj_cat <- add_model_summary(adj_cat, reconstructed_sample, "Adjusted R$^2$", 6)
+    } else if (!isTRUE(panel$reconstructed_sample_no_minority)) {
+      adj_cat <- add_model_summary(adj_cat, reconstructed_sample, "Adjusted R$^2$ (Category)", 6)
     }
   }
 
@@ -477,7 +476,7 @@ panel_lines <- function(panel, all_completed_pairs, within, panel_index, single_
 
   trials <- summary_value(minority, "Number of Trials", copy_cols)
   trials <- add_model_summary(trials, if (is.null(within)) NULL else within$minority, "Number of Trials", 5)
-  trials <- add_model_summary(trials, all_completed_pairs, "Number of Trials", 6)
+  trials <- add_model_summary(trials, reconstructed_sample, "Number of Trials", 6)
 
   lines <- c(
     lines,
@@ -527,21 +526,21 @@ table_footer <- function(note, n_cols, compact = FALSE, table_width = "\\textwid
   )
 }
 
-# All-completed-pairs tables are parsed once here, then attached to the relevant panels below.
-table5_all_completed_pairs <- readLines(file.path(all_completed_pairs_dir, "table5.tex"), warn = FALSE)
-table6_all_completed_pairs <- readLines(file.path(all_completed_pairs_dir, "table6.tex"), warn = FALSE)
-table7_all_completed_pairs <- readLines(file.path(all_completed_pairs_dir, "table7.tex"), warn = FALSE)
-table8_panels <- split_source_panels(file.path(all_completed_pairs_dir, "table8.tex"))
-table9_panels <- split_source_panels(file.path(all_completed_pairs_dir, "table9.tex"))
-table10_panels <- split_source_panels(file.path(all_completed_pairs_dir, "table10.tex"))
-table12_panels <- split_source_panels(file.path(all_completed_pairs_dir, "table12.tex"))
+# Reconstructed-sample tables are parsed once here, then attached to the relevant panels below.
+table5_reconstructed_sample <- readLines(file.path(reconstructed_formatted_dir, "table5.tex"), warn = FALSE)
+table6_reconstructed_sample <- readLines(file.path(reconstructed_formatted_dir, "table6.tex"), warn = FALSE)
+table7_reconstructed_sample <- readLines(file.path(reconstructed_formatted_dir, "table7.tex"), warn = FALSE)
+table8_panels <- split_source_panels(file.path(reconstructed_formatted_dir, "table8.tex"))
+table9_panels <- split_source_panels(file.path(reconstructed_formatted_dir, "table9.tex"))
+table10_panels <- split_source_panels(file.path(reconstructed_formatted_dir, "table10.tex"))
+table12_panels <- split_source_panels(file.path(reconstructed_formatted_dir, "table12.tex"))
 
-all_completed_pairs_results <- list(
-  table5_col1 = extract_result_column(table5_all_completed_pairs, 1),
-  table5_col2 = extract_result_column(table5_all_completed_pairs, 2),
-  table6_col1 = extract_result_column(table6_all_completed_pairs, 1),
-  table7_col1 = extract_result_column(table7_all_completed_pairs, 1),
-  table7_col3 = extract_result_column(table7_all_completed_pairs, 3),
+reconstructed_sample_results <- list(
+  table5_col1 = extract_result_column(table5_reconstructed_sample, 1),
+  table5_col2 = extract_result_column(table5_reconstructed_sample, 2),
+  table6_col1 = extract_result_column(table6_reconstructed_sample, 1),
+  table7_col1 = extract_result_column(table7_reconstructed_sample, 1),
+  table7_col3 = extract_result_column(table7_reconstructed_sample, 3),
   table8_panel1_col4 = extract_result_column(table8_panels[[1]], 4),
   table8_panel2_col1 = extract_result_column(table8_panels[[2]], 1),
   table9_panel1_col1 = extract_result_column(table9_panels[[1]], 1),
@@ -696,9 +695,9 @@ panel_specs <- data.frame(
   dep_var = c(1, 2, 1, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 1, 1, 2, 1),
   copy_cols = I(c(list(c(1, 2, 3), c(1, 2, 3)), rep(list(1:4), 16))),
   display_cols = I(c(list(c(1, 2, 3, 5, 6), c(1, 2, 3, 5, 6)), rep(list(1:6), 16))),
-  style = c("table5", "table5", rep("all_completed_pairs", 11), "no_all_completed_pairs",
-            "all_completed_pairs", "no_all_completed_pairs", "no_all_completed_pairs", "no_all_completed_pairs"),
-  all_completed_pairs_key = c("table5_col1", "table5_col2", "table6_col1", "table7_col1",
+  style = c("table5", "table5", rep("reconstructed_sample", 11), "no_reconstructed_sample",
+            "reconstructed_sample", "no_reconstructed_sample", "no_reconstructed_sample", "no_reconstructed_sample"),
+  reconstructed_sample_key = c("table5_col1", "table5_col2", "table6_col1", "table7_col1",
                               "table7_col3", "table8_panel1_col4", "table8_panel2_col1",
                               "table9_panel1_col1", "table9_panel2_col1", "table10_panel1_col1",
                               "table10_panel1_col2", "table10_panel2_col2", "table10_panel2_col4",
@@ -708,7 +707,7 @@ panel_specs <- data.frame(
                  "table9_panel1_col1", "table9_panel2_col1", "table10_panel1_col1",
                  "table10_panel1_col2", "table10_panel2_col2", "table10_panel2_col4",
                  "table11_col1", "table12_col1", NA, NA, "table14_col5"),
-  all_completed_pairs_no_minority = c(rep(FALSE, 14), TRUE, FALSE, FALSE, FALSE),
+  reconstructed_sample_no_minority = c(rep(FALSE, 14), TRUE, FALSE, FALSE, FALSE),
   stringsAsFactors = FALSE
 )
 
@@ -777,23 +776,23 @@ for (i in seq_len(nrow(table_specs))) {
 
   for (j in seq_len(nrow(table_panels))) {
     panel_row <- table_panels[j, ]
-    all_completed_pairs <- if (is.na(panel_row$all_completed_pairs_key)) {
+    reconstructed_sample <- if (is.na(panel_row$reconstructed_sample_key)) {
       NULL
     } else {
-      all_completed_pairs_results[[panel_row$all_completed_pairs_key]]
+      reconstructed_sample_results[[panel_row$reconstructed_sample_key]]
     }
     within <- if (is.na(panel_row$within_key)) NULL else within_results[[panel_row$within_key]]
     panel <- list(
       title = panel_row$panel_title,
-      minority = file.path(selected_sample_dir, paste0(panel_row$table_id, "_dep_var_", panel_row$dep_var, "_minority.tex")),
-      categories = file.path(selected_sample_dir, paste0(panel_row$table_id, "_dep_var_", panel_row$dep_var, "_categories.tex")),
+      minority = file.path(ct_comparison_estimates_dir, paste0(panel_row$table_id, "_dep_var_", panel_row$dep_var, "_minority.tex")),
+      categories = file.path(ct_comparison_estimates_dir, paste0(panel_row$table_id, "_dep_var_", panel_row$dep_var, "_categories.tex")),
       copy_cols = panel_row$copy_cols[[1]],
       display_cols = panel_row$display_cols[[1]],
       style = panel_row$style,
       table_id = panel_row$table_id,
-      all_completed_pairs_no_minority = panel_row$all_completed_pairs_no_minority
+      reconstructed_sample_no_minority = panel_row$reconstructed_sample_no_minority
     )
-    lines <- c(lines, panel_lines(panel, all_completed_pairs, within, j, nrow(table_panels) == 1))
+    lines <- c(lines, panel_lines(panel, reconstructed_sample, within, j, nrow(table_panels) == 1))
   }
 
   lines <- c(lines, table_footer(table$note[[1]], n_cols, table$compact, table$table_width, table$notes_label))

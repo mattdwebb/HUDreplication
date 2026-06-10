@@ -5,11 +5,15 @@ clear all
 	/* Set path to the local location of the HUDreplication repository */
 	global REPO_ROOT "/PATH/TO/HUDreplication"
 
-	global CODE "${REPO_ROOT}/selected_sample" // set the file path to the selected-sample analysis directory
+	global CODE "${REPO_ROOT}/ct_sample" // set the file path to the C&T-sample analysis directory
 	global DATA "${REPO_ROOT}/Data" // set the file path to the data subdirectory
 
 	cap mkdir "${CODE}/Output" // make an Output folder if it doesn't already exist
-	global OUTPUT "${CODE}/Output" // set the output file path
+	global BASE_OUTPUT "${CODE}/Output" // set the base output file path
+	cap mkdir "${BASE_OUTPUT}/comparison_table_estimates"
+	cap mkdir "${BASE_OUTPUT}/corrected"
+	cap mkdir "${BASE_OUTPUT}/original"
+	global OUTPUT "${BASE_OUTPUT}"
 
 	// Rebuild all cleaned Stata inputs from the current generated CSV files.
 	global FORCE_CLEAN 1
@@ -28,11 +32,15 @@ clear all
 	set more off
 
 // Run unified comparison tables driver
+	global OUTPUT "${BASE_OUTPUT}/comparison_table_estimates"
 	do "${CODE}/comparison_tables.do"
 
 
 // generate full replication tables as features in Appendix B
+	global OUTPUT "${BASE_OUTPUT}"
+	global APPENDIX_OUTPUT_ROOT "${BASE_OUTPUT}"
 	do "${CODE}/appendix_tables.do"
+	macro drop APPENDIX_OUTPUT_ROOT
 
 // create meta analysis figures
 //	do "${CODE}/meta_analysis.do"

@@ -1,15 +1,24 @@
 clear all
 
-// Original-style full selected-sample tables. This mirrors appendix_tables.do but uses
-// the pre-deduplication inputs and original hcity/hcityx geography variables,
-// matching the "Original Data" column in comparison_tables.do.
-
 do "${CODE}/table_generation_function.do"
 
 if "${FORCE_CLEAN}" == "" {
     global FORCE_CLEAN 0
 }
 local FORCE_CLEAN_LOCAL "${FORCE_CLEAN}"
+
+local APPENDIX_ORIGINAL_OUTPUT "${OUTPUT}"
+local APPENDIX_BASE_OUTPUT "${OUTPUT}"
+if "${APPENDIX_OUTPUT_ROOT}" != "" {
+    local APPENDIX_BASE_OUTPUT "${APPENDIX_OUTPUT_ROOT}"
+}
+
+if "${APPENDIX_TABLE_MODES}" == "" {
+    local APPENDIX_TABLE_MODES "corrected original"
+}
+else {
+    local APPENDIX_TABLE_MODES "${APPENDIX_TABLE_MODES}"
+}
 
 capture program drop generate_condition_var
 program define generate_condition_var
@@ -31,9 +40,48 @@ program define generate_condition_var
     drop condition tag cnt
 end
 
+foreach APPENDIX_TABLE_MODE in `APPENDIX_TABLE_MODES' {
+    if "`APPENDIX_TABLE_MODE'" == "corrected" {
+        local APPENDIX_ANALYSIS_TYPE "corrected"
+        local ADS_FILE "adsprocessed_correct_cities_processed.csv"
+        local CENSUS_FILE "HUDprocessed_census_correct_cities_processed.csv"
+        local TESTSCORES_FILE "HUDprocessed_testscores_correct_cities_processed.csv"
+        local NAMES_FILE "HUDprocessed_names_correct_cities_processed.csv"
+        local HUD_HCITY_SOURCE "hcity_ad"
+        local ADS_TAG "adsprocessed_processed_hcity"
+        local CENSUS_TAG "HUDprocessed_census_processed_hcity_ad"
+        local TESTSCORES_TAG "HUDprocessed_testscores_processed_hcity_ad"
+        local NAMES_TAG "HUDprocessed_names_processed_hcity_ad"
+
+        local APPENDIX_MODE_OUTPUT "`APPENDIX_BASE_OUTPUT'/corrected"
+    }
+    else if inlist("`APPENDIX_TABLE_MODE'", "original", "replicated") {
+        local APPENDIX_ANALYSIS_TYPE "original"
+        local ADS_FILE "adsprocessed_correct_cities_with_duplicates.csv"
+        local CENSUS_FILE "HUDprocessed_census_correct_cities_with_duplicates.csv"
+        local TESTSCORES_FILE "HUDprocessed_testscores_correct_cities_with_duplicates.csv"
+        local NAMES_FILE "HUDprocessed_names_correct_cities_with_duplicates.csv"
+        local HUD_HCITY_SOURCE "hcityx"
+        local ADS_TAG "adsprocessed_with_duplicates_hcity"
+        local CENSUS_TAG "HUDprocessed_census_with_duplicates_hcityx"
+        local TESTSCORES_TAG "HUDprocessed_testscores_with_duplicates_hcityx"
+        local NAMES_TAG "HUDprocessed_names_with_duplicates_hcityx"
+
+        local APPENDIX_MODE_OUTPUT "`APPENDIX_BASE_OUTPUT'/original"
+    }
+    else {
+        display as error "Unknown APPENDIX_TABLE_MODE: `APPENDIX_TABLE_MODE'"
+        error 198
+    }
+
+    cap mkdir "`APPENDIX_BASE_OUTPUT'"
+    cap mkdir "`APPENDIX_MODE_OUTPUT'"
+    global OUTPUT "`APPENDIX_MODE_OUTPUT'"
+    display as text "Generating C&T-sample appendix tables for mode: " as result "`APPENDIX_TABLE_MODE'" as text " into ${OUTPUT}"
+
 // TABLE 5
 
-process_data "adsprocessed_correct_cities_with_duplicates.csv" "`FORCE_CLEAN_LOCAL'" "" "hcity" "adsprocessed_with_duplicates_hcity"
+process_data "`ADS_FILE'" "`FORCE_CLEAN_LOCAL'" "`APPENDIX_ANALYSIS_TYPE'" "hcity" "`ADS_TAG'"
 
 qui gen show = stotunit
 qui cap destring show, replace force
@@ -72,11 +120,11 @@ correct_table "`CONTROL_VARS'" "`ABS_VARS'" ///
     " " ///
     " " ///
     "5" ///
-    "original"
+    "`APPENDIX_ANALYSIS_TYPE'"
 
 // TABLE 6
 
-process_data "HUDprocessed_census_correct_cities_with_duplicates.csv" "`FORCE_CLEAN_LOCAL'" "" "hcityx" "HUDprocessed_census_with_duplicates_hcityx"
+process_data "`CENSUS_FILE'" "`FORCE_CLEAN_LOCAL'" "`APPENDIX_ANALYSIS_TYPE'" "`HUD_HCITY_SOURCE'" "`CENSUS_TAG'"
 
 // Generate condition variables
 forvalues i = 1/5 {
@@ -99,13 +147,13 @@ correct_table "`CONTROL_VARS'" "`ABS_VARS'" ///
     "w2012pc_ad logadprice b2012pc_ad a2012pc_ad hisp2012pc_ad povrate_ad" ///
     " " ///
     "6" ///
-    "original" ///
+    "`APPENDIX_ANALYSIS_TYPE'" ///
     " " " " " " " " " " ///
     " "
 
 // TABLE 7
 
-process_data "HUDprocessed_census_correct_cities_with_duplicates.csv" "`FORCE_CLEAN_LOCAL'" "" "hcityx" "HUDprocessed_census_with_duplicates_hcityx"
+process_data "`CENSUS_FILE'" "`FORCE_CLEAN_LOCAL'" "`APPENDIX_ANALYSIS_TYPE'" "`HUD_HCITY_SOURCE'" "`CENSUS_TAG'"
 
 // Generate condition variables
 forvalues i = 1/3 {
@@ -128,11 +176,11 @@ correct_table "`CONTROL_VARS'" "`ABS_VARS'" ///
 	" " ///
     " " ///
     "7" ///
-    "original"
+    "`APPENDIX_ANALYSIS_TYPE'"
 
 // TABLE 8A - pt. 1
 
-process_data "HUDprocessed_testscores_correct_cities_with_duplicates.csv" "`FORCE_CLEAN_LOCAL'" "" "hcityx" "HUDprocessed_testscores_with_duplicates_hcityx"
+process_data "`TESTSCORES_FILE'" "`FORCE_CLEAN_LOCAL'" "`APPENDIX_ANALYSIS_TYPE'" "`HUD_HCITY_SOURCE'" "`TESTSCORES_TAG'"
 
 // Generate condition variables
 forvalues i = 1/2 {
@@ -155,10 +203,10 @@ correct_table "`CONTROL_VARS'" "`ABS_VARS'" ///
 	" " ///
     " " ///
     "8A1" ///
-	"original"
+	"`APPENDIX_ANALYSIS_TYPE'"
 
 // TABLE 8A - pt. 2
-process_data "HUDprocessed_census_correct_cities_with_duplicates.csv" "`FORCE_CLEAN_LOCAL'" "" "hcityx" "HUDprocessed_census_with_duplicates_hcityx"
+process_data "`CENSUS_FILE'" "`FORCE_CLEAN_LOCAL'" "`APPENDIX_ANALYSIS_TYPE'" "`HUD_HCITY_SOURCE'" "`CENSUS_TAG'"
 
 
 // Generate condition variables
@@ -182,11 +230,11 @@ correct_table "`CONTROL_VARS'" "`ABS_VARS'" ///
 	" " ///
     " " ///
     "8A2" ///
-	"original"
+	"`APPENDIX_ANALYSIS_TYPE'"
 
 // TABLE 8B
 
-process_data "HUDprocessed_census_correct_cities_with_duplicates.csv" "`FORCE_CLEAN_LOCAL'" "" "hcityx" "HUDprocessed_census_with_duplicates_hcityx"
+process_data "`CENSUS_FILE'" "`FORCE_CLEAN_LOCAL'" "`APPENDIX_ANALYSIS_TYPE'" "`HUD_HCITY_SOURCE'" "`CENSUS_TAG'"
 
 // Generate condition variables
 forvalues i = 1/5 {
@@ -209,11 +257,11 @@ correct_table "`CONTROL_VARS'" "`ABS_VARS'" ///
 	"ownerocc_ad" ///
     " " ///
     "8B" ///
-	"original"
+	"`APPENDIX_ANALYSIS_TYPE'"
 
 // TABLE 9A
 
-process_data "HUDprocessed_census_correct_cities_with_duplicates.csv" "`FORCE_CLEAN_LOCAL'" "" "hcityx" "HUDprocessed_census_with_duplicates_hcityx"
+process_data "`CENSUS_FILE'" "`FORCE_CLEAN_LOCAL'" "`APPENDIX_ANALYSIS_TYPE'" "`HUD_HCITY_SOURCE'" "`CENSUS_TAG'"
 
 // Generate condition variables, whole dataset
 forvalues i = 1/3 {
@@ -235,11 +283,11 @@ correct_table "`CONTROL_VARS'" "`ABS_VARS'" ///
     " " ///
     " " ///
     "9A" /// // table_number
-    "original" // original or corrected?
+    "`APPENDIX_ANALYSIS_TYPE'" // original or corrected?
 
 // TABLE 9B
 
-process_data "HUDprocessed_census_correct_cities_with_duplicates.csv" "`FORCE_CLEAN_LOCAL'" "" "hcityx" "HUDprocessed_census_with_duplicates_hcityx"
+process_data "`CENSUS_FILE'" "`FORCE_CLEAN_LOCAL'" "`APPENDIX_ANALYSIS_TYPE'" "`HUD_HCITY_SOURCE'" "`CENSUS_TAG'"
 
 // Generate condition variables, selecting only for mothers
 forvalues i = 1/3 {
@@ -262,13 +310,13 @@ correct_table "`CONTROL_VARS'" "`ABS_VARS'" ///
     " " ///
     " " ///
     "9B" /// // table_number
-    "original" // original or corrected?
+    "`APPENDIX_ANALYSIS_TYPE'" // original or corrected?
 
 
 
 // TABLE 10A - pt. 1
 
-process_data "HUDprocessed_testscores_correct_cities_with_duplicates.csv" "`FORCE_CLEAN_LOCAL'" "" "hcityx" "HUDprocessed_testscores_with_duplicates_hcityx"
+process_data "`TESTSCORES_FILE'" "`FORCE_CLEAN_LOCAL'" "`APPENDIX_ANALYSIS_TYPE'" "`HUD_HCITY_SOURCE'" "`TESTSCORES_TAG'"
 
 // Generate condition variables
 forvalues i = 1/2 {
@@ -292,11 +340,11 @@ correct_table "`CONTROL_VARS'" "`ABS_VARS'" ///
 	" " ///
     " " ///
     "10A1" ///
-	"original"
+	"`APPENDIX_ANALYSIS_TYPE'"
 
 // TABLE 10A - pt. 2
 
-process_data "HUDprocessed_census_correct_cities_with_duplicates.csv" "`FORCE_CLEAN_LOCAL'" "" "hcityx" "HUDprocessed_census_with_duplicates_hcityx"
+process_data "`CENSUS_FILE'" "`FORCE_CLEAN_LOCAL'" "`APPENDIX_ANALYSIS_TYPE'" "`HUD_HCITY_SOURCE'" "`CENSUS_TAG'"
 
 
 // Generate condition variables
@@ -321,11 +369,11 @@ correct_table "`CONTROL_VARS'" "`ABS_VARS'" ///
 	" " ///
     " " ///
     "10A2" ///
-	"original"
+	"`APPENDIX_ANALYSIS_TYPE'"
 
 // TABLE 10B
 
-process_data "HUDprocessed_census_correct_cities_with_duplicates.csv" "`FORCE_CLEAN_LOCAL'" "" "hcityx" "HUDprocessed_census_with_duplicates_hcityx"
+process_data "`CENSUS_FILE'" "`FORCE_CLEAN_LOCAL'" "`APPENDIX_ANALYSIS_TYPE'" "`HUD_HCITY_SOURCE'" "`CENSUS_TAG'"
 
 // Generate condition variables
 forvalues i = 1/5 {
@@ -349,11 +397,11 @@ correct_table "`CONTROL_VARS'" "`ABS_VARS'" ///
 	"ownerocc_ad" ///
     " " ///
     "10B" ///
-	"original"
+	"`APPENDIX_ANALYSIS_TYPE'"
 
 // TABLE 11
 
-process_data "HUDprocessed_census_correct_cities_with_duplicates.csv" "`FORCE_CLEAN_LOCAL'" "" "hcityx" "HUDprocessed_census_with_duplicates_hcityx"
+process_data "`CENSUS_FILE'" "`FORCE_CLEAN_LOCAL'" "`APPENDIX_ANALYSIS_TYPE'" "`HUD_HCITY_SOURCE'" "`CENSUS_TAG'"
 
 clean_vars "povrate_rec povrate_ad nodad_rec nodad_ad"
 
@@ -389,12 +437,12 @@ correct_table "`CONTROL_VARS'" "`ABS_VARS'" ///
 	" " ///
     " " ///
     "11" ///
-	"original"
+	"`APPENDIX_ANALYSIS_TYPE'"
 
 
 // TABLE 12
 
-process_data "HUDprocessed_census_correct_cities_with_duplicates.csv" "`FORCE_CLEAN_LOCAL'" "" "hcityx" "HUDprocessed_census_with_duplicates_hcityx"
+process_data "`CENSUS_FILE'" "`FORCE_CLEAN_LOCAL'" "`APPENDIX_ANALYSIS_TYPE'" "`HUD_HCITY_SOURCE'" "`CENSUS_TAG'"
 
 clean_vars "medincome_rec"
 qui gen lnmincome_rec = log(medincome_rec)
@@ -419,11 +467,16 @@ correct_table "`CONTROL_VARS'" "`ABS_VARS'" ///
 	" " ///
     " " ///
     "12" ///
-	"original"
+	"`APPENDIX_ANALYSIS_TYPE'"
+
+if "`APPENDIX_ANALYSIS_TYPE'" == "corrected" {
+    display as text "Skipping Table 13 for corrected drop-trial-invariant-controls specification."
+}
+else {
 
 // TABLE 13 - pt. 1
 
-process_data "HUDprocessed_testscores_correct_cities_with_duplicates.csv" "`FORCE_CLEAN_LOCAL'" "" "hcityx" "HUDprocessed_testscores_with_duplicates_hcityx"
+process_data "`TESTSCORES_FILE'" "`FORCE_CLEAN_LOCAL'" "`APPENDIX_ANALYSIS_TYPE'" "`HUD_HCITY_SOURCE'" "`TESTSCORES_TAG'"
 
 clean_vars "mn_avg_ol_elem_rec mn_avg_ol_elem_ad mn_avg_ol_middle_rec mn_avg_ol_middle_ad"
 
@@ -451,12 +504,12 @@ correct_table "`CONTROL_VARS'" "`ABS_VARS'" ///
 	" " ///
     " " ///
     "13A1" ///
-	"original"
+	"`APPENDIX_ANALYSIS_TYPE'"
 
 
 // TABLE 13 - pt. 2
 
-process_data "HUDprocessed_census_correct_cities_with_duplicates.csv" "`FORCE_CLEAN_LOCAL'" "" "hcityx" "HUDprocessed_census_with_duplicates_hcityx"
+process_data "`CENSUS_FILE'" "`FORCE_CLEAN_LOCAL'" "`APPENDIX_ANALYSIS_TYPE'" "`HUD_HCITY_SOURCE'" "`CENSUS_TAG'"
 
 clean_vars "assault_rec assault_ad elementary_school_score_rec elementary_school_score_ad"
 
@@ -484,12 +537,12 @@ correct_table "`CONTROL_VARS'" "`ABS_VARS'" ///
 	" " ///
     " " ///
     "13A2" ///
-	"original"
+	"`APPENDIX_ANALYSIS_TYPE'"
 
 
 // TABLE 13B
 
-process_data "HUDprocessed_census_correct_cities_with_duplicates.csv" "`FORCE_CLEAN_LOCAL'" "" "hcityx" "HUDprocessed_census_with_duplicates_hcityx"
+process_data "`CENSUS_FILE'" "`FORCE_CLEAN_LOCAL'" "`APPENDIX_ANALYSIS_TYPE'" "`HUD_HCITY_SOURCE'" "`CENSUS_TAG'"
 
 clean_vars "povrate_rec povrate_ad skill_rec skill_ad college_rec college_ad singlefamily_rec singlefamily_ad ownerocc_rec ownerocc_ad sfcount_rec sfcount_ad rsei_rec rsei_ad pm25_rec pm25_ad"
 
@@ -520,12 +573,13 @@ correct_table "`CONTROL_VARS'" "`ABS_VARS'" ///
     " " ///
     " " ///
     "13B" ///
-	"original"
+	"`APPENDIX_ANALYSIS_TYPE'"
 
+}
 
 // TABLE 14A
 
-process_data "HUDprocessed_names_correct_cities_with_duplicates.csv" "`FORCE_CLEAN_LOCAL'" "" "hcityx" "HUDprocessed_names_with_duplicates_hcityx"
+process_data "`NAMES_FILE'" "`FORCE_CLEAN_LOCAL'" "`APPENDIX_ANALYSIS_TYPE'" "`HUD_HCITY_SOURCE'" "`NAMES_TAG'"
 
 
 // construct indicators for race groups
@@ -581,13 +635,13 @@ correct_table "`CONTROL_VARS'" "`ABS_VARS'" ///
 	" " ///
     " " ///
     "14A" ///
-	"original" ///
+	"`APPENDIX_ANALYSIS_TYPE'" ///
     " " " " " " " " " " " " "override"
 
 
 // TABLE 14B
 
-process_data "HUDprocessed_names_correct_cities_with_duplicates.csv" "`FORCE_CLEAN_LOCAL'" "" "hcityx" "HUDprocessed_names_with_duplicates_hcityx"
+process_data "`NAMES_FILE'" "`FORCE_CLEAN_LOCAL'" "`APPENDIX_ANALYSIS_TYPE'" "`HUD_HCITY_SOURCE'" "`NAMES_TAG'"
 
 // Convert RecordingDate_Rec to month and year
 gen recordingdate_rec_date = date(recordingdate_rec, "YMD")
@@ -629,4 +683,7 @@ correct_table "`CONTROL_VARS'" "`ABS_VARS'" ///
 	" " ///
     " " ///
     "14B" ///
-	"original"
+	"`APPENDIX_ANALYSIS_TYPE'"
+
+    global OUTPUT "`APPENDIX_ORIGINAL_OUTPUT'"
+}

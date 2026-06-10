@@ -33,7 +33,7 @@ resolve_repo_root <- function() {
     repo_root <- start_dir
     while (repo_root != dirname(repo_root)) {
       if (
-        dir.exists(file.path(repo_root, "all_completed_pairs")) &&
+        dir.exists(file.path(repo_root, "reconstructed_sample")) &&
         dir.exists(file.path(repo_root, "Data"))
       ) {
         return(repo_root)
@@ -42,7 +42,7 @@ resolve_repo_root <- function() {
     }
   }
 
-  stop("Could not infer repo_root. Run from HUDreplication or all_completed_pairs.")
+  stop("Could not infer repo_root. Run from HUDreplication or reconstructed_sample.")
 }
 
 repo_root <- resolve_repo_root()
@@ -50,7 +50,7 @@ repo_root <- resolve_repo_root()
 setwd(repo_root)
 
 args <- commandArgs(trailingOnly = TRUE)
-cluster_level <- Sys.getenv("ALL_COMPLETED_PAIRS_CLUSTER", "trial")
+cluster_level <- Sys.getenv("RECONSTRUCTED_SAMPLE_CLUSTER", "trial")
 if (cluster_level == "") cluster_level <- "trial"
 if (any(args %in% c("market", "--cluster=market", "--market-clustering"))) {
   cluster_level <- "market"
@@ -65,13 +65,13 @@ cluster_note <- if (cluster_level == "market") {
 }
 
 data_dir <- file.path(repo_root, "Data")
-all_completed_pairs_generated_dir <- file.path(data_dir, "Generated", "all_completed_pairs")
+reconstructed_sample_generated_dir <- file.path(data_dir, "Generated", "reconstructed_sample")
 if (cluster_level == "market") {
-  tables_dir <- file.path(repo_root, "all_completed_pairs", "market_clustering", "Tables")
-  appendix_tables_dir <- file.path(repo_root, "all_completed_pairs", "market_clustering", "Appendix_Tables")
+  tables_dir <- file.path(repo_root, "reconstructed_sample", "market_clustering", "Tables")
+  appendix_tables_dir <- file.path(repo_root, "reconstructed_sample", "market_clustering", "Appendix_Tables")
 } else {
-  tables_dir <- file.path(repo_root, "all_completed_pairs", "Tables")
-  appendix_tables_dir <- file.path(repo_root, "all_completed_pairs", "Appendix_Tables")
+  tables_dir <- file.path(repo_root, "reconstructed_sample", "Tables")
+  appendix_tables_dir <- file.path(repo_root, "reconstructed_sample", "Appendix_Tables")
 }
 
 dir.create(tables_dir, showWarnings = FALSE, recursive = TRUE)
@@ -82,7 +82,7 @@ progress_message <- function(message) {
   flush.console()
 }
 
-progress_message(paste0("Running all_completed_pairs/analysis.R from ", repo_root))
+progress_message(paste0("Running reconstructed_sample/analysis.R from ", repo_root))
 progress_message(paste0("Cluster level: ", cluster_level))
 
 rank_warn_log <- list()
@@ -132,7 +132,7 @@ current_table <- "Table 5"
 
 # Import the data
 progress_message("Table 5: loading sales/tester data")
-data <- read.csv(file.path(all_completed_pairs_generated_dir, "sales_and_tester_merged.csv")) %>%
+data <- read.csv(file.path(reconstructed_sample_generated_dir, "sales_and_tester_merged.csv")) %>%
     restrict_to_official_pass() %>%
     filter(
         !is.na(STOTUNIT_TOTAL) & 
@@ -220,7 +220,7 @@ summary(available_first_ofcolor)
 
 # Alternate specification keeping each appointment as a separate row
 progress_message("Table 5: loading appointment-level data")
-appointments_data <- read.csv(file.path(all_completed_pairs_generated_dir, "sales_and_tester_appointments.csv"))  %>%
+appointments_data <- read.csv(file.path(reconstructed_sample_generated_dir, "sales_and_tester_appointments.csv"))  %>%
     restrict_to_official_pass() %>%
     filter(
         !is.na(STOTUNIT) &
@@ -273,8 +273,8 @@ summary(recommended_apps_ofcolor)
 summary(available_apps_ofcolor)
 
 sample_summary <- data.frame(
-    all_completed_pairs_rows = nrow(data),
-    all_completed_pairs_controls = length(unique(data$CONTROL)),
+    reconstructed_sample_rows = nrow(data),
+    reconstructed_sample_controls = length(unique(data$CONTROL)),
     appointment_rows = nrow(appointments_data),
     appointment_controls = length(unique(appointments_data$CONTROL))
 )
@@ -459,7 +459,7 @@ write_table(file.path(tables_dir, "table5.tex"), latex_table(table_rows))
 # =================================================================================================== #
 
 progress_message("Loading cleaned HDS data for Tables 6-12 and appendix outputs")
-cleaned_data <- read.csv(file.path(all_completed_pairs_generated_dir, "cleaned_hds.csv")) %>%
+cleaned_data <- read.csv(file.path(reconstructed_sample_generated_dir, "cleaned_hds.csv")) %>%
   restrict_to_official_pass() %>%
   mutate(
     RACE = as.factor(RACE),
@@ -1549,7 +1549,7 @@ if (cluster_level == "trial") {
       label = "tab:appendixA10",
       stat_lines = NULL,
       note_lines = c(
-        "Rows report the African American coefficient from separate site-specific all-completed-pairs regressions with the full baseline controls and control fixed effects; controls with no within-site variation are omitted.",
+        "Rows report the African American coefficient from separate site-specific reconstructed-sample regressions with the full baseline controls and control fixed effects; controls with no within-site variation are omitted.",
         "A full site-by-race-by-outcome coefficient file is saved to Appendix\\_Tables/market\\_racial\\_share\\_heterogeneity.csv; site labels are summarized in Appendix\\_Tables/site\\_market\\_lookup.csv.",
         cluster_note,
         "\\sym{*} \\(p<0.10\\), \\sym{**} \\(p<0.05\\), \\sym{***} \\(p<0.01\\)"

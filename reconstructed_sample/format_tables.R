@@ -1,14 +1,14 @@
 resolve_repo_root <- function() {
   cwd <- normalizePath(getwd(), winslash = "/", mustWork = TRUE)
   if (basename(cwd) == "HUDreplication") return(cwd)
-  if (basename(cwd) == "all_completed_pairs") return(dirname(cwd))
+  if (basename(cwd) == "reconstructed_sample") return(dirname(cwd))
   candidate <- file.path(cwd, "HUDreplication")
   if (dir.exists(candidate)) return(normalizePath(candidate, winslash = "/", mustWork = TRUE))
-  stop("Could not infer repo_root. Run from HUDreplication or all_completed_pairs.")
+  stop("Could not infer repo_root. Run from HUDreplication or reconstructed_sample.")
 }
 
 repo_root <- resolve_repo_root()
-root <- file.path(repo_root, "all_completed_pairs")
+root <- file.path(repo_root, "reconstructed_sample")
 source_dir <- file.path(root, "Tables")
 output_dir <- file.path(root, "Tables", "Formatted_Tables")
 

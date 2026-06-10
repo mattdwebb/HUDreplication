@@ -41,10 +41,10 @@ if (stop_before_geocoding) {
 resolve_repo_root <- function() {
   cwd <- normalizePath(getwd(), winslash = "/", mustWork = TRUE)
   if (basename(cwd) == "HUDreplication") return(cwd)
-  if (basename(cwd) == "all_completed_pairs") return(dirname(cwd))
+  if (basename(cwd) == "reconstructed_sample") return(dirname(cwd))
   candidate <- file.path(cwd, "HUDreplication")
   if (dir.exists(candidate)) return(normalizePath(candidate, winslash = "/", mustWork = TRUE))
-  stop("Could not infer repo_root. Run from HUDreplication or all_completed_pairs.")
+  stop("Could not infer repo_root. Run from HUDreplication or reconstructed_sample.")
 }
 
 repo_root <- resolve_repo_root()
@@ -52,12 +52,12 @@ setwd(repo_root)
 
 # Define data paths
 raw_data_path <- "Data/HDS2012_Raw_Data"
-all_completed_pairs_generated_path <- "Data/Generated/all_completed_pairs"
+reconstructed_sample_generated_path <- "Data/Generated/reconstructed_sample"
 
-dir.create(all_completed_pairs_generated_path, showWarnings = FALSE, recursive = TRUE)
+dir.create(reconstructed_sample_generated_path, showWarnings = FALSE, recursive = TRUE)
 
 generated_file <- function(filename) {
-  file.path(all_completed_pairs_generated_path, filename)
+  file.path(reconstructed_sample_generated_path, filename)
 }
 
 
@@ -332,9 +332,9 @@ parse_time_string <- function(time_string, am_pm_indicator = NULL) {
   if (!is.null(am_pm_indicator)) {
     # Handle missing AM/PM indicator (-1 or NULL) by guessing based on hour
     if (is.na(am_pm_indicator) || am_pm_indicator == -1) {
-      if (!is.na(hour) && hour >= 9 && hour <= 12) {
+      if (!is.na(hour) && hour >= 9 && hour < 12) {
         am_pm_indicator <- 1  # AM
-      } else if (!is.na(hour) && hour >= 1 && hour <= 8) {
+      } else if (!is.na(hour) && (hour == 12 || (hour >= 1 && hour <= 8))) {
         am_pm_indicator <- 2  # PM
       }
 
@@ -458,8 +458,8 @@ correct_am_pm_indicator <- function(hour, am_pm_indicator) {
   # Handle missing AM/PM indicator (-1 or NA) by guessing based on hour
   if_else(is.na(am_pm_indicator) | am_pm_indicator == -1,
     case_when(
-      !is.na(hour) & hour >= 9 & hour <= 12 ~ TRUE,  # AM
-      !is.na(hour) & hour >= 1 & hour <= 8 ~ FALSE,  # PM
+      !is.na(hour) & hour >= 9 & hour < 12 ~ TRUE,  # AM
+      !is.na(hour) & (hour == 12 | (hour >= 1 & hour <= 8)) ~ FALSE,  # PM
       TRUE ~ NA  # Cannot determine, leave as NA
     ),
     # Correct obviously wrong AM/PM indicators (only if hour is not NA)
@@ -1577,9 +1577,9 @@ if (stop_before_geocoding) {
 # =================================================================================================== #
 
 cat("=== GEOCODING  ===\n")
-source(file.path("all_completed_pairs", "Cleaning_Scripts", "address_geocoding.R"))
+source(file.path("reconstructed_sample", "Cleaning_Scripts", "address_geocoding.R"))
 manual_geocode_override_path <- file.path(
-  "all_completed_pairs",
+  "reconstructed_sample",
   "Cleaning_Scripts",
   "manual_geocoded_addresses.csv"
 )
@@ -1686,12 +1686,12 @@ if (exists("sales_tester_rechomes_geocoded")) {
 }
 
 # Load merge helpers
-source(file.path("all_completed_pairs", "Cleaning_Scripts", "acs_merging.R"))
-source(file.path("all_completed_pairs", "Cleaning_Scripts", "superfund_merging.R"))
-source(file.path("all_completed_pairs", "Cleaning_Scripts", "school_score_merging.R"))
-source(file.path("all_completed_pairs", "Cleaning_Scripts", "greatschools_crime_merging.R"))
-source(file.path("all_completed_pairs", "Cleaning_Scripts", "rsei_merging.R"))
-source(file.path("all_completed_pairs", "Cleaning_Scripts", "pm25_merging.R"))
+source(file.path("reconstructed_sample", "Cleaning_Scripts", "acs_merging.R"))
+source(file.path("reconstructed_sample", "Cleaning_Scripts", "superfund_merging.R"))
+source(file.path("reconstructed_sample", "Cleaning_Scripts", "school_score_merging.R"))
+source(file.path("reconstructed_sample", "Cleaning_Scripts", "greatschools_crime_merging.R"))
+source(file.path("reconstructed_sample", "Cleaning_Scripts", "rsei_merging.R"))
+source(file.path("reconstructed_sample", "Cleaning_Scripts", "pm25_merging.R"))
 
 # Prepare tract GEOID for ACS merging
 merged_external_data <- merged_external_data %>%

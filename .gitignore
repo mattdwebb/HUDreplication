@@ -1,26 +1,26 @@
-all_completed_pairs/api_keys.R
+reconstructed_sample/api_keys.R
 .DS_Store
 Data/**
 !Data/meta_comparison.csv
 !Data/Generated/
 Data/Generated/**
-all_completed_pairs/Appendix_Tables/**
-all_completed_pairs/Tables/**
-selected_sample/Output/**
-selected_sample/temp*
-Comparison_Tables/
+reconstructed_sample/Appendix_Tables/**
+reconstructed_sample/Tables/**
+ct_sample/Output/**
+ct_sample/temp*
+comparison_tables/
 
-all_completed_pairs/.Rhistory
+reconstructed_sample/.Rhistory
 Rplots.pdf
 
 # Generated market-clustered and exploratory output folders.
-all_completed_pairs/market_clustering/**
-all_completed_pairs/Market_Heterogeneity/**
+reconstructed_sample/market_clustering/**
+reconstructed_sample/Market_Heterogeneity/**
 Market_Clustered_*/
 
 # Generated original-paper table exports.
-selected_sample/original_tables/
+ct_sample/original_tables/
 
 # Scratch/experimental scripts that are not part of the main replication run.
-all_completed_pairs/table5_wild_cluster_bootstrap.R
-selected_sample/audit_adsprocessed_provenance.R
+reconstructed_sample/table5_wild_cluster_bootstrap.R
+ct_sample/audit_adsprocessed_provenance.R

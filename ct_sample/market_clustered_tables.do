@@ -1,14 +1,14 @@
 clear all
 
-// Parallel selected-sample run with conventional market-level clustering.
+// Parallel C&T-sample run with conventional market-level clustering.
 // This leaves the standard Output folder untouched by writing into
-// Output/market_clustered/{comparison_tables,corrected_full,original_full}.
+// Output/market_clustered/{comparison_table_estimates,corrected,original}.
 
 if "${REPO_ROOT}" == "" {
     global REPO_ROOT "/PATH/TO/HUDreplication"
 }
 if "${CODE}" == "" {
-    global CODE "${REPO_ROOT}/selected_sample"
+    global CODE "${REPO_ROOT}/ct_sample"
 }
 if "${DATA}" == "" {
     global DATA "${REPO_ROOT}/Data"
@@ -37,9 +37,9 @@ global SELECTED_SAMPLE_CLUSTER_DESC "market"
 
 cap mkdir "${CODE}/Output"
 cap mkdir "${CODE}/Output/market_clustered"
-cap mkdir "${CODE}/Output/market_clustered/comparison_tables"
-cap mkdir "${CODE}/Output/market_clustered/corrected_full"
-cap mkdir "${CODE}/Output/market_clustered/original_full"
+cap mkdir "${CODE}/Output/market_clustered/comparison_table_estimates"
+cap mkdir "${CODE}/Output/market_clustered/corrected"
+cap mkdir "${CODE}/Output/market_clustered/original"
 
 // Reuse the current cleaned caches when FORCE_CLEAN=0. This keeps the market-
 // clustered analysis focused on inference and avoids rerunning the city-cleaning
@@ -56,7 +56,7 @@ foreach f in ///
     HUDprocessed_names_with_duplicates_hcityx_cleaned.dta ///
     HUDprocessed_names_processed_hcityx_cleaned.dta ///
     HUDprocessed_names_processed_hcity_ad_cleaned.dta {
-    cap copy "${CODE}/Output/`f'" "${CODE}/Output/market_clustered/comparison_tables/`f'", replace
+    cap copy "${CODE}/Output/comparison_table_estimates/`f'" "${CODE}/Output/market_clustered/comparison_table_estimates/`f'", replace
 }
 
 foreach f in ///
@@ -64,7 +64,7 @@ foreach f in ///
     HUDprocessed_census_processed_hcity_ad_cleaned.dta ///
     HUDprocessed_testscores_processed_hcity_ad_cleaned.dta ///
     HUDprocessed_names_processed_hcity_ad_cleaned.dta {
-    cap copy "${CODE}/Output/`f'" "${CODE}/Output/market_clustered/corrected_full/`f'", replace
+    cap copy "${CODE}/Output/corrected/`f'" "${CODE}/Output/market_clustered/corrected/`f'", replace
 }
 
 foreach f in ///
@@ -72,12 +72,12 @@ foreach f in ///
     HUDprocessed_census_with_duplicates_hcityx_cleaned.dta ///
     HUDprocessed_testscores_with_duplicates_hcityx_cleaned.dta ///
     HUDprocessed_names_with_duplicates_hcityx_cleaned.dta {
-    cap copy "${CODE}/Output/`f'" "${CODE}/Output/market_clustered/original_full/`f'", replace
+    cap copy "${CODE}/Output/original/`f'" "${CODE}/Output/market_clustered/original/`f'", replace
 }
 
 cap log close
 
-global OUTPUT "${CODE}/Output/market_clustered/comparison_tables"
+global OUTPUT "${CODE}/Output/market_clustered/comparison_table_estimates"
 log using "${OUTPUT}/market_clustered_comparison_tables.log", text replace
 do "${CODE}/comparison_tables.do"
 log close

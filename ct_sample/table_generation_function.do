@@ -79,7 +79,7 @@ program define process_data
         }
     }
     // import data
-    import delimited "${DATA}/Generated/selected_sample/`data_file'", bindquote(strict) clear
+    import delimited "${DATA}/Generated/ct_sample/`data_file'", bindquote(strict) clear
     rename *, lower
 	gen id = _n
 	
@@ -486,9 +486,14 @@ program define correct_table, rclass
 		local full_sample_abs_vars_`full_sample_i' "`abs_vars_`full_sample_i''"
 	}
 
-	if "${SELECTED_SAMPLE_TRIAL_VARYING}" == "1" {
-		// Diagnostic specification: keep the trial fixed effect and the
-		// tester/appointment controls used in the all-completed-pairs design. In this
+    local drop_trial_invariant 0
+    if "`analysis_type'" == "corrected" {
+        local drop_trial_invariant 1
+    }
+
+	if `drop_trial_invariant' {
+		// Corrected specification: keep the trial fixed effect and the
+		// tester/appointment controls used in the reconstructed-sample design. In this
         // mode, use the same retained baseline controls across all tables
         // rather than inheriting smaller table-specific C&T control sets.
         local within_trial_abs_vars_ads "control sequencex month arelate2 sapptam thhegai tpegai thighedu tcurtenr algncur aelng1 dpmtexp amovers age aleasetp acarown"
@@ -514,7 +519,7 @@ program define correct_table, rclass
             }
         }
 
-        display as text "Within-trial-controls-only diagnostic is active."
+        display as text "Corrected drop-trial-invariant-controls specification is active."
     }
 
     local all_vars "`CONTROL_VARS' `ABS_VARS'"
@@ -525,7 +530,7 @@ program define correct_table, rclass
 	// Extract all unique control variables
 	local unique_controls "`control_vars_1' `control_vars_2' `control_vars_3' `control_vars_4' `control_vars_5' `control_vars_6'"
 	local all_vars "`all_vars' `unique_controls'"
-	if "${SELECTED_SAMPLE_TRIAL_VARYING}" == "1" & "`analysis_type'" == "corrected" {
+	if `drop_trial_invariant' {
 		local all_vars "`all_vars' `full_sample_CONTROL_VARS' `full_sample_ABS_VARS'"
 		forvalues full_sample_i = 1/6 {
 			local all_vars "`all_vars' `full_sample_control_vars_`full_sample_i'' `full_sample_abs_vars_`full_sample_i''"
@@ -577,7 +582,7 @@ program define correct_table, rclass
             local racial_minority = "ofcolor"
             local geofe = "place_name"
         }
-        if "${SELECTED_SAMPLE_TRIAL_VARYING}" == "1" {
+        if `drop_trial_invariant' {
             local geofe ""
         }
 
@@ -588,7 +593,7 @@ program define correct_table, rclass
         disp as text "City Fixed Effect is: " as result "`geofe'"
 	        disp as text "Clustered by: ${SELECTED_SAMPLE_CLUSTER_DESC}"
 
-	        if "${SELECTED_SAMPLE_TRIAL_VARYING}" == "1" & "`analysis_type'" == "corrected" {
+	        if `drop_trial_invariant' {
 	            tempvar full_control_complete_case
 	            local fs_same_ctrl ""
 	            local fs_same_abs ""

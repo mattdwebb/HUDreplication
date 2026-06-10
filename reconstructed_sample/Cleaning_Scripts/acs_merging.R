@@ -22,9 +22,9 @@ for (pkg in packages) {
 }
 
 # Load API keys
-api_keys_path <- file.path("all_completed_pairs", "api_keys.R")
+api_keys_path <- file.path("reconstructed_sample", "api_keys.R")
 if (!file.exists(api_keys_path)) {
-  stop("Missing all_completed_pairs/api_keys.R. Copy all_completed_pairs/api_keys_template.R to api_keys.R and add your Census API key.")
+  stop("Missing reconstructed_sample/api_keys.R. Copy reconstructed_sample/api_keys_template.R to api_keys.R and add your Census API key.")
 }
 source(api_keys_path)
 

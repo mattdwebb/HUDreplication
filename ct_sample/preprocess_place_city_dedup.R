@@ -15,9 +15,9 @@ sf_use_s2(FALSE)
 # Set this to the local location of the HUDreplication repository.
 REPO_ROOT <- path.expand("~/PATH/TO/HUDreplication")
 
-# Define the selected-sample output folder and shared generated root
+# Define the C&T-sample output folder and shared generated root
 generated_root <- file.path(REPO_ROOT, "Data", "Generated")
-output_folder <- file.path(generated_root, "selected_sample")
+output_folder <- file.path(generated_root, "ct_sample")
 input_folder <- file.path(REPO_ROOT, "Data", "CT2022_Replication_Data")
 
 ensure_output_dir <- function(path) {
@@ -1095,7 +1095,7 @@ write_hud_outputs(
 )
 write_dedup_log(output_folder, "dedup_log_processed.csv")
 
-cat("\nGenerating non-deduplicated selected-sample outputs...\n")
+cat("\nGenerating non-deduplicated C&T-sample outputs...\n")
 dedup_log <- new_dedup_log()
 
 adsprocessed_data_nodedup <- readRDS(paste0(input_folder, "/adsprocessed_JPE_censor.rds"))

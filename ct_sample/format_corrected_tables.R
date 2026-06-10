@@ -1,38 +1,45 @@
 resolve_repo_root <- function() {
   cwd <- normalizePath(getwd(), winslash = "/", mustWork = TRUE)
   if (basename(cwd) == "HUDreplication") return(cwd)
-  if (basename(cwd) == "selected_sample") return(dirname(cwd))
+  if (basename(cwd) == "ct_sample") return(dirname(cwd))
 
   candidate <- file.path(cwd, "HUDreplication")
   if (dir.exists(candidate)) {
     return(normalizePath(candidate, winslash = "/", mustWork = TRUE))
   }
 
-  stop("Could not infer repo_root. Run from HUDreplication or selected_sample.")
+  stop("Could not infer repo_root. Run from HUDreplication or ct_sample.")
 }
 
 repo_root <- resolve_repo_root()
-env_value <- function(name, default = "") {
+env_value <- function(name, default = "", legacy_name = NULL) {
   value <- Sys.getenv(name, "")
   if (nzchar(value)) return(value)
+  if (!is.null(legacy_name)) {
+    legacy_value <- Sys.getenv(legacy_name, "")
+    if (nzchar(legacy_value)) return(legacy_value)
+  }
   default
 }
 
 source_dir <- env_value(
-  "SELECTED_SAMPLE_FORMAT_SOURCE_DIR",
-  file.path(repo_root, "selected_sample", "Output")
+  "CT_SAMPLE_FORMAT_SOURCE_DIR",
+  file.path(repo_root, "ct_sample", "Output", "corrected"),
+  legacy_name = "SELECTED_SAMPLE_FORMAT_SOURCE_DIR"
 )
 output_dir <- env_value(
-  "SELECTED_SAMPLE_FORMAT_OUTPUT_DIR",
-  file.path(source_dir, "Corrected Tables")
+  "CT_SAMPLE_FORMAT_OUTPUT_DIR",
+  file.path(source_dir, "formatted"),
+  legacy_name = "SELECTED_SAMPLE_FORMAT_OUTPUT_DIR"
 )
 table_subtitle <- env_value(
-  "SELECTED_SAMPLE_FORMAT_TABLE_SUBTITLE",
-  "Corrected Model-Based Replication"
+  "CT_SAMPLE_FORMAT_TABLE_SUBTITLE",
+  "Corrected Model-Based Replication",
+  legacy_name = "SELECTED_SAMPLE_FORMAT_TABLE_SUBTITLE"
 )
-label_prefix <- env_value("SELECTED_SAMPLE_FORMAT_LABEL_PREFIX", "corrected_table")
-ad_control_row_mode <- env_value("SELECTED_SAMPLE_FORMAT_AD_CONTROL_ROWS", "corrected")
-exclude_tables <- strsplit(env_value("SELECTED_SAMPLE_FORMAT_EXCLUDE_TABLES"), "[, ]+")[[1]]
+label_prefix <- env_value("CT_SAMPLE_FORMAT_LABEL_PREFIX", "corrected_table", "SELECTED_SAMPLE_FORMAT_LABEL_PREFIX")
+ad_control_row_mode <- env_value("CT_SAMPLE_FORMAT_AD_CONTROL_ROWS", "corrected", "SELECTED_SAMPLE_FORMAT_AD_CONTROL_ROWS")
+exclude_tables <- strsplit(env_value("CT_SAMPLE_FORMAT_EXCLUDE_TABLES", legacy_name = "SELECTED_SAMPLE_FORMAT_EXCLUDE_TABLES"), "[, ]+")[[1]]
 exclude_tables <- exclude_tables[nzchar(exclude_tables)]
 
 dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
@@ -133,6 +140,17 @@ format_counts <- function(cells) {
   }, character(1))
 }
 
+optional_summary_labels <- c("White SD", "White N")
+
+summary_values <- function(tbl, summary_label, missing_value = "--") {
+  row <- tbl$summary[[summary_label]]
+  if (!is.null(row)) return(row)
+  if (summary_label %in% optional_summary_labels) {
+    return(rep(missing_value, tbl$n_cols))
+  }
+  stop("Missing summary row `", summary_label, "` in ", basename(tbl$path))
+}
+
 white_sd_rows <- list()
 
 record_white_sd_rows <- function(table_id, panel_title, col_names, category_stems,
@@ -148,16 +166,14 @@ record_white_sd_rows <- function(table_id, panel_title, col_names, category_stem
   display_col <- 1L
   for (stem in category_stems) {
     tbl <- get_table(stem)
-    white_sd <- tbl$summary[["White SD"]]
-    white_n <- tbl$summary[["White N"]]
-    if (is.null(white_sd)) stop("Missing White SD row in ", basename(tbl$path))
-    if (is.null(white_n)) stop("Missing White N row in ", basename(tbl$path))
+    white_sd <- summary_values(tbl, "White SD", missing_value = NA_character_)
+    white_n <- summary_values(tbl, "White N", missing_value = NA_character_)
 
     for (source_col in seq_len(tbl$n_cols)) {
       white_sd_rows[[length(white_sd_rows) + 1L]] <<- data.frame(
         table_id = table_id,
         panel_title = panel_title,
-        sample_label = "Selected Sample",
+        sample_label = "C\\&T Sample",
         specification = "Drop Trial-Invariant Controls",
         display_column = display_col,
         column_label = col_labels[[display_col]],
@@ -198,9 +214,7 @@ combine_summary <- function(stems, summary_label) {
 
   for (stem in stems) {
     tbl <- get_table(stem)
-    row <- tbl$summary[[summary_label]]
-    if (is.null(row)) stop("Missing summary row `", summary_label, "` in ", basename(tbl$path))
-    values <- c(values, row)
+    values <- c(values, summary_values(tbl, summary_label))
   }
 
   values
@@ -281,7 +295,7 @@ build_model_panel <- function(panel_title = NULL, header_span = "Dependent Varia
 
   # The raw appendix exports can include nuisance "Other Race" rows from the
   # legacy APRACE coding. The formatted corrected tables follow the original
-  # and all-completed-pairs table layout and display the substantive HDS race groups.
+  # and reconstructed-sample table layout and display the substantive HDS race groups.
   category_rows <- c("African American", "Hispanic", "Asian")
   for (row_label in category_rows) {
     lines <- c(lines, effect_lines(row_label, combine_blocks(category_stems, row_label)))
@@ -355,7 +369,7 @@ build_table14a_panel <- function() {
     "\\midrule",
     effect_lines("Same-race tester", same_race),
     "\\midrule",
-    latex_row("White-group SD", panel$summary[["White SD"]]),
+    latex_row("White-group SD", if (is.null(panel$summary[["White SD"]])) rep("--", length(panel$summary$Observations)) else panel$summary[["White SD"]]),
     latex_row("Observations", format_counts(panel$summary$Observations)),
     latex_row("Adjusted R$^2$", panel$summary[["Adjusted R^2"]]),
     geography_row,
@@ -679,7 +693,7 @@ white_sd_output <- if (length(white_sd_rows) == 0L) {
 }
 write.csv(
   white_sd_output,
-  file.path(output_dir, "selected_sample_appendix_white_sds.csv"),
+  file.path(output_dir, "ct_sample_appendix_white_sds.csv"),
   row.names = FALSE
 )
 
@@ -711,7 +725,7 @@ manifest <- c(
   "Outputs:",
   paste0("- table", preview_tables, ".tex"),
   "- formatted_corrected_tables_preview.tex",
-  "- selected_sample_appendix_white_sds.csv",
+  "- ct_sample_appendix_white_sds.csv",
   "",
   "Notes:",
   "- The script consumes the current raw corrected CSV outputs; it does not rerun Stata.",
