@@ -76,7 +76,10 @@ read_raw_csv <- function(stem) {
     summary = list()
   )
 
-  summary_labels <- c("Observations", "Adjusted R^2", "Number of Cities")
+  summary_labels <- c(
+    "Observations", "Adjusted R^2", "Number of Cities",
+    "Number of Trials", "White SD", "White N"
+  )
   i <- 1L
   while (i <= nrow(raw)) {
     label <- raw[i, 1]
@@ -130,6 +133,46 @@ format_counts <- function(cells) {
   }, character(1))
 }
 
+white_sd_rows <- list()
+
+record_white_sd_rows <- function(table_id, panel_title, col_names, category_stems,
+                                 analysis = "categories", col_labels = col_names) {
+  expected_cols <- sum(vapply(category_stems, function(stem) get_table(stem)$n_cols, integer(1)))
+  if (length(col_names) != expected_cols) {
+    stop("Column labels do not match White SD source columns for ", table_id)
+  }
+  if (length(col_labels) != expected_cols) {
+    stop("Column report labels do not match White SD source columns for ", table_id)
+  }
+
+  display_col <- 1L
+  for (stem in category_stems) {
+    tbl <- get_table(stem)
+    white_sd <- tbl$summary[["White SD"]]
+    white_n <- tbl$summary[["White N"]]
+    if (is.null(white_sd)) stop("Missing White SD row in ", basename(tbl$path))
+    if (is.null(white_n)) stop("Missing White N row in ", basename(tbl$path))
+
+    for (source_col in seq_len(tbl$n_cols)) {
+      white_sd_rows[[length(white_sd_rows) + 1L]] <<- data.frame(
+        table_id = table_id,
+        panel_title = panel_title,
+        sample_label = "Selected Sample",
+        specification = "Drop Trial-Invariant Controls",
+        display_column = display_col,
+        column_label = col_labels[[display_col]],
+        analysis = analysis,
+        source_csv = basename(tbl$path),
+        source_column = source_col,
+        white_sd = white_sd[[source_col]],
+        white_n = white_n[[source_col]],
+        stringsAsFactors = FALSE
+      )
+      display_col <- display_col + 1L
+    }
+  }
+}
+
 latex_row <- function(label, cells, suffix = "") {
   paste0(label, " & ", paste(cells, collapse = " & "), " \\\\", suffix)
 }
@@ -173,6 +216,7 @@ effect_lines <- function(label, block) {
 
 summary_lines <- function(category_stems, minority_stems = NULL, include_minority = TRUE) {
   lines <- c(
+    latex_row("White-group SD", combine_summary(category_stems, "White SD")),
     latex_row("Observations", format_counts(combine_summary(category_stems, "Observations")))
   )
 
@@ -200,8 +244,20 @@ summary_lines <- function(category_stems, minority_stems = NULL, include_minorit
 
 build_model_panel <- function(panel_title = NULL, header_span = "Dependent Variable",
                               col_names, category_stems, minority_stems = NULL,
-                              include_minority = TRUE, additional_rows = list()) {
+                              include_minority = TRUE, additional_rows = list(),
+                              white_sd_table = NULL, white_sd_panel = panel_title,
+                              white_sd_col_labels = col_names) {
   n_cols <- length(col_names)
+
+  if (!is.null(white_sd_table)) {
+    record_white_sd_rows(
+      table_id = white_sd_table,
+      panel_title = if (is.null(white_sd_panel)) "" else white_sd_panel,
+      col_names = col_names,
+      category_stems = category_stems,
+      col_labels = white_sd_col_labels
+    )
+  }
 
   lines <- character()
   if (!is.null(panel_title)) {
@@ -253,6 +309,15 @@ build_model_panel <- function(panel_title = NULL, header_span = "Dependent Varia
 
 build_table14a_panel <- function() {
   panel <- get_table("table14A_override_corrected")
+  buyer_headers <- c("Buyer White", "Buyer African American", "Buyer Hispanic", "Buyer Asian")
+  record_white_sd_rows(
+    table_id = "table14",
+    panel_title = "Panel A: Buyers upon Sale",
+    col_names = buyer_headers,
+    category_stems = "table14A_override_corrected",
+    analysis = "override",
+    col_labels = buyer_headers
+  )
 
   same_race <- list(
     coef = c(
@@ -290,6 +355,7 @@ build_table14a_panel <- function() {
     "\\midrule",
     effect_lines("Same-race tester", same_race),
     "\\midrule",
+    latex_row("White-group SD", panel$summary[["White SD"]]),
     latex_row("Observations", format_counts(panel$summary$Observations)),
     latex_row("Adjusted R$^2$", panel$summary[["Adjusted R^2"]]),
     geography_row,
@@ -334,6 +400,14 @@ write_table(
     col_names = c("(1)", "(2)", "(3)", "(4)"),
     category_stems = "table5_categories_corrected",
     minority_stems = "table5_minority_corrected",
+    white_sd_table = "table5",
+    white_sd_panel = "",
+    white_sd_col_labels = c(
+      "Number of recommendations",
+      "Number of recommendations",
+      "Advertised home availability",
+      "Advertised home availability"
+    ),
     additional_rows = list(
       ad_control_row("ln(price) advertised home", c("No", "Yes", "No", "Yes")),
       ad_control_row("Racial composition advertised home", c("No", "Yes", "No", "Yes"))
@@ -349,6 +423,9 @@ write_table(
     col_names = c("(1)", "(2)", "(3)", "(4)", "(5)"),
     category_stems = "table6_categories_corrected",
     minority_stems = "table6_minority_corrected",
+    white_sd_table = "table6",
+    white_sd_panel = "",
+    white_sd_col_labels = rep("White household share", 5),
     additional_rows = list(
       ad_control_row("Share white advertised home", c("No", "Yes", "Yes", "Yes", "Yes")),
       ad_control_row("ln(price) advertised home", c("No", "No", "Yes", "Yes", "Yes")),
@@ -366,6 +443,13 @@ write_table(
     col_names = c("High Income", "Middle Income", "Low Income"),
     category_stems = "table7_categories_corrected",
     minority_stems = "table7_minority_corrected",
+    white_sd_table = "table7",
+    white_sd_panel = "",
+    white_sd_col_labels = c(
+      "White high-income household share",
+      "White middle-income household share",
+      "White low-income household share"
+    ),
     additional_rows = list(
       ad_control_row("Share white advertised home", c("Yes", "Yes", "Yes")),
       ad_control_row("ln(price) advertised home", c("Yes", "Yes", "Yes")),
@@ -404,6 +488,14 @@ write_table(
       col_names = school_headers,
       category_stems = c("table8A1_categories_corrected", "table8A2_categories_corrected"),
       minority_stems = c("table8A1_minority_corrected", "table8A2_minority_corrected"),
+      white_sd_table = "table8",
+      white_sd_panel = "Panel A: School Quality and Neighborhood Safety",
+      white_sd_col_labels = c(
+        "Elementary school test score",
+        "Middle school test score",
+        "Assaults",
+        "Elementary school rating"
+      ),
       additional_rows = school_controls
     ),
     build_model_panel(
@@ -412,6 +504,9 @@ write_table(
       col_names = acs_headers,
       category_stems = "table8B_categories_corrected",
       minority_stems = "table8B_minority_corrected",
+      white_sd_table = "table8",
+      white_sd_panel = "Panel B: American Community Survey",
+      white_sd_col_labels = acs_headers,
       additional_rows = acs_controls
     )
   )
@@ -434,6 +529,9 @@ write_table(
       col_names = pollution_headers,
       category_stems = "table9A_categories_corrected",
       minority_stems = "table9A_minority_corrected",
+      white_sd_table = "table9",
+      white_sd_panel = "Panel A: Differences for the Entire Sample",
+      white_sd_col_labels = pollution_headers,
       additional_rows = pollution_controls
     ),
     build_model_panel(
@@ -441,6 +539,9 @@ write_table(
       col_names = pollution_headers,
       category_stems = "table9B_categories_corrected",
       minority_stems = "table9B_minority_corrected",
+      white_sd_table = "table9",
+      white_sd_panel = "Panel B: Differences for Sample of Mothers",
+      white_sd_col_labels = pollution_headers,
       additional_rows = pollution_controls
     )
   )
@@ -456,6 +557,14 @@ write_table(
       col_names = school_headers,
       category_stems = c("table10A1_categories_corrected", "table10A2_categories_corrected"),
       minority_stems = c("table10A1_minority_corrected", "table10A2_minority_corrected"),
+      white_sd_table = "table10",
+      white_sd_panel = "Panel A: School Quality and Neighborhood Safety",
+      white_sd_col_labels = c(
+        "Elementary school test score",
+        "Middle school test score",
+        "Assaults",
+        "Elementary school rating"
+      ),
       additional_rows = school_controls
     ),
     build_model_panel(
@@ -463,6 +572,9 @@ write_table(
       col_names = acs_headers,
       category_stems = "table10B_categories_corrected",
       minority_stems = "table10B_minority_corrected",
+      white_sd_table = "table10",
+      white_sd_panel = "Panel B: American Community Survey",
+      white_sd_col_labels = acs_headers,
       additional_rows = acs_controls
     )
   )
@@ -482,7 +594,17 @@ write_table(
       "Low Poverty/High Dad: Moms"
     ),
     category_stems = "table11_categories_corrected",
-    include_minority = FALSE
+    include_minority = FALSE,
+    white_sd_table = "table11",
+    white_sd_panel = "",
+    white_sd_col_labels = c(
+      "Low poverty",
+      "Low poverty: families",
+      "Low poverty: moms",
+      "Low poverty/high dad",
+      "Low poverty/high dad: families",
+      "Low poverty/high dad: moms"
+    )
   ))
 )
 
@@ -493,7 +615,10 @@ write_table(
   list(build_model_panel(
     col_names = c("All Testers", "Families", "Moms"),
     category_stems = "table12_categories_corrected",
-    include_minority = FALSE
+    include_minority = FALSE,
+    white_sd_table = "table12",
+    white_sd_panel = "",
+    white_sd_col_labels = c("Log median income: all testers", "Log median income: families", "Log median income: moms")
   ))
 )
 
@@ -532,6 +657,9 @@ write_table(
       col_names = c("(1)", "(2)", "(3)", "(4)", "(5)"),
       category_stems = "table14B_categories_corrected",
       minority_stems = "table14B_minority_corrected",
+      white_sd_table = "table14",
+      white_sd_panel = "Panel B: Dependent Variable: Logarithm of Price",
+      white_sd_col_labels = rep("Log sale price", 5),
       additional_rows = list(
         ad_control_row("Share white advertised home", c("No", "Yes", "Yes", "Yes", "Yes")),
         ad_control_row("ln(price) advertised home", c("No", "No", "Yes", "Yes", "Yes")),
@@ -542,6 +670,17 @@ write_table(
       )
     )
   )
+)
+
+white_sd_output <- if (length(white_sd_rows) == 0L) {
+  data.frame()
+} else {
+  do.call(rbind, white_sd_rows)
+}
+write.csv(
+  white_sd_output,
+  file.path(output_dir, "selected_sample_appendix_white_sds.csv"),
+  row.names = FALSE
 )
 
 preview_tables <- c(5:14)
@@ -572,6 +711,7 @@ manifest <- c(
   "Outputs:",
   paste0("- table", preview_tables, ".tex"),
   "- formatted_corrected_tables_preview.tex",
+  "- selected_sample_appendix_white_sds.csv",
   "",
   "Notes:",
   "- The script consumes the current raw corrected CSV outputs; it does not rerun Stata.",

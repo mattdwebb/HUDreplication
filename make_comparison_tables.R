@@ -30,15 +30,37 @@ all_completed_pairs_dir <- file.path("all_completed_pairs", "Tables", "Formatted
 mark_no <- "--"
 spec_yes <- "Yes"
 spec_no <- "No"
+main_notes_label <- "tab:comparison_table_notes_main"
+appendix_notes_label <- "tab:comparison_table_notes_appendix"
+
+header_cell <- function(lines) {
+  paste0("\\begin{tabular}[b]{@{}c@{}}", paste(lines, collapse = "\\\\"), "\\end{tabular}")
+}
 
 column_labels <- list(
-  `1` = "Original",
-  `2` = "\\begin{tabular}{@{}c@{}}HDS Race\\\\Definition \\&\\\\Deduplicated\\end{tabular}",
-  `3` = "\\begin{tabular}{@{}c@{}}Standardized\\\\City FE\\end{tabular}",
-  `4` = "\\begin{tabular}{@{}c@{}}Advertised-Home\\\\City FE\\end{tabular}",
-  `5` = "Selected Sample",
-  `6` = "All Completed Pairs"
+  `1` = header_cell("Original"),
+  `2` = header_cell(c("HDS Race", "Definition \\&", "Deduplicated")),
+  `3` = header_cell(c("Standardized", "City FE")),
+  `4` = header_cell(c("Advertised-Home", "City FE")),
+  `5` = header_cell(c("Corrected C\\&T", "Sample")),
+  `6` = header_cell(c("Reconstructed", "Sample"))
 )
+
+paired_header_label <- "Drop Trial-Invariant Controls"
+model_col_width <- function(n_cols) {
+  if (n_cols == 5L) "1.15in" else "1.25in"
+}
+
+fixed_header_col <- function(contents, logical_col, n_cols) {
+  paste0(
+    "\\multicolumn{1}{>{\\centering\\arraybackslash}p{", model_col_width(n_cols), "}}",
+    "{\\makebox[\\linewidth][c]{", contents, "}}"
+  )
+}
+
+paired_group_cell <- function(label) {
+  paste0("\\multicolumn{2}{c}{\\makebox[0pt][c]{", label, "}}")
+}
 
 split_latex_cells <- function(x) {
   row_body <- sub("[[:space:]]*\\\\\\\\[[:space:]]*$", "", x)
@@ -129,7 +151,10 @@ read_esttab_csv <- function(path) {
 
   blocks <- list()
   summary <- list()
-  valid_summary <- c("Observations", "Adjusted R^2", "Number of Cities", "Number of Trials")
+  valid_summary <- c(
+    "Observations", "Adjusted R^2", "Number of Cities", "Number of Trials",
+    "White SD", "White N"
+  )
 
   i <- 1L
   while (i <= nrow(raw)) {
@@ -209,7 +234,7 @@ extract_csv_column <- function(stem, source_col) {
     scalar_rows[[label]] <- rows$summary[[label]][[source_col + 1]]
   }
 
-  list(row_blocks = row_blocks, scalar_rows = scalar_rows)
+  list(row_blocks = row_blocks, scalar_rows = scalar_rows, source_stem = stem, source_col = source_col)
 }
 
 category_block <- function(source, display_label, path) {
@@ -270,7 +295,7 @@ add_model_summary <- function(vals, source, label, target_col) {
   vals
 }
 
-panel_header <- function(title, display_cols, single_panel, style, table_id) {
+panel_header <- function(title, display_cols, single_panel, style, table_id, continuation_panel = FALSE) {
   title_prefix <- if (single_panel) "\t" else ""
   n_cols <- length(display_cols)
   cmidrules <- paste0(
@@ -281,47 +306,75 @@ panel_header <- function(title, display_cols, single_panel, style, table_id) {
   )
   number_row <- paste0("(", seq_along(display_cols), ")")
 
-  top_cells <- character()
-  sub_cells <- character()
+  is_table5 <- style == "table5"
+  has_paired_sample_cols <- any(
+    display_cols[-length(display_cols)] == 5 &
+      display_cols[-1] == 6
+  )
+  has_group_header <- has_paired_sample_cols
+  group_cells <- character()
+  label_cells <- character()
   i <- 1L
   while (i <= length(display_cols)) {
     col <- display_cols[[i]]
     if (col == 5 && i < length(display_cols) && display_cols[[i + 1L]] == 6) {
-      control_label <- if (table_id == "table7") "Correct Controls Only" else "Within-Trial Controls Only"
-      top_cells <- c(top_cells, paste0("\\multicolumn{2}{c}{", control_label, "}"))
-      sub_cells <- c(
-        sub_cells,
-        paste0("\\multicolumn{1}{c}{", column_labels[["5"]], "}"),
-        paste0("\\multicolumn{1}{c}{", column_labels[["6"]], "}")
+      group_label <- paired_header_label
+      group_cells <- c(group_cells, paired_group_cell(group_label))
+      label_cells <- c(
+        label_cells,
+        fixed_header_col(column_labels[["5"]], 5L, n_cols),
+        fixed_header_col(column_labels[["6"]], 6L, n_cols)
       )
       i <- i + 2L
       next
     }
 
     label <- column_labels[[as.character(col)]]
-    top_cells <- c(top_cells, paste0("\\multicolumn{1}{c}{", label, "}"))
-    sub_cells <- c(sub_cells, "\\multicolumn{1}{c}{}")
+    group_cells <- c(group_cells, fixed_header_col("", col, n_cols))
+    label_cells <- c(label_cells, fixed_header_col(label, col, n_cols))
     i <- i + 1L
   }
 
-  c(
-    "\\toprule",
+  header_lines <- c("\\toprule")
+  if (continuation_panel) {
+    header_lines <- c(header_lines, "\\addlinespace[0.3em]")
+  }
+  header_lines <- c(
+    header_lines,
     paste0(title_prefix, "& \\multicolumn{", n_cols, "}{c}{", title, "}\\\\"),
-    "\\toprule",
+    "\\toprule"
+  )
+  if (has_group_header) {
+    header_lines <- c(
+      header_lines,
+      paste0(
+        "                    &",
+        paste(group_cells, collapse = "&"),
+        "\\\\[-0.35ex]"
+      )
+    )
+  }
+
+  c(
+    header_lines,
     paste0(
       "                    &",
-      paste(top_cells, collapse = "&"),
-      "\\\\"
-    ),
-    paste0(
-      "                    &",
-      paste(sub_cells, collapse = "&"),
+      paste(label_cells, collapse = "&"),
       "\\\\"
     ),
     paste0("                    ", cmidrules),
     paste0(
       "                    &",
-      paste(paste0("\\multicolumn{1}{c}{", number_row, "}"), collapse = "   &"),
+      paste(
+        mapply(
+          fixed_header_col,
+          number_row,
+          display_cols,
+          MoreArgs = list(n_cols = n_cols),
+          USE.NAMES = FALSE
+        ),
+        collapse = "   &"
+      ),
       "\\\\"
     ),
     "\\midrule"
@@ -335,19 +388,18 @@ spec_rows <- function(style, display_cols, table_id) {
       c("Duplicate Rows Removed", spec_no, spec_yes, spec_yes, mark_no, spec_yes, spec_yes),
       c("City Names Standardized", spec_no, spec_no, spec_yes, mark_no, mark_no, mark_no),
       c("City Fixed Effect", "Ad.", "Ad.", "Ad.", mark_no, mark_no, mark_no),
-      c("Within-Trial Controls Only", spec_no, spec_no, spec_no, mark_no, spec_yes, spec_yes),
-      c("All Completed Pairs", spec_no, spec_no, spec_no, mark_no, spec_no, spec_yes)
+      c("Drop Trial-Invariant Controls", spec_no, spec_no, spec_no, mark_no, spec_yes, spec_yes),
+      c("Reconstructed Sample", spec_no, spec_no, spec_no, mark_no, spec_no, spec_yes)
     )
   } else {
-    controls_row <- if (table_id == "table7") "Correct Controls Only" else "Within-Trial Controls Only"
     completed_pair_col <- if (style == "all_completed_pairs") spec_yes else mark_no
     rows <- list(
       c("HDS Race Definition", spec_no, spec_yes, spec_yes, spec_yes, spec_yes, completed_pair_col),
       c("Duplicate Rows Removed", spec_no, spec_yes, spec_yes, spec_yes, spec_yes, completed_pair_col),
       c("City Names Standardized", spec_no, spec_no, spec_yes, spec_yes, mark_no, mark_no),
       c("City Fixed Effect", "Rec.", "Rec.", "Rec.", "Ad.", mark_no, mark_no),
-      c(controls_row, spec_no, spec_no, spec_no, spec_no, spec_yes, completed_pair_col),
-      c("All Completed Pairs", spec_no, spec_no, spec_no, spec_no, spec_no, completed_pair_col)
+      c("Drop Trial-Invariant Controls", spec_no, spec_no, spec_no, spec_no, spec_yes, completed_pair_col),
+      c("Reconstructed Sample", spec_no, spec_no, spec_no, spec_no, spec_no, completed_pair_col)
     )
   }
 
@@ -360,7 +412,17 @@ panel_lines <- function(panel, all_completed_pairs, within, panel_index, single_
   copy_cols <- panel$copy_cols
   display_cols <- panel$display_cols
 
-  lines <- panel_header(panel$title, display_cols, single_panel, panel$style, panel$table_id)
+  lines <- panel_header(
+    panel$title,
+    display_cols,
+    single_panel,
+    panel$style,
+    panel$table_id,
+    continuation_panel = panel_index > 1L
+  )
+  if (panel_index > 1L) {
+    lines <- c("\\addlinespace[1.0em]", lines)
+  }
 
   minority_all_completed_pairs_block <- if (isTRUE(panel$all_completed_pairs_no_minority)) {
     rep(mark_no, 3)
@@ -399,20 +461,14 @@ panel_lines <- function(panel, all_completed_pairs, within, panel_index, single_
   obs <- add_model_summary(obs, if (is.null(within)) NULL else within$minority, "Observations", 5)
   obs <- add_model_summary(obs, all_completed_pairs, "Observations", 6)
 
-  adj_min <- summary_value(minority, "Adjusted R$^2$", copy_cols)
-  adj_min <- add_model_summary(adj_min, if (is.null(within)) NULL else within$minority, "Adjusted R$^2$", 5)
-  if (isTRUE(panel$all_completed_pairs_no_minority)) {
-    adj_min[[6]] <- mark_no
-  } else {
-    adj_min <- add_model_summary(adj_min, all_completed_pairs, "Adjusted R$^2$ (Minority)", 6)
-  }
-
   adj_cat <- summary_value(categories, "Adjusted R$^2$", copy_cols)
   adj_cat <- add_model_summary(adj_cat, if (is.null(within)) NULL else within$categories, "Adjusted R$^2$", 5)
-  if (isTRUE(panel$all_completed_pairs_no_minority)) {
-    adj_cat <- add_model_summary(adj_cat, all_completed_pairs, "Adjusted R$^2$", 6)
-  } else {
-    adj_cat <- add_model_summary(adj_cat, all_completed_pairs, "Adjusted R$^2$ (Category)", 6)
+  if (!is.null(all_completed_pairs)) {
+    if (!is.null(all_completed_pairs$scalar_rows[["Adjusted R$^2$"]])) {
+      adj_cat <- add_model_summary(adj_cat, all_completed_pairs, "Adjusted R$^2$", 6)
+    } else if (!isTRUE(panel$all_completed_pairs_no_minority)) {
+      adj_cat <- add_model_summary(adj_cat, all_completed_pairs, "Adjusted R$^2$ (Category)", 6)
+    }
   }
 
   cities <- summary_value(minority, "Number of Cities", copy_cols)
@@ -426,14 +482,17 @@ panel_lines <- function(panel, all_completed_pairs, within, panel_index, single_
   lines <- c(
     lines,
     latex_row(c("Observations", select_display(obs, display_cols))),
-    latex_row(c("Adjusted R$^2$ (Minority)", select_display(adj_min, display_cols))),
-    latex_row(c("Adjusted R$^2$ (Category)", select_display(adj_cat, display_cols))),
+    latex_row(c("Adjusted R$^2$", select_display(adj_cat, display_cols))),
     latex_row(c("Number of Cities", select_display(cities, display_cols))),
-    latex_row(c("Number of Trials", select_display(trials, display_cols))),
+    latex_row(c("Number of Pairs", select_display(trials, display_cols))),
     "\\bottomrule"
   )
 
   lines
+}
+
+comparison_colspec <- function(n_cols) {
+  paste0("l*{", n_cols, "}{>{\\centering\\arraybackslash}p{", model_col_width(n_cols), "}}")
 }
 
 table_header <- function(caption, label, n_cols, compact = FALSE, table_width = "\\textwidth") {
@@ -448,26 +507,24 @@ table_header <- function(caption, label, n_cols, compact = FALSE, table_width = 
   if (compact) {
     lines <- c(lines, "\\begingroup")
   }
-  c(lines, paste0("\\resizebox{", table_width, "}{!}{"), paste0("\\begin{tabular}{l*{", n_cols, "}{c}}"))
+  c(lines, paste0("\\resizebox{", table_width, "}{!}{"), paste0("\\begin{tabular}{", comparison_colspec(n_cols), "}"))
 }
 
-table_footer <- function(note, n_cols, compact = FALSE) {
-  note_span <- n_cols + 1L
-  lines <- c(
-    paste0("\\multicolumn{", note_span, "}{l}{\\footnotesize Cluster-robust standard errors in parentheses; clustered at the trial level. 95\\% confidence intervals in square brackets.}\\\\"),
-    paste0("\\multicolumn{", note_span, "}{l}{\\footnotesize \\sym{*} \\(p<0.10\\), \\sym{**} \\(p<0.05\\), \\sym{***} \\(p<0.01\\)}\\\\"),
-    paste0("\\multicolumn{", note_span, "}{l}{\\footnotesize Notes: Columns report estimates under successive corrections to the original specification.}\\\\"),
-    paste0("\\multicolumn{", note_span, "}{l}{\\footnotesize ``HDS Race Definition'' replaces the \\origpaper race and ethnicity coding with that used in the HDS 2012 design.}\\\\"),
-    paste0("\\multicolumn{", note_span, "}{l}{\\footnotesize ``Duplicate Rows Removed'' removes duplicated recommendation records. ``City Names Standardized'' harmonizes city-name spellings before constructing city fixed effects.}\\\\"),
-    paste0("\\multicolumn{", note_span, "}{l}{\\footnotesize ``City Fixed Effect'' indicates whether the fixed effect is based on the recommended-home city (``Rec.'') or advertised-home city (``Ad.'').}\\\\"),
-    paste0("\\multicolumn{", note_span, "}{l}{\\footnotesize ``Within-Trial Controls Only'' retains only controls expected to vary within trial by the design of the audit,}\\\\"),
-    paste0("\\multicolumn{", note_span, "}{l}{\\footnotesize excluding controls that provide no additional identifying power while risking introducing bias from mismeasurement.}\\\\"),
-    paste0("\\multicolumn{", note_span, "}{l}{\\footnotesize ``All Completed Pairs'' refers to a sample that is not selected on the event of being recommended the advertised home,}\\\\"),
-    paste0("\\multicolumn{", note_span, "}{l}{\\footnotesize but instead includes observations from all completed paired trials that passed protocol approval by the HDS 2012 team and are not missing covariate or outcome data.}\\\\"),
-    paste0("\\multicolumn{", note_span, "}{l}{\\footnotesize A dash indicates that the correction is not applicable in that specification.}\\\\")
+table_footer <- function(note, n_cols, compact = FALSE, table_width = "\\textwidth", notes_label = NA_character_) {
+  table_note <- if (!is.na(notes_label)) {
+    c(
+      "\\vspace{0.5em}",
+      paste0("\\caption*{\\footnotesize See notes for comparison tables on p.~\\pageref{", notes_label, "}.}")
+    )
+  }
+
+  c(
+    "\\end{tabular}",
+    "}",
+    if (compact) "\\endgroup",
+    table_note,
+    "\\end{table}"
   )
-  if (!(length(note) == 1L && is.na(note))) lines <- c(lines, note)
-  c(lines, "\\end{tabular}", "}", if (compact) "\\endgroup", "\\end{table}")
 }
 
 # All-completed-pairs tables are parsed once here, then attached to the relevant panels below.
@@ -563,15 +620,11 @@ within_results <- list(
   )
 )
 
-table5_note <- paste0(
-  "\\multicolumn{6}{l}{\\footnotesize Note: Column 3 standardizes advertised-home city names; \\origpaper Table 5 does not use recommended-home city fixed effects.}"
-)
+table5_note <- "Note: Column 3 standardizes advertised-home city names; \\origpaper Table 5 does not use recommended-home city fixed effects."
 table7_note <- paste0(
-  "\\multicolumn{7}{l}{\\footnotesize Note: ``Correct Controls Only'' removes trial-invariant controls relative to \\origpaper's original specification, as in other tables,}\\\\"
-)
-table7_note <- c(
-  table7_note,
-  "\\multicolumn{7}{l}{\\footnotesize and also removes post-treatment controls, such as number of recommendations (STOTUNIT) and whether the agent indicated the advertised home was available (SAVLBAD).}"
+  "Note: ``Drop Trial-Invariant Controls'' removes trial-invariant controls relative to \\origpaper's original specification, ",
+  "as in other tables, and also removes post-treatment controls, such as number of recommendations (STOTUNIT) and ",
+  "whether the agent indicated the advertised home was available (SAVLBAD)."
 )
 
 table_specs <- data.frame(
@@ -590,11 +643,24 @@ table_specs <- data.frame(
               "\\small Results Comparison for \\origpaper Table 12",
               "\\small Results Comparison for \\origpaper Table 13",
               "\\small Results Comparison for \\origpaper Table 14"),
-  label = c("comtab:table5", NA, "comtab:table7", "comtab:table8", NA, NA, NA,
+  label = c("comtab:table5", "comtab:table6", "comtab:table7", "comtab:table8",
+            "comtab:table9",
+            "comtab:table10A", "comtab:table10B",
             "comtab:table11", "comptab:table12", NA, NA),
   note = I(list(table5_note, NA, table7_note, NA, NA, NA, NA, NA, NA, NA, NA)),
   compact = c(TRUE, rep(FALSE, 10)),
-  table_width = c("0.86\\textwidth", rep("\\textwidth", 8), "0.85\\textwidth", "\\textwidth"),
+  table_width = c(
+    "0.80\\textwidth", "0.94\\textwidth", "0.92\\textwidth",
+    "0.92\\textwidth", "0.92\\textwidth", "0.92\\textwidth",
+    "0.92\\textwidth", "0.94\\textwidth", "0.94\\textwidth",
+    "0.78\\textwidth", "0.94\\textwidth"
+  ),
+  notes_label = c(
+    main_notes_label, appendix_notes_label, main_notes_label,
+    appendix_notes_label, main_notes_label, appendix_notes_label,
+    appendix_notes_label, appendix_notes_label, appendix_notes_label,
+    appendix_notes_label, appendix_notes_label
+  ),
   stringsAsFactors = FALSE
 )
 
@@ -649,13 +715,65 @@ panel_specs <- data.frame(
 table13_rows <- panel_specs$file == "comparison_table13.tex"
 panel_specs$display_cols[table13_rows] <- rep(list(1:4), sum(table13_rows))
 
+clean_scalar <- function(x) {
+  if (is.null(x) || length(x) == 0L) return(NA_character_)
+  y <- trimws(as.character(x[[1]]))
+  if (!nzchar(y) || y %in% c(".", mark_no)) return(NA_character_)
+  y
+}
+
+white_sd_rows <- list()
+for (i in seq_len(nrow(panel_specs))) {
+  panel_row <- panel_specs[i, ]
+  if (is.na(panel_row$within_key)) next
+
+  within_key <- as.character(panel_row$within_key)
+  within <- within_results[[within_key]]
+  if (is.null(within)) next
+
+  for (analysis in c("minority", "categories")) {
+    source <- within[[analysis]]
+    if (is.null(source)) next
+    source_stem <- if (is.null(source$source_stem)) NA_character_ else source$source_stem
+    source_col <- if (is.null(source$source_col)) NA_integer_ else source$source_col
+    white_sd_rows[[length(white_sd_rows) + 1L]] <- data.frame(
+      comparison_table = sub("\\.tex$", "", panel_row$file),
+      table_id = panel_row$table_id,
+      panel_order = panel_row$panel_order,
+      panel_title = panel_row$panel_title,
+      sample_label = "Cleaned C&T Sample",
+      comparison_column = 5L,
+      analysis = analysis,
+      within_key = within_key,
+      source_csv = ifelse(is.na(source_stem), NA_character_, paste0(source_stem, ".csv")),
+      source_column = source_col,
+      white_sd = clean_scalar(source$scalar_rows[["White SD"]]),
+      white_n = clean_scalar(source$scalar_rows[["White N"]]),
+      stringsAsFactors = FALSE
+    )
+  }
+}
+
+white_sd_output <- do.call(rbind, white_sd_rows)
+write.csv(
+  white_sd_output,
+  file.path(output_dir, "cleaned_ct_sample_white_sds.csv"),
+  row.names = FALSE
+)
+
 for (i in seq_len(nrow(table_specs))) {
   table <- table_specs[i, ]
   table_panels <- panel_specs[panel_specs$file == table$file, ]
   table_panels <- table_panels[order(table_panels$panel_order), ]
   n_cols <- length(table_panels$display_cols[[1]])
 
-  lines <- table_header(table$caption, table$label, n_cols, table$compact, table$table_width)
+  lines <- table_header(
+    table$caption,
+    table$label,
+    n_cols,
+    table$compact,
+    table$table_width
+  )
 
   for (j in seq_len(nrow(table_panels))) {
     panel_row <- table_panels[j, ]
@@ -678,9 +796,10 @@ for (i in seq_len(nrow(table_specs))) {
     lines <- c(lines, panel_lines(panel, all_completed_pairs, within, j, nrow(table_panels) == 1))
   }
 
-  lines <- c(lines, table_footer(table$note[[1]], n_cols, table$compact))
+  lines <- c(lines, table_footer(table$note[[1]], n_cols, table$compact, table$table_width, table$notes_label))
   lines <- gsub("{,}", "", lines, fixed = TRUE)
   writeLines(lines, file.path(output_dir, table$file), useBytes = TRUE)
 }
 
 message("Wrote ", nrow(table_specs), " comparison tables to ", normalizePath(output_dir))
+message("Wrote cleaned C&T white-group SDs to ", normalizePath(file.path(output_dir, "cleaned_ct_sample_white_sds.csv")))

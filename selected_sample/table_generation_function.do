@@ -262,6 +262,22 @@ program define add_trial_count
     qui estadd scalar num_trials = r(N)
 end
 
+capture program drop add_white_outcome_stats
+program define add_white_outcome_stats
+    args dependent_var
+
+    capture confirm variable aprace
+    if _rc {
+        qui estadd scalar white_sd = .
+        qui estadd scalar white_n = .
+        exit
+    }
+
+    qui summarize `dependent_var' if e(sample) & aprace == 1
+    qui estadd scalar white_sd = r(sd)
+    qui estadd scalar white_n = r(N)
+end
+
 capture program drop run_comparison_regressions
 program define run_comparison_regressions, rclass
     args CONTROL_VARS ABS_VARS dependent_var_1 dependent_var_2 control_var_1 control_var_2 table_number data_col1 data_col23 data_col456
@@ -612,6 +628,7 @@ program define correct_table, rclass
                 qui estadd scalar num_cities = .
             }
             add_trial_count
+            add_white_outcome_stats "`dependent_var'"
 
             qui eststo regression_`i'_minority
             local cols_for_minority = "`cols_for_minority' regression_`i'_minority"
@@ -628,6 +645,7 @@ program define correct_table, rclass
                 qui estadd scalar num_cities = .
             }
             add_trial_count
+            add_white_outcome_stats "`dependent_var'"
 
             qui eststo regression_`i'_categories
             local cols_for_categories = "`cols_for_categories' regression_`i'_categories"
@@ -646,6 +664,7 @@ program define correct_table, rclass
                 qui estadd scalar num_cities = .
             }
             add_trial_count
+            add_white_outcome_stats "`dependent_var'"
 
             qui eststo regression_`i'_override
             local cols_for_override = "`cols_for_override' regression_`i'_override"
@@ -696,8 +715,8 @@ program define correct_table, rclass
         mgroups(`mgroups_titles', pattern(`mgroups_pattern')) ///
         cells("b(star fmt(4))" se(par fmt(4)) ci(fmt(4) par)) ///
         starlevels(* 0.10 ** 0.05 *** 0.01) ///
-        stats(N r2_a num_cities num_trials, fmt(0 4 0 0) ///
-        labels("Observations" "Adjusted R^2" "Number of Cities" "Number of Trials")) ///
+        stats(N r2_a num_cities num_trials white_sd white_n, fmt(0 4 0 0 4 0) ///
+        labels("Observations" "Adjusted R^2" "Number of Cities" "Number of Trials" "White SD" "White N")) ///
         keep(`keep_list_minority')
 
         // Output the Latex table for the racial categories analyses
@@ -721,8 +740,8 @@ program define correct_table, rclass
         mgroups(`mgroups_titles', pattern(`mgroups_pattern')) ///
         cells("b(star fmt(4))" se(par fmt(4)) ci(fmt(4) par)) ///
         starlevels(* 0.10 ** 0.05 *** 0.01) ///
-        stats(N r2_a num_cities num_trials, fmt(0 4 0 0) ///
-        labels("Observations" "Adjusted R^2" "Number of Cities" "Number of Trials")) ///
+        stats(N r2_a num_cities num_trials white_sd white_n, fmt(0 4 0 0 4 0) ///
+        labels("Observations" "Adjusted R^2" "Number of Cities" "Number of Trials" "White SD" "White N")) ///
         keep(`keep_list_categories')
     }
     else {
@@ -747,8 +766,8 @@ program define correct_table, rclass
         mgroups(`mgroups_titles', pattern(`mgroups_pattern')) ///
         cells("b(star fmt(4))" se(par fmt(4)) ci(fmt(4) par)) ///
         starlevels(* 0.10 ** 0.05 *** 0.01) ///
-        stats(N r2_a num_cities num_trials, fmt(0 4 0 0) ///
-        labels("Observations" "Adjusted R^2" "Number of Cities" "Number of Trials")) ///
+        stats(N r2_a num_cities num_trials white_sd white_n, fmt(0 4 0 0 4 0) ///
+        labels("Observations" "Adjusted R^2" "Number of Cities" "Number of Trials" "White SD" "White N")) ///
         keep(`unique_controls')
     }
 end

@@ -1023,10 +1023,29 @@ canonical_status <- bind_rows(canonical_status_rows)
 canonical_retained_pairs <- canonical_status %>%
   filter(status == "retained") %>%
   select(CONTROL, TESTERID)
+canonical_unresolved_pairs <- canonical_status %>%
+  filter(status == "dropped_unresolved_advertised_home") %>%
+  select(CONTROL, TESTERID)
 
 ads_final_rows <- nrow(read.csv(adsprocessed_processed_path, stringsAsFactors = FALSE, check.names = FALSE))
-ads_tester_trial_collapse_drop <- nrow(ads_address_for_dedup) - nrow(pair_meta_for_dedup)
-ads_no_unique_drop <- sum(canonical_status$status == "dropped_unresolved_advertised_home")
+ads_resolved_address_rows <- anti_join(
+  ads_address_for_dedup,
+  canonical_unresolved_pairs,
+  by = c("CONTROL", "TESTERID")
+)
+ads_resolved_pair_rows <- anti_join(
+  pair_meta_for_dedup,
+  canonical_unresolved_pairs,
+  by = c("CONTROL", "TESTERID")
+)
+ads_tester_trial_collapse_drop <- nrow(ads_resolved_address_rows) - nrow(ads_resolved_pair_rows)
+ads_no_unique_rows <- semi_join(
+  ads_address_for_dedup,
+  canonical_unresolved_pairs,
+  by = c("CONTROL", "TESTERID")
+)
+ads_no_unique_drop <- nrow(ads_no_unique_rows)
+ads_no_unique_pairs <- nrow(canonical_unresolved_pairs)
 
 duplicate_cleanup_summary <- tibble(
   dataset = "adsprocessed",
@@ -1035,6 +1054,7 @@ duplicate_cleanup_summary <- tibble(
   key_based_dedup_removed = dedup_log_processed$dropped[dedup_log_processed$step == "adsprocessed address key"],
   tester_trial_collapse_removed = ads_tester_trial_collapse_drop,
   no_unique_advertised_home = ads_no_unique_drop,
+  no_unique_advertised_home_pairs = ads_no_unique_pairs,
   missing_city_drop = nrow(canonical_retained_pairs) - ads_final_rows,
   final_rows = ads_final_rows
 )
@@ -1069,7 +1089,11 @@ for (i in seq_len(nrow(hud_dedup_specs))) {
   exact_step <- paste(hud_dedup_specs$log_stem[[i]], "exact")
   key_step <- paste(hud_dedup_specs$log_stem[[i]], "recommendation")
   final_rows <- nrow(read.csv(hud_dedup_specs$processed_path[[i]], stringsAsFactors = FALSE, check.names = FALSE))
-  no_unique_drop <- nrow(anti_join(hud_after_key, canonical_retained_pairs, by = c("CONTROL", "TESTERID")))
+  no_unique_rows <- anti_join(hud_after_key, canonical_retained_pairs, by = c("CONTROL", "TESTERID"))
+  no_unique_drop <- nrow(no_unique_rows)
+  no_unique_pairs <- no_unique_rows %>%
+    distinct(CONTROL, TESTERID) %>%
+    nrow()
 
   duplicate_cleanup_summary <- bind_rows(
     duplicate_cleanup_summary,
@@ -1080,6 +1104,7 @@ for (i in seq_len(nrow(hud_dedup_specs))) {
       key_based_dedup_removed = dedup_log_processed$dropped[dedup_log_processed$step == key_step],
       tester_trial_collapse_removed = 0L,
       no_unique_advertised_home = no_unique_drop,
+      no_unique_advertised_home_pairs = no_unique_pairs,
       missing_city_drop = nrow(hud_after_key) - no_unique_drop - final_rows,
       final_rows = final_rows
     )
@@ -1099,15 +1124,26 @@ dataset_tex_labels <- c(
   testscores = "\\texttt{testscores}"
 )
 
+dataset_table_labels <- c(
+  adsprocessed = "(Table 5)",
+  census = "(Tables 6--13)",
+  names = "(Table 14)",
+  testscores = "(Tables 8A, 10A)"
+)
+
+format_pair_label <- function(pairs) {
+  paste0("(", format_int(pairs), " pairs)")
+}
+
 duplicate_cleanup_lines <- c(
   "\\begin{table}[htbp]",
   "\\centering",
-  "\\caption{Rows removed by the corrected selected-sample-file cleaning procedure}",
+  "\\caption{Duplicate rows removed by cleaning procedure}",
   "\\label{tab:duplicate_cleanup_summary}",
-  "\\setlength{\\tabcolsep}{4pt}",
-  "\\begin{tabular}{lrrrrrr}",
+  "\\setlength{\\tabcolsep}{0pt}",
+  "\\begin{tabular*}{\\textwidth}{@{\\extracolsep{\\fill}}lrrr>{\\raggedleft\\arraybackslash}p{1.05in}rr@{}}",
   "\\toprule",
-  "Dataset & Original & Exact dupes & Key dedup & Ambiguous ad & Missing city & Final\\\\",
+  "Dataset & Original & Exact dup. & Address dup.$^\\dagger$ & \\multicolumn{1}{c}{Ambiguous ad} & Missing city & Final\\\\",
   "\\midrule"
 )
 
@@ -1130,16 +1166,26 @@ for (i in seq_len(nrow(duplicate_cleanup_summary))) {
       format_int(row$missing_city_drop),
       format_int(row$final_rows),
       sep = " & "
-    ) |> paste0("\\\\")
+    ) |> paste0("\\\\"),
+    paste(
+      dataset_table_labels[[row$dataset]],
+      "",
+      "",
+      "",
+      format_pair_label(row$no_unique_advertised_home_pairs),
+      "",
+      "",
+      sep = " & "
+    ) |> paste0("\\\\[0.4em]")
   )
 }
 
 duplicate_cleanup_lines <- c(
   duplicate_cleanup_lines,
   "\\bottomrule",
-  "\\end{tabular}",
+  "\\end{tabular*}",
   "\\begin{minipage}{\\textwidth}",
-  "\\footnotesize Notes: Exact duplicates are computed after ignoring index-like columns. Key-based deduplication uses normalized advertised-home addresses for \\texttt{adsprocessed} and recommended-home characteristics for the selected-sample files. $^*$For \\texttt{adsprocessed}, key dedup also includes 321 repeated retained advertised-home rows collapsed to one \\texttt{CONTROL}$\\times$\\texttt{TESTERID} record. The ambiguous-ad column counts unresolved advertised-home assignments.",
+  "\\footnotesize Notes: Exact duplicates are computed after ignoring index-like columns. $^\\dagger$The duplicate-address column uses normalized advertised-home addresses for \\texttt{adsprocessed} and the recommendation-record key for the selected-sample files; the latter includes the recommended-home address and associated recommendation characteristics. $^*$For \\texttt{adsprocessed}, duplicate-address removals also include 164 resolvable repeated advertised-home rows collapsed to one \\texttt{CONTROL}$\\times$\\texttt{TESTERID} record. The ambiguous-ad column counts rows removed because no unique advertised-home assignment can be recovered; tester-trial pair counts are shown below row counts. Tables 8A and 10A use \\texttt{testscores} for columns 1--2 and \\texttt{census} for columns 3--4.",
   "\\end{minipage}",
   "\\end{table}"
 )
