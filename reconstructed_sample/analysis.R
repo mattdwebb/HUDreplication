@@ -121,6 +121,13 @@ valid_controls <- c(
 )
 valid_controls_fml <- paste(valid_controls, collapse = " + ")
 valid_control_factors <- setdiff(valid_controls, "age")
+missing_category_label <- "Did not answer"
+
+as_control_factor <- function(x) {
+  x_chr <- trimws(as.character(x))
+  x_chr[!is.na(x_chr) & x_chr == "-1"] <- missing_category_label
+  as.factor(x_chr)
+}
 
 appointment_valid_controls <- c(
     "visit_order", "am_indicator", setdiff(valid_controls, c("was_first_visitor", "am_indicator_first"))
@@ -146,7 +153,7 @@ data <- read.csv(file.path(reconstructed_sample_generated_dir, "sales_and_tester
     mutate(
         RACE = as.factor(RACE),
         CONTROL = as.factor(CONTROL),
-        across(all_of(valid_control_factors), as.factor),
+        across(all_of(valid_control_factors), as_control_factor),
         age = as.numeric(age)
     ) %>%
     mutate(
@@ -155,6 +162,9 @@ data <- read.csv(file.path(reconstructed_sample_generated_dir, "sales_and_tester
         ofcolor = ifelse(RACE %in% c(2,3,4), 1, 0),
         got_second_appointment = as.integer(num_visits >= 2)
     )
+if (!"SAVLBAD_FIRST_LITERAL" %in% names(data) && "SAVLBAD_LITERAL_FIRST" %in% names(data)) {
+    data$SAVLBAD_FIRST_LITERAL <- data$SAVLBAD_LITERAL_FIRST
+}
 
 # Note that the only RACE categories present in valid trials are those indicated by 1, 2, 3, 4 (white, black, hispanic, asian)
 summary(data$RACE)
@@ -180,6 +190,27 @@ available_any_ofcolor <- felm(
     as.formula(paste("SAVLBAD_ANY ~ ofcolor +", valid_controls_fml, "| CONTROL | 0 | cluster_group")),
     data = data
 )
+
+available_any_literal_races <- NULL
+available_any_literal_ofcolor <- NULL
+literal_available_data <- NULL
+if ("SAVLBAD_ANY_LITERAL" %in% names(data)) {
+    literal_available_data <- data %>%
+        filter(!is.na(SAVLBAD_ANY_LITERAL)) %>%
+        group_by(CONTROL) %>%
+        filter(n_distinct(TESTERID) == 2) %>%
+        ungroup()
+
+    available_any_literal_races <- felm(
+        as.formula(paste("SAVLBAD_ANY_LITERAL ~ RACE +", valid_controls_fml, "| CONTROL | 0 | cluster_group")),
+        data = literal_available_data
+    )
+
+    available_any_literal_ofcolor <- felm(
+        as.formula(paste("SAVLBAD_ANY_LITERAL ~ ofcolor +", valid_controls_fml, "| CONTROL | 0 | cluster_group")),
+        data = literal_available_data
+    )
+}
 
 second_appointment_races <- felm(
     as.formula(paste("got_second_appointment ~ RACE +", valid_controls_fml, "| CONTROL | 0 | cluster_group")),
@@ -208,6 +239,27 @@ available_first_ofcolor <- felm(
     data = first_appointment_data
 )
 
+available_first_literal_races <- NULL
+available_first_literal_ofcolor <- NULL
+literal_first_appointment_data <- NULL
+if ("SAVLBAD_FIRST_LITERAL" %in% names(data)) {
+    literal_first_appointment_data <- data %>%
+        filter(!is.na(SAVLBAD_FIRST_LITERAL)) %>%
+        group_by(CONTROL) %>%
+        filter(n_distinct(TESTERID) == 2) %>%
+        ungroup()
+
+    available_first_literal_races <- felm(
+        as.formula(paste("SAVLBAD_FIRST_LITERAL ~ RACE +", valid_controls_fml, "| CONTROL | 0 | cluster_group")),
+        data = literal_first_appointment_data
+    )
+
+    available_first_literal_ofcolor <- felm(
+        as.formula(paste("SAVLBAD_FIRST_LITERAL ~ ofcolor +", valid_controls_fml, "| CONTROL | 0 | cluster_group")),
+        data = literal_first_appointment_data
+    )
+}
+
 # Display summaries of previous models
 summary(recommended_total_races)
 summary(available_any_races)
@@ -234,7 +286,7 @@ appointments_data <- read.csv(file.path(reconstructed_sample_generated_dir, "sal
     mutate(
         RACE = as.factor(RACE),
         CONTROL = as.factor(CONTROL),
-        across(all_of(appointment_valid_control_factors), as.factor),
+        across(all_of(appointment_valid_control_factors), as_control_factor),
         age = as.numeric(age)
     ) %>%
     mutate(
@@ -379,6 +431,42 @@ table_specs <- list(
     )
 )
 
+coef_summary_row <- function(model, term, estimand, label) {
+    coefs <- coef(summary(model))
+    if (!term %in% rownames(coefs)) return(NULL)
+    se_col <- if ("Cluster s.e." %in% colnames(coefs)) "Cluster s.e." else "Std. Error"
+    p_col <- grep("^Pr\\(", colnames(coefs), value = TRUE)
+    if (length(p_col) == 0) p_col <- "Pr(>|t|)"
+    data.frame(
+        estimand = estimand,
+        term = label,
+        estimate = as.numeric(coefs[term, "Estimate"]),
+        std_error = as.numeric(coefs[term, se_col]),
+        p_value = as.numeric(coefs[term, p_col[1]]),
+        observations = model$N,
+        stringsAsFactors = FALSE
+    )
+}
+
+if (!is.null(available_any_literal_ofcolor) && !is.null(available_any_literal_races)) {
+    literal_sensitivity <- bind_rows(
+        coef_summary_row(available_any_ofcolor, "ofcolor", "SAVLBAD_ANY", "Racial Minority"),
+        coef_summary_row(available_any_races, "RACE2", "SAVLBAD_ANY", "African American"),
+        coef_summary_row(available_any_races, "RACE3", "SAVLBAD_ANY", "Hispanic"),
+        coef_summary_row(available_any_races, "RACE4", "SAVLBAD_ANY", "Asian"),
+        coef_summary_row(available_any_literal_ofcolor, "ofcolor", "SAVLBAD_ANY_LITERAL", "Racial Minority"),
+        coef_summary_row(available_any_literal_races, "RACE2", "SAVLBAD_ANY_LITERAL", "African American"),
+        coef_summary_row(available_any_literal_races, "RACE3", "SAVLBAD_ANY_LITERAL", "Hispanic"),
+        coef_summary_row(available_any_literal_races, "RACE4", "SAVLBAD_ANY_LITERAL", "Asian")
+    )
+    write.csv(
+        literal_sensitivity,
+        file.path(tables_dir, "table5_savlbad_literal_sensitivity.csv"),
+        row.names = FALSE
+    )
+    progress_message("Wrote Table 5 SAVLBAD literal-availability sensitivity CSV")
+}
+
 cell_for <- function(spec, race_index, stat_index) {
     if (is.null(race_index)) {
         info <- spec$minority
@@ -465,7 +553,7 @@ cleaned_data <- read.csv(file.path(reconstructed_sample_generated_dir, "cleaned_
     RACE = as.factor(RACE),
     CONTROL = as.factor(CONTROL),
     TSEX_num = as.numeric(as.character(TSEX)),
-    across(all_of(valid_control_factors), as.factor),
+    across(all_of(valid_control_factors), as_control_factor),
     age = as.numeric(age),
     ofcolor = ifelse(RACE %in% c(2, 3, 4), 1, 0),
     kids = as.numeric(kids),
@@ -696,6 +784,7 @@ latex_table_multi <- function(rows, outcome_labels, caption, label,
 latex_table_race_only <- function(rows, outcome_labels, caption, label, models, n_trials,
                                   stat_lines = NULL, note_lines = NULL) {
   n_cols <- length(outcome_labels)
+  n_trials_vals <- if (length(n_trials) == 1) rep(n_trials, n_cols) else n_trials
   if (is.null(note_lines)) {
     note_lines <- c(
       cluster_note,
@@ -733,7 +822,7 @@ latex_table_race_only <- function(rows, outcome_labels, caption, label, models, 
   for (j in seq_along(models)) cat(sprintf(" & %.4f", summary(models[[j]])$adj.r.squared))
   cat("\\\\\n")
   cat("Number of Trials")
-  for (j in seq_along(models)) cat(sprintf(" & %s", fint(n_trials)))
+  for (j in seq_along(models)) cat(sprintf(" & %s", fint(n_trials_vals[j])))
   cat("\\\\\n")
   cat("\\bottomrule\n")
   if (!is.null(note_lines) && length(note_lines) > 0) {
@@ -833,6 +922,64 @@ write_table(
     )
   )
 )
+
+# ----- Appendix Table A11: Literal advertised-home availability -----
+if (
+  !is.null(available_any_literal_ofcolor) &&
+  !is.null(available_any_literal_races) &&
+  !is.null(available_first_literal_ofcolor) &&
+  !is.null(available_first_literal_races)
+) {
+  current_table <- "Appendix Table A11"
+  progress_message("Appendix Table A11: running literal advertised-home availability models")
+
+  appendix_a11_models_minority <- list(
+    available_any_literal_ofcolor,
+    available_first_literal_ofcolor
+  )
+  appendix_a11_models_race <- list(
+    available_any_literal_races,
+    available_first_literal_races
+  )
+  appendix_a11_labels <- c(
+    "\\begin{tabular}{@{}c@{}}Ad Property Ever\\\\Literally Available\\end{tabular}",
+    "\\begin{tabular}{@{}c@{}}Ad Property Literally Available\\\\First Appointment\\end{tabular}"
+  )
+  appendix_a11_data_list <- list(
+    literal_available_data,
+    literal_first_appointment_data
+  )
+  appendix_a11_outcomes <- c("SAVLBAD_ANY_LITERAL", "SAVLBAD_FIRST_LITERAL")
+  appendix_a11_white_means <- mapply(function(outcome, df) {
+    mean(df[[outcome]][as.character(df$RACE) == "1"], na.rm = TRUE)
+  }, appendix_a11_outcomes, appendix_a11_data_list)
+  appendix_a11_n_trials <- sapply(appendix_a11_data_list, function(df) length(unique(df$CONTROL)))
+  appendix_a11_rows <- build_rows(
+    appendix_a11_models_minority,
+    appendix_a11_models_race,
+    appendix_a11_labels
+  )
+
+  write_table(
+    file.path(appendix_tables_dir, "tableA11_savlbad_literal_availability.tex"),
+    latex_table_multi(
+      appendix_a11_rows,
+      outcome_labels = appendix_a11_labels,
+      caption = "Literal Availability of Advertised Properties\\\\[0.5em]\\textit{Appendix Table A11}",
+      label = "tab:appendixA11",
+      models_minority = appendix_a11_models_minority,
+      models_race = appendix_a11_models_race,
+      n_trials = appendix_a11_n_trials,
+      stat_lines = list("Comparison mean (white)" = sprintf("%.3f", appendix_a11_white_means)),
+      note_lines = c(
+        comparison_mean_note,
+        "Literal availability treats HDS \\texttt{SAVLBAD} codes 1 and 5 as available. The main C\\&T-style Table 5 availability outcome treats only code 1 as available.",
+        cluster_note,
+        "\\sym{*} \\(p<0.10\\), \\sym{**} \\(p<0.05\\), \\sym{***} \\(p<0.01\\)"
+      )
+    )
+  )
+}
 
 # ----- Table 7: Discriminatory Steering and Neighborhood Racial Composition by Income -----
 current_table <- "Table 7"
@@ -1121,8 +1268,17 @@ current_table <- "Table 12"
 progress_message("Table 12: running median-income models")
 table12_data_all <- prep_table_data(cleaned_data, c("medincome_Rec")) %>%
   filter(medincome_Rec > 0)
-table12_data_fam <- table12_data_all %>% filter(kids == 1)
-table12_data_mom <- table12_data_all %>% filter(kids == 1 & TSEX_num == 0)
+table12_data_fam <- table12_data_all %>%
+  filter(kids == 1) %>%
+  completed_pair_filter()
+table12_data_mom <- table12_data_all %>%
+  filter(kids == 1 & TSEX_num == 0) %>%
+  completed_pair_filter()
+table12_n_trials <- c(
+  length(unique(table12_data_all$CONTROL)),
+  length(unique(table12_data_fam$CONTROL)),
+  length(unique(table12_data_mom$CONTROL))
+)
 
 table12_models <- list(
   felm(as.formula(paste("log(medincome_Rec) ~ RACE +", base_covariates_fml, "| CONTROL | 0 | cluster_group")), data = table12_data_all),
@@ -1145,7 +1301,7 @@ write_table(
     caption = "Discriminatory Steering: Median Income in Neighborhood\\\\[0.5em]\\textit{Table 12, C\\&T 2022}",
     label = "tab:table12",
     models = table12_models,
-    n_trials = length(unique(table12_data_all$CONTROL)),
+    n_trials = table12_n_trials,
     stat_lines = list("Comparison mean (white)" = sprintf("%.3f", table12_white_means)),
     note_lines = c(
       comparison_mean_note,

@@ -2,11 +2,37 @@ library(dplyr)
 library(haven)
 library(stringr)
 
-# This file assumes it is run from the repository root. For example:
-#   cd HUDreplication
-#   Rscript data_description.R
-repo_root <- normalizePath(getwd(), winslash = "/", mustWork = TRUE)
+# This file can be run from the repository root or from the HUDReplication
+# subdirectory. For example:
+#   Rscript HUDReplication/data_description.R
+#   cd HUDReplication && Rscript data_description.R
+resolve_repo_root <- function() {
+  start_dir <- normalizePath(getwd(), winslash = "/", mustWork = TRUE)
+
+  repo_root <- start_dir
+  while (repo_root != dirname(repo_root)) {
+    if (dir.exists(file.path(repo_root, "Data")) && dir.exists(file.path(repo_root, "ct_sample"))) {
+      return(repo_root)
+    }
+    if (
+      dir.exists(file.path(repo_root, "HUDReplication", "Data")) &&
+      dir.exists(file.path(repo_root, "HUDReplication", "ct_sample"))
+    ) {
+      return(file.path(repo_root, "HUDReplication"))
+    }
+    repo_root <- dirname(repo_root)
+  }
+
+  stop("Could not infer HUDReplication repository root. Run from HUDReplication/ or its parent repository.")
+}
+
+repo_root <- resolve_repo_root()
 output_dir <- file.path(repo_root, "ct_sample", "Output")
+comparison_output_dir <- file.path(output_dir, "comparison_table_estimates")
+
+# Keep raw-city/corrected-city/ad-city diagnostics active. The separate
+# place/county spatial fixed-effect branch is disabled in the C&T workflow.
+RUN_CITY_FE_DIAGNOSTICS <- TRUE
 
 format_int <- function(x) {
   format(round(x), big.mark = ",", trim = TRUE, scientific = FALSE)
@@ -95,9 +121,9 @@ write_city_mixed_cell_tex <- function(data, output_path) {
     "\\label{tab:mixed_cell_summary}",
     "\\footnotesize",
     "\\setlength{\\tabcolsep}{3pt}",
-    "\\begin{tabular}{lrrrrrrr}",
+    "\\begin{tabular}{lrrrrr}",
     "\\toprule",
-    "Cell group & Cells & Rows & \\shortstack{Median block\\\\groups / FE} & \\shortstack{Share single\\\\place} & \\shortstack{Share single\\\\county} & \\shortstack{White-share\\\\gap} & \\shortstack{Income\\\\gap}\\\\",
+    "Cell group & Cells & Rows & \\shortstack{Median block\\\\groups / FE} & \\shortstack{White-share\\\\gap} & \\shortstack{Income\\\\gap}\\\\",
     "\\midrule"
   )
 
@@ -110,8 +136,6 @@ write_city_mixed_cell_tex <- function(data, output_path) {
         format_int(row$cells),
         format_int(row$rows),
         format_num(row$median_blockgroups_per_cell, 1),
-        format_pct(row$share_single_place),
-        format_pct(row$share_single_county),
         format_num(row$weighted_gap_w2012pc_rec, 3),
         format_int(row$weighted_gap_medincome_rec),
         sep = " & "
@@ -132,10 +156,6 @@ write_city_mixed_cell_tex <- function(data, output_path) {
 
   writeLines(lines, output_path)
 }
-if (basename(repo_root) != "HUDreplication") {
-  stop("Run this script from the HUDreplication repository root")
-}
-
 # ---- Input files --------------------------------------------------------------
 
 adsprocessed_path <- file.path(repo_root, "Data", "CT2022_Replication_Data", "adsprocessed_JPE_censor.rds")
@@ -2212,6 +2232,8 @@ print(taf_office_like_examples)
 
 # ---- How city cleaning changes FE geometry and identification ---------------
 
+if (RUN_CITY_FE_DIAGNOSTICS) {
+
 derive_ofcolor_from_hds_race <- function(x) {
   race_num <- suppressWarnings(as.numeric(as.character(x)))
   aprace <- ifelse(is.na(race_num), NA_real_, race_num %% 10)
@@ -2228,16 +2250,12 @@ load_city_fe_file <- function(file_path, dataset_label, raw_city_var, race_var, 
       dataset = dataset_label,
       ofcolor = derive_ofcolor_from_hds_race(.data[[race_var]]),
       raw_city = as.character(.data[[raw_city_var]]),
-      temp_city = as.character(temp_city),
-      place_name = as.character(place_name),
-      county_name = as.character(county_name)
+      temp_city = as.character(temp_city)
     ) %>%
     filter(
       !is.na(ofcolor),
       !is.na(raw_city), !raw_city %in% c("", ".", "NA"),
-      !is.na(temp_city), !temp_city %in% c("", ".", "NA"),
-      !is.na(place_name), !place_name %in% c("", ".", "NA"),
-      !is.na(county_name), !county_name %in% c("", ".", "NA")
+      !is.na(temp_city), !temp_city %in% c("", ".", "NA")
     )
 
   if (require_ad_city) {
@@ -2281,28 +2299,28 @@ summarize_fe_geometry <- function(data, fe_var) {
 city_fe_files <- list(
   list(
     dataset = "adsprocessed",
-    path = file.path(output_dir, "adsprocessed_processed_hcity_cleaned.dta"),
+    path = file.path(comparison_output_dir, "adsprocessed_processed_hcity_cleaned.dta"),
     raw_city_var = "hcity",
     race_var = "race_ad",
     require_ad_city = FALSE
   ),
   list(
     dataset = "census",
-    path = file.path(output_dir, "HUDprocessed_census_processed_hcityx_cleaned.dta"),
+    path = file.path(comparison_output_dir, "HUDprocessed_census_processed_hcityx_cleaned.dta"),
     raw_city_var = "hcityx",
     race_var = "race_rec",
     require_ad_city = TRUE
   ),
   list(
     dataset = "testscores",
-    path = file.path(output_dir, "HUDprocessed_testscores_processed_hcityx_cleaned.dta"),
+    path = file.path(comparison_output_dir, "HUDprocessed_testscores_processed_hcityx_cleaned.dta"),
     raw_city_var = "hcityx",
     race_var = "race_rec",
     require_ad_city = TRUE
   ),
   list(
     dataset = "names",
-    path = file.path(output_dir, "HUDprocessed_names_processed_hcityx_cleaned.dta"),
+    path = file.path(comparison_output_dir, "HUDprocessed_names_processed_hcityx_cleaned.dta"),
     raw_city_var = "hcityx",
     race_var = "race_rec",
     require_ad_city = TRUE
@@ -2359,7 +2377,7 @@ print(city_fe_geometry_summary)
 # ---- Census mixed-cell comparison -------------------------------------------
 
 census_city_data <- load_city_fe_file(
-  file.path(output_dir, "HUDprocessed_census_processed_hcityx_cleaned.dta"),
+  file.path(comparison_output_dir, "HUDprocessed_census_processed_hcityx_cleaned.dta"),
   dataset_label = "census",
   raw_city_var = "hcityx",
   race_var = "race_rec",
@@ -2404,11 +2422,9 @@ census_after_mixed_cells <- census_city_data %>%
 
 census_mixed_cells_for_summary <- bind_rows(
   census_raw_mixed_cells %>%
-    select(cell_type, cell_id, control, ofcolor, blkgrp, place_name, county_name,
-           w2012pc_rec, medincome_rec),
+    select(cell_type, cell_id, control, ofcolor, blkgrp, w2012pc_rec, medincome_rec),
   census_after_mixed_cells %>%
-    select(cell_type, cell_id, control, ofcolor, blkgrp, place_name, county_name,
-           w2012pc_rec, medincome_rec)
+    select(cell_type, cell_id, control, ofcolor, blkgrp, w2012pc_rec, medincome_rec)
 )
 
 summarize_weighted_gap <- function(data, outcome_var) {
@@ -2445,8 +2461,6 @@ census_cell_structure <- census_mixed_cells_for_summary %>%
   summarise(
     rows_in_cell = n(),
     blockgroups_per_cell = n_distinct(blkgrp),
-    places_per_cell = n_distinct(place_name),
-    counties_per_cell = n_distinct(county_name),
     .groups = "drop"
   ) %>%
   group_by(cell_type) %>%
@@ -2454,8 +2468,6 @@ census_cell_structure <- census_mixed_cells_for_summary %>%
     cells = n(),
     rows = sum(rows_in_cell),
     median_blockgroups_per_cell = median(blockgroups_per_cell),
-    share_single_place = mean(places_per_cell == 1),
-    share_single_county = mean(counties_per_cell == 1),
     .groups = "drop"
   )
 
@@ -2488,7 +2500,6 @@ census_mixed_cell_console_examples <- census_mixed_cells_for_summary %>%
   summarise(
     rows = n(),
     blockgroups_per_cell = n_distinct(blkgrp),
-    places_per_cell = n_distinct(place_name),
     controls = n_distinct(control),
     .groups = "drop"
   ) %>%
@@ -2500,3 +2511,6 @@ census_mixed_cell_console_examples <- census_mixed_cells_for_summary %>%
 cat("\n\nIllustrative city fixed-effect cells by comparison type:\n")
 cat("========================================================\n\n")
 print(census_mixed_cell_console_examples)
+} else {
+  cat("\n\nCity fixed-effect diagnostics disabled.\n")
+}

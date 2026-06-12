@@ -282,7 +282,9 @@ geocode_addresses <- function(df, street_col, city_col, state_col, postalcode_co
   cat("\nGeocoding", nrow(work_df), "addresses...\n")
   
   # Initial geocoding with census - handle large datasets by chunking
-  chunk_size <- 10000
+  # The Census batch endpoint accepts large batches, but near-maximum batches can
+  # be slow and have produced many missing coordinates in replication runs.
+  chunk_size <- 1000
   n_chunks <- ceiling(nrow(work_df) / chunk_size)
   
   if (n_chunks > 1) {

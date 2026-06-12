@@ -191,9 +191,41 @@ split_source_panels <- function(path) {
     return(Map(function(a, b) lines[a:b], panel_starts, panel_ends))
   }
 
-  starts <- grep("\\\\begin\\{tabular\\}", lines)
-  ends <- grep("\\\\end\\{tabular\\}", lines)
-  Map(function(a, b) lines[a:b], starts, ends)
+  ranges <- list()
+  depth <- 0L
+  start <- NA_integer_
+
+  for (i in seq_along(lines)) {
+    begins <- gregexpr("\\\\begin\\{tabular\\}", lines[[i]], perl = TRUE)[[1]]
+    ends <- gregexpr("\\\\end\\{tabular\\}", lines[[i]], perl = TRUE)[[1]]
+    events <- data.frame(
+      pos = c(if (begins[1] == -1) integer() else begins,
+              if (ends[1] == -1) integer() else ends),
+      type = c(rep("begin", if (begins[1] == -1) 0L else length(begins)),
+               rep("end", if (ends[1] == -1) 0L else length(ends))),
+      stringsAsFactors = FALSE
+    )
+    if (nrow(events) == 0) next
+    events <- events[order(events$pos, ifelse(events$type == "begin", 0, 1)), ]
+
+    for (j in seq_len(nrow(events))) {
+      if (events$type[[j]] == "begin") {
+        if (depth == 0L) start <- i
+        depth <- depth + 1L
+      } else {
+        if (depth == 0L) stop("Unmatched \\end{tabular} in ", path)
+        depth <- depth - 1L
+        if (depth == 0L) {
+          ranges[[length(ranges) + 1L]] <- c(start, i)
+          start <- NA_integer_
+        }
+      }
+    }
+  }
+
+  if (depth != 0L) stop("Unmatched \\begin{tabular} in ", path)
+  if (length(ranges) == 0L) stop("Could not find top-level tabular panels in ", path)
+  lapply(ranges, function(rng) lines[rng[[1]]:rng[[2]]])
 }
 
 extract_result_column <- function(lines, source_col) {

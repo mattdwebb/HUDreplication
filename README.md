@@ -5,7 +5,7 @@ This repository provides the code required to replicate an upcoming comment whic
 The repository has two major sections:
 
 1. `ct_sample`: replication of the Christensen and Timmins (2022) analysis, starting from their replication files, with corrections to a number of data cleaning errors and several approaches to generating fixed effects for the geographical region of recommended houses.
-2. `reconstructed_sample`: a new specification that is appropriate for the paired testing design of the 2012 Housing Discrimination Study (HDS 2012). This section works directly from the raw data of HDS 2012 with no inputs from the C&T2022 replication package.
+2. `reconstructed_sample`: a new specification and reconstructed cleaned dataset drawn fromt the 2012 Housing Discrimination Study (HDS 2012) that address issues in the original analysis. This section works directly from the raw data of HDS 2012 with no inputs from the C&T2022 replication package.
 
 The repository is organized so that raw or source inputs live in `Data`, C&T-sample intermediates live in `Data/Generated/ct_sample`, reconstructed-sample intermediates live in `Data/Generated/reconstructed_sample`, and final output tables are written inside the corresponding folder for each analysis approach.
 
@@ -48,7 +48,11 @@ Data files are not stored in Git, except for `Data/meta_comparison.csv`. A repli
 - Includes:
   - `ct_sample`
   - `reconstructed_sample`
-  - `Intersection Files`
+  - `Intersection Files` only if the inactive place/county fixed-effect branch is manually re-enabled
+
+For exact replication of the reconstructed-sample tables, the replication bundle should also include the saved canonical geocoded recommended-home cache:
+
+- `Data/Generated/reconstructed_sample/sales_tester_rechomes_geocoded.csv`
 
 ## Software
 
@@ -65,16 +69,41 @@ The Stata driver installs missing SSC packages automatically. Some R helper scri
 
 ## One-Time Setup
 
-Set the repository root path in the two C&T-sample drivers before running:
-
-- `ct_sample/main.do`
-- `ct_sample/preprocess_place_city_dedup.R`
-
-The reconstructed-sample R scripts infer the repository root when run from either the repository root or `reconstructed_sample`.
+The C&T-sample and reconstructed-sample drivers infer the repository root when run from the repository root or the relevant subfolder. If running from another working directory, set `HUD_REPLICATION_ROOT` or Stata global `REPO_ROOT` to the local `HUDReplication` path before running.
 
 For the reconstructed-sample workflow, `reconstructed_sample/api_keys.R` must exist and contain a valid `CENSUS_API_KEY`. A template is provided at `reconstructed_sample/api_keys_template.R`.
 
-`ct_sample/main.do` currently sets `global FORCE_CLEAN 1`, which rebuilds cleaned Stata inputs from the current generated CSV files on each run. Set it to `0` only if you intentionally want to reuse existing cleaned `.dta` files in the relevant `ct_sample/Output` subfolders.
+Set the repository root path in the two C&T-sample drivers before running:
+
+- `ct_sample/main.do`
+- `ct_sample/preprocess.R`
+
+The reconstructed-sample R scripts infer the repository root when run from either the repository root or `reconstructed_sample`.
+
+## Recommended Full Replication Sequence
+
+From the `HUDReplication` folder, the main replication sequence is:
+
+1. Build the corrected C&T-sample inputs with R:
+   - `Rscript ct_sample/preprocess.R`
+2. Run the C&T-sample Stata workflow manually:
+   - open Stata and run `ct_sample/main.do`
+3. Run the remaining R workflow:
+   - `Rscript run_post_stata.R`
+
+The post-Stata R runner starts at reconstructed-sample data cleaning, then runs the reconstructed analysis, formats reconstructed-sample tables, formats the corrected C&T-sample appendix tables, generates comparison tables, regenerates the data-description diagnostics, and regenerates the matching-diagnosis appendix tables.
+
+The runner does not invoke Stata. Stata command-line behavior differs across operating systems and installations, so the C&T Stata step is kept as an explicit manual step. The runner assumes `ct_sample/main.do` has already produced the required C&T-sample outputs.
+
+When the canonical geocoding cache exists at `Data/Generated/reconstructed_sample/sales_tester_rechomes_geocoded.csv`, `run_post_stata.R` uses it automatically by passing `--skip-geocoding` to `reconstructed_sample/data_cleaning.R`. To force live geocoding, run:
+
+- `Rscript run_post_stata.R --live-geocoding`
+
+Useful runner options:
+
+- `Rscript run_post_stata.R --skip-data-cleaning` starts from reconstructed-sample analysis.
+- `Rscript run_post_stata.R --skip-data-description` skips regenerated data-description tables.
+- `Rscript run_post_stata.R --skip-matching-diagnostics` skips regenerated matching-diagnosis appendix tables.
 
 ## C&T-Sample Workflow
 
@@ -82,7 +111,7 @@ For the reconstructed-sample workflow, `reconstructed_sample/api_keys.R` must ex
 
 Run:
 
-- `Rscript ct_sample/preprocess_place_city_dedup.R`
+- `Rscript ct_sample/preprocess.R`
 
 This script reads the source C\&T inputs from `Data/CT2022_Replication_Data` and writes `.rds`, `.csv`, and `.dta` versions of the corrected-city C&T-sample outputs (both `_processed` and `_with_duplicates`) for:
 
@@ -91,13 +120,12 @@ This script reads the source C\&T inputs from `Data/CT2022_Replication_Data` and
 - `HUDprocessed_names`
 - `HUDprocessed_testscores`
 
+The inactive place/county fixed-effect reconstruction code is retained in the script for reference, but is disabled by default because those fixed effects are not used in the active paper workflow. The generated C&T-sample inputs therefore do not require `place_name`, `county_name`, or the block-group/place intersection cache.
+
 It also writes:
 
 - C&T-sample intermediates to `Data/Generated/ct_sample`
 - logs (`dedup_log_processed.csv` and `dedup_log_with_duplicates.csv`) inside `Data/Generated/ct_sample`
-- cached spatial intersection files in `Data/Generated/Intersection Files`
-
-The first run can take a long time because it builds and caches state-level spatial intersections.
 
 The `_processed` files are the default C&T-sample analysis inputs. The `_with_duplicates` files preserve duplicates and are used only for the original-data comparison-table columns.
 
@@ -120,19 +148,23 @@ C&T-sample outputs are written to:
 
 The meta-analysis figure script is separate. After setting the repository root in `ct_sample/main.do`, run `do "${CODE}/meta_analysis.do"` from Stata if the meta-analysis figure needs to be regenerated. This writes `meta_analysis_p_values.pdf` and `meta_analysis_p_values.png` to `ct_sample/Output`.
 
-### Optional: market-clustered C&T-sample tables
+### Step 3: Format corrected C&T-sample appendix tables
 
-To regenerate the C&T-sample tables with standard errors clustered at the market level rather than the trial level, run:
+This step is run automatically by `Rscript run_post_stata.R`. To run it by itself, use:
 
-- `ct_sample/market_clustered_tables.do`
+To combine the corrected C&T-sample component CSVs into the formatted appendix tables, run:
 
-This driver re-runs the C&T-sample comparison tables and both sets of full appendix tables using the same point-estimate specifications as the trial-clustered C&T-sample analysis, changing only the clustering level. Outputs are written to:
+- `Rscript ct_sample/format_corrected_tables.R`
 
-- `ct_sample/Output/market_clustered/comparison_table_estimates`
-- `ct_sample/Output/market_clustered/corrected`
-- `ct_sample/Output/market_clustered/original`
+The formatter reads from `ct_sample/Output/corrected` by default and writes to:
+
+- `ct_sample/Output/corrected/formatted`
+
+Corrected Table 13 is skipped by default. The corrected C&T-sample appendix driver does not estimate Table 13 because the drop-trial-invariant-controls specification is not meaningful for that table, so there are no corrected Table 13 component CSVs to combine.
 
 ## Reconstructed-Sample Workflow
+
+The reconstructed-sample steps below can be run one by one. They are also run automatically by `Rscript run_post_stata.R` after the C&T Stata workflow has completed.
 
 ### Step 1: Clean and merge reconstructed-sample data
 
@@ -151,13 +183,23 @@ Key outputs include:
 - `Data/Generated/reconstructed_sample/sales_tester_rechomes_geocoded.csv`
 - `Data/Generated/reconstructed_sample/cleaned_hds.csv`
 
-If `Data/Generated/reconstructed_sample/sales_tester_rechomes_geocoded.csv` already exists and you want to skip the geocoding step, rerun with:
+### Exact replication with the canonical geocoding cache
+
+The preferred exact-replication path is to use the canonical generated geocoding cache included in the data bundle. This is done first for the convenience of the replicator; rerunning the geocoding sequence can take a lot of time. Second, the geocoding process, as it relies on external APIs and server infrastructure is not deterministic and can create slighly different outputs between runs. Providing the pre-geocoded file allows the replicator to be sure to recover the same results as the original authors. The geocoded data cache is present here:
+
+- `Data/Generated/reconstructed_sample/sales_tester_rechomes_geocoded.csv`
+
+When this file is present, run the reconstructed-sample cleaning step with:
 
 - `Rscript reconstructed_sample/data_cleaning.R --skip-geocoding`
 
-### Optional: regenerate methodology appendix diagnostics
+This still reruns the non-geocoding cleaning, ACS merge, and external-data merge steps, but it reuses the fixed coordinates and GEOIDs in the canonical cache instead of querying live geocoding services.
 
-To recreate the validation tables used in the data-cleaning methodology appendix, run:
+Running `Rscript reconstructed_sample/data_cleaning.R` without `--skip-geocoding` rebuilds the cache from current Census, Nominatim, ArcGIS, and TIGERweb responses. That is useful for auditing or refreshing the geocodes, but it may not reproduce the exact checked table values. In a fresh audit run, the regenerated geocodes produced full final coverage but changed some displayed coefficients at the fourth decimal place and changed a few borderline significance stars.
+
+### Methodology appendix diagnostics
+
+This step is run automatically by `Rscript run_post_stata.R` unless `--skip-matching-diagnostics` is passed. To recreate the validation tables used in the data-cleaning methodology appendix by itself, run:
 
 - `Rscript reconstructed_sample/matching_diagnosis.R`
 
@@ -214,7 +256,23 @@ This writes:
 
 - `reconstructed_sample/Tables/Formatted_Tables/formatted_tables_preview.pdf`
 
+## Data-Description and Diagnostic Tables
+
+This step is run automatically by `Rscript run_post_stata.R` unless `--skip-data-description` is passed.
+
+After the C&T-sample Stata workflow and reconstructed-sample data cleaning have been run, diagnostic tables used to describe the sample construction can be regenerated with:
+
+- `Rscript data_description.R`
+
+This script reads the C&T source inputs, generated C&T-sample files, cleaned C&T Stata inputs, HDS raw files, and reconstructed-sample generated files. It writes diagnostic `.csv` and `.tex` outputs to:
+
+- `ct_sample/Output`
+
+The outputs include duplicate-cleanup summaries, advertised-home sequence diagnostics, and city fixed-effect diagnostics. These are audit and paper-diagnostic outputs that are reported on in the text.
+
 ## Comparison Tables
+
+This step is run automatically by `Rscript run_post_stata.R`.
 
 After the C&T-sample and reconstructed-sample workflows have both been run, generate the six-column comparison tables with:
 
@@ -232,12 +290,11 @@ To write the comparison tables somewhere else, pass an output directory:
 
 For a full clean replication from source inputs:
 
-1. Set the repo root in the top-level scripts listed above
-2. Ensure `reconstructed_sample/api_keys.R` contains a valid Census API key
-3. Run `Rscript ct_sample/preprocess_place_city_dedup.R`
+1. Set `HUD_REPLICATION_ROOT` in `preprocess.R` and `main.do`
+2. Ensure `reconstructed_sample/api_keys.R` contains a valid Census API key 
+3. Run `Rscript ct_sample/preprocess.R`
 4. Run `ct_sample/main.do`
-5. Run `Rscript reconstructed_sample/data_cleaning.R`
-6. Optionally run `Rscript reconstructed_sample/matching_diagnosis.R` to regenerate methodology appendix diagnostics
-7. Run `Rscript reconstructed_sample/analysis.R`
-8. Run `Rscript reconstructed_sample/format_tables.R`
-9. Run `Rscript make_comparison_tables.R`
+5. Run `Rscript run_post_stata.R`
+
+For exact replication, the post-Stata runner reuses the canonical geocoding cache when it exists. To rebuild geocodes from live services, use `Rscript run_post_stata.R --live-geocoding`.
+

@@ -28,9 +28,9 @@ if (!file.exists(api_keys_path)) {
 }
 source(api_keys_path)
 
-# Set Census API key for tidycensus only if not already set
-if (is.null(Sys.getenv("CENSUS_API_KEY")) || Sys.getenv("CENSUS_API_KEY") == "") {
-  census_api_key(CENSUS_API_KEY, install = TRUE)
+# Set Census API key for this R session only. 
+if (Sys.getenv("CENSUS_API_KEY") == "") {
+  Sys.setenv(CENSUS_API_KEY = CENSUS_API_KEY)
 }
 
 # =================================================================================================== #

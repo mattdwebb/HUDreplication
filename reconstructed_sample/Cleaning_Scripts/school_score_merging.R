@@ -17,18 +17,29 @@ library(readr)
 #' @return Original dataframe with four additional columns:
 #'   - elementary_school_score: SEDA v3 test score (grades 4-5.5 average)
 #'   - middle_school_score: SEDA v3 test score (grades 6.5-7.5 average)
-#'   - elementary_school_id: NCES school ID for elementary school
-#'   - middle_school_id: NCES school ID for middle school
+#'   - elementary_school_id: NCES school ID(s) used for elementary score
+#'   - middle_school_id: NCES school ID(s) used for middle school score
+#'   - elementary_school_overlap_count: number of overlapping primary boundaries
+#'   - middle_school_overlap_count: number of overlapping middle boundaries
 #'
 #' @details
 #' Uses spatial point-in-polygon matching with SABS 2015-16 school attendance
-#' boundaries. For properties falling in multiple school boundaries, the first
-#' match is selected. Properties outside all boundaries or matched to schools
-#' without SEDA data receive NA.
+#' boundaries. For properties falling in multiple school boundaries, scores are
+#' averaged across overlapping schools with non-missing SEDA data. Properties
+#' outside all boundaries or matched only to schools without SEDA data receive
+#' NA.
 #'
 merge_school_scores <- function(data, lat_col = "lat", lon_col = "long") {
 
   cat("Loading school boundaries and test scores...\n")
+
+  school_output_cols <- c(
+    "elementary_school_id", "elementary_school_score",
+    "elementary_school_overlap_count", "elementary_school_scored_overlap_count",
+    "middle_school_id", "middle_school_score",
+    "middle_school_overlap_count", "middle_school_scored_overlap_count"
+  )
+  data <- data %>% select(-any_of(school_output_cols))
 
   # Load SABS 2015-16 school attendance boundaries
   primary <- st_read("Data/Non_HDS_Data/SABS/SABS_1516_SchoolLevels/SABS_1516_Primary.shp",
@@ -68,27 +79,52 @@ merge_school_scores <- function(data, lat_col = "lat", lon_col = "long") {
                             crs = 4326)
   properties_sf <- st_transform(properties_sf, st_crs(primary))
 
+  summarise_school_matches <- function(boundaries, scores, id_col, score_col,
+                                       overlap_count_col, scored_overlap_count_col) {
+    score_name <- names(scores)[names(scores) != "ncessch"][1]
+
+    st_join(properties_sf, boundaries, join = st_within) %>%
+      st_drop_geometry() %>%
+      mutate(ncessch = as.character(ncessch)) %>%
+      left_join(scores, by = "ncessch") %>%
+      distinct(row_id, ncessch, .keep_all = TRUE) %>%
+      group_by(row_id) %>%
+      summarise(
+        "{id_col}" := if (any(!is.na(.data[[score_name]]))) {
+          paste(sort(unique(ncessch[!is.na(.data[[score_name]])])), collapse = ";")
+        } else {
+          NA_character_
+        },
+        "{score_col}" := if (any(!is.na(.data[[score_name]]))) {
+          mean(.data[[score_name]], na.rm = TRUE)
+        } else {
+          NA_real_
+        },
+        "{overlap_count_col}" := sum(!is.na(ncessch)),
+        "{scored_overlap_count_col}" := sum(!is.na(.data[[score_name]])),
+        .groups = "drop"
+      )
+  }
+
   # Match to elementary schools
-  elem_matches <- st_join(properties_sf, primary, join = st_within) %>%
-    st_drop_geometry() %>%
-    group_by(row_id) %>%
-    slice(1) %>%  # Take first match if multiple boundaries overlap
-    ungroup() %>%
-    left_join(elem_scores, by = "ncessch") %>%
-    select(row_id,
-           elementary_school_id = ncessch,
-           elementary_school_score)
+  elem_matches <- summarise_school_matches(
+    primary,
+    elem_scores,
+    id_col = "elementary_school_id",
+    score_col = "elementary_school_score",
+    overlap_count_col = "elementary_school_overlap_count",
+    scored_overlap_count_col = "elementary_school_scored_overlap_count"
+  )
 
   # Match to middle schools
-  middle_matches <- st_join(properties_sf, middle, join = st_within) %>%
-    st_drop_geometry() %>%
-    group_by(row_id) %>%
-    slice(1) %>%  # Take first match if multiple boundaries overlap
-    ungroup() %>%
-    left_join(middle_scores, by = "ncessch") %>%
-    select(row_id,
-           middle_school_id = ncessch,
-           middle_school_score)
+  middle_matches <- summarise_school_matches(
+    middle,
+    middle_scores,
+    id_col = "middle_school_id",
+    score_col = "middle_school_score",
+    overlap_count_col = "middle_school_overlap_count",
+    scored_overlap_count_col = "middle_school_scored_overlap_count"
+  )
 
   # Merge back with original data
   result <- properties %>%
@@ -102,8 +138,12 @@ merge_school_scores <- function(data, lat_col = "lat", lon_col = "long") {
     mutate(
       elementary_school_id = NA_character_,
       elementary_school_score = NA_real_,
+      elementary_school_overlap_count = NA_integer_,
+      elementary_school_scored_overlap_count = NA_integer_,
       middle_school_id = NA_character_,
-      middle_school_score = NA_real_
+      middle_school_score = NA_real_,
+      middle_school_overlap_count = NA_integer_,
+      middle_school_scored_overlap_count = NA_integer_
     )
 
   # Combine

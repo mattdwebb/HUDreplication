@@ -1,8 +1,10 @@
 resolve_repo_root <- function() {
   cwd <- normalizePath(getwd(), winslash = "/", mustWork = TRUE)
-  if (basename(cwd) == "HUDreplication") return(cwd)
+  if (tolower(basename(cwd)) == "hudreplication") return(cwd)
   if (basename(cwd) == "reconstructed_sample") return(dirname(cwd))
   candidate <- file.path(cwd, "HUDreplication")
+  if (dir.exists(candidate)) return(normalizePath(candidate, winslash = "/", mustWork = TRUE))
+  candidate <- file.path(cwd, "HUDReplication")
   if (dir.exists(candidate)) return(normalizePath(candidate, winslash = "/", mustWork = TRUE))
   stop("Could not infer repo_root. Run from HUDreplication or reconstructed_sample.")
 }

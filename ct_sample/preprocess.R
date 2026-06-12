@@ -12,13 +12,49 @@ library(stringr)
 # Important! Set sf to not use the spherical s2 geometry, opting instead for planar geometry to reduce computation time with negligible accuracy changes.
 sf_use_s2(FALSE)
 
-# Set this to the local location of the HUDreplication repository.
-REPO_ROOT <- path.expand("~/PATH/TO/HUDreplication")
+resolve_repo_root <- function() {
+  env_root <- Sys.getenv("HUD_REPLICATION_ROOT", Sys.getenv("REPO_ROOT", ""))
+  if (nzchar(env_root)) {
+    env_root <- normalizePath(env_root, winslash = "/", mustWork = TRUE)
+    if (dir.exists(file.path(env_root, "ct_sample")) && dir.exists(file.path(env_root, "Data"))) {
+      return(env_root)
+    }
+    stop("HUD_REPLICATION_ROOT/REPO_ROOT does not point to the HUDReplication repository.")
+  }
+
+  cmd_args <- commandArgs(FALSE)
+  file_arg <- grep("^--file=", cmd_args, value = TRUE)
+  start_dirs <- normalizePath(getwd(), winslash = "/", mustWork = TRUE)
+  if (length(file_arg) == 1) {
+    script_arg <- sub("^--file=", "", file_arg)
+    script_path <- normalizePath(script_arg, winslash = "/", mustWork = TRUE)
+    start_dirs <- c(dirname(script_path), start_dirs)
+  }
+
+  for (start_dir in unique(start_dirs)) {
+    candidate <- start_dir
+    while (candidate != dirname(candidate)) {
+      if (dir.exists(file.path(candidate, "ct_sample")) && dir.exists(file.path(candidate, "Data"))) {
+        return(candidate)
+      }
+      candidate <- dirname(candidate)
+    }
+  }
+
+  stop("Could not infer HUDReplication repository root. Run from HUDReplication/ or set HUD_REPLICATION_ROOT.")
+}
+
+REPO_ROOT <- resolve_repo_root()
 
 # Define the C&T-sample output folder and shared generated root
 generated_root <- file.path(REPO_ROOT, "Data", "Generated")
 output_folder <- file.path(generated_root, "ct_sample")
 input_folder <- file.path(REPO_ROOT, "Data", "CT2022_Replication_Data")
+
+# Place/county fixed-effect construction is no longer used in the paper.
+# Keep the implementation below for reference, but do not run the expensive
+# spatial joins or require place/county columns in generated C&T-sample inputs.
+ENABLE_PLACE_COUNTY_FIXED_EFFECTS <- FALSE
 
 ensure_output_dir <- function(path) {
   if (!dir.exists(path)) {
@@ -383,6 +419,41 @@ states_to_process <- c(
   "53" = "WA"  # Washington
 )
 
+if (ENABLE_PLACE_COUNTY_FIXED_EFFECTS) {
+
+add_block_group_area_to_intersection <- function(block_group_place_intersection,
+                                                 state_abbr,
+                                                 census_year,
+                                                 intersection_file = NULL) {
+  if (
+    "block_group_area" %in% names(block_group_place_intersection) &&
+    !all(is.na(block_group_place_intersection$block_group_area))
+  ) {
+    return(block_group_place_intersection)
+  }
+
+  cat("Adding full block-group area denominator for", state_abbr, "...\n")
+  block_groups_area <- block_groups(state = state_abbr, cb = TRUE, year = census_year)
+  st_crs(block_groups_area) <- st_crs(block_group_place_intersection)
+  block_groups_area$block_group_area <- st_area(block_groups_area)
+
+  block_group_place_intersection <- block_group_place_intersection %>%
+    select(-any_of("block_group_area")) %>%
+    left_join(
+      block_groups_area %>%
+        st_drop_geometry() %>%
+        select(GEO_ID, block_group_area),
+      by = "GEO_ID"
+    )
+
+  if (!is.null(intersection_file)) {
+    saveRDS(block_group_place_intersection, file = intersection_file)
+    cat("Updated cached intersection with block_group_area:", intersection_file, "\n")
+  }
+
+  block_group_place_intersection
+}
+
 # Initialize an empty dataframe to store all block group-place mappings
 all_block_group_place_mappings <- data.frame()
 
@@ -414,6 +485,7 @@ for (state_fips in names(states_to_process)) {
     
     # Ensure both datasets have the same CRS
     st_crs(block_groups_sf) <- st_crs(places)
+    block_groups_sf$block_group_area <- st_area(block_groups_sf)
     
     # Perform spatial intersection
     cat("Performing spatial intersection between block groups and places for", state_abbr, "...\n")
@@ -433,29 +505,25 @@ for (state_fips in names(states_to_process)) {
   
   # Calculate areas and coverage percentages
   cat("Calculating coverage percentages for", state_abbr, "...\n")
+
+  # Ensure cached and fresh paths use the full block-group area denominator.
+  # Older cached intersections lacked this column and used the sum of place
+  # intersections instead, which changed county/place fallback behavior.
+  block_group_place_intersection <- add_block_group_area_to_intersection(
+    block_group_place_intersection,
+    state_abbr,
+    census_year,
+    intersection_file
+  )
   
   # Make geometries valid
   block_group_place_intersection <- st_make_valid(block_group_place_intersection)
   
   # Calculate intersection areas
   block_group_place_intersection$intersection_area <- st_area(block_group_place_intersection)
-  
-  if (used_cached_intersection) {
-    # When reusing cached intersections, derive relative coverage from intersections alone.
-    block_group_place_intersection <- block_group_place_intersection %>%
-      group_by(GEO_ID) %>%
-      mutate(block_group_area = sum(intersection_area, na.rm = TRUE)) %>%
-      ungroup()
-  } else {
-    # Calculate block group areas
-    block_groups_sf$block_group_area <- st_area(block_groups_sf)
-    
-    # Join block group areas to intersection data
-    block_group_place_intersection <- block_group_place_intersection %>%
-      left_join(block_groups_sf %>% 
-                  st_drop_geometry() %>% 
-                  select(GEO_ID, block_group_area), 
-                by = "GEO_ID")
+
+  if (any(is.na(block_group_place_intersection$block_group_area))) {
+    stop("Missing block_group_area after area-denominator repair for ", state_abbr)
   }
   
   # Calculate coverage percentage
@@ -541,6 +609,15 @@ add_place_county_info <- function(dataset, label) {
   cat("Number of observations with county fallback:", sum(is.na(dataset$coverage_pct)), "\n")
   
   dataset
+}
+
+} else {
+  cat("\nPlace/county fixed-effect construction disabled; skipping spatial place/county enrichment.\n")
+  add_place_county_info <- function(dataset, label) {
+    cat("\nSkipping place/county enrichment for", label, "\n")
+    dataset
+  }
+  block_group_place_mapping <- data.frame()
 }
 
 adsprocessed_place_lookup_source <- add_place_county_info(
@@ -876,9 +953,14 @@ cat("\nApplying canonical advertised-home values to adsprocessed output...\n")
 cat("Tester-control rows before canonical merge:", ads_rows_before, "\n")
 cat("Tester-control rows after canonical merge:", nrow(adsprocessed_data_processed), "\n")
 
+ads_geo_required_cols <- if (ENABLE_PLACE_COUNTY_FIXED_EFFECTS) {
+  c("HCITY", "place_name", "county_name")
+} else {
+  c("HCITY")
+}
 adsprocessed_data_processed <- filter_processed_geo(
   adsprocessed_data_processed,
-  c("HCITY", "place_name", "county_name"),
+  ads_geo_required_cols,
   "deduplicated adsprocessed output"
 )
 
@@ -966,22 +1048,24 @@ ad_combos_spanning_multiple_blkgrps <- ad_combinations %>%
 cat("\nAd combinations spanning multiple block groups:\n")
 print(head(ad_combos_spanning_multiple_blkgrps, 20))
 
-# For the two blkgrp values that have the same ad characteristics, we show that they will be assigned the same city in the end
-cat("\nSubsetting to specific block_group_geoid values (39055312203 and 39055312202)...\n")
-selected_block_groups <- block_group_place_mapping %>%
-  filter(block_group_geoid %in% c("39055312203", "39055312202"))
+if (ENABLE_PLACE_COUNTY_FIXED_EFFECTS) {
+  # For the two blkgrp values that have the same ad characteristics, we show that they will be assigned the same city in the end
+  cat("\nSubsetting to specific block_group_geoid values (39055312203 and 39055312202)...\n")
+  selected_block_groups <- block_group_place_mapping %>%
+    filter(block_group_geoid %in% c("39055312203", "39055312202"))
 
-# Display the results
-cat("Found", nrow(selected_block_groups), "matching records\n")
-if(nrow(selected_block_groups) > 0) {
-  cat("\nSelected block group information:\n")
-  print(selected_block_groups %>% 
-        as.data.frame())
-} else {
-  cat("No matching records found for the specified GEOIDs\n")
+  # Display the results
+  cat("Found", nrow(selected_block_groups), "matching records\n")
+  if(nrow(selected_block_groups) > 0) {
+    cat("\nSelected block group information:\n")
+    print(selected_block_groups %>%
+          as.data.frame())
+  } else {
+    cat("No matching records found for the specified GEOIDs\n")
+  }
+
+  # Note that both block_group_geoids point to the place_name Chardon, so we can use either one without inaccuracy in our generated place names
 }
-
-# Note that both block_group_geoids point to the place_name Chardon, so we can use either one without inaccuracy in our generated place names
 
 
 
@@ -1069,19 +1153,24 @@ hud_testscores_with_place <- merge_canonical_ads_into_hud(
   canonical_hud_lookup
 )
 
+hud_geo_required_cols <- if (ENABLE_PLACE_COUNTY_FIXED_EFFECTS) {
+  c("HCITY.x", "HCITY_Ad", "place_name", "county_name")
+} else {
+  c("HCITY.x", "HCITY_Ad")
+}
 hud_census_with_place <- filter_processed_geo(
   hud_census_with_place,
-  c("HCITY.x", "HCITY_Ad", "place_name", "county_name"),
+  hud_geo_required_cols,
   "deduplicated HUD census output"
 )
 hud_names_with_place <- filter_processed_geo(
   hud_names_with_place,
-  c("HCITY.x", "HCITY_Ad", "place_name", "county_name"),
+  hud_geo_required_cols,
   "deduplicated HUD names output"
 )
 hud_testscores_with_place <- filter_processed_geo(
   hud_testscores_with_place,
-  c("HCITY.x", "HCITY_Ad", "place_name", "county_name"),
+  hud_geo_required_cols,
   "deduplicated HUD testscores output"
 )
 

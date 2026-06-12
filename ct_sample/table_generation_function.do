@@ -306,11 +306,11 @@ program define run_comparison_regressions, rclass
 	            if `cols' > 1 {
 	                if "`table_number'" == "5" {
 	                    apply_hds_fixed_race_spec "race_ad"
-	                    keep if !inlist(hcity, "", ".", "NA") & !inlist(place_name, "", ".", "NA") & !inlist(county_name, "", ".", "NA")
+	                    keep if !inlist(hcity, "", ".", "NA")
                 }
                 else {
                     apply_hds_fixed_race_spec "race_rec"
-	                    keep if !inlist(hcityx, "", ".", "NA") & !inlist(hcity_ad, "", ".", "NA") & !inlist(place_name, "", ".", "NA") & !inlist(county_name, "", ".", "NA")
+	                    keep if !inlist(hcityx, "", ".", "NA") & !inlist(hcity_ad, "", ".", "NA")
 	                }
 	            }
 
@@ -318,10 +318,10 @@ program define run_comparison_regressions, rclass
 	                tempvar comparison_complete_case
 	                local comparison_sample_vars "`CONTROL_VARS' `ABS_VARS' `dependent_var_`d'' `control_var_`d'' aprace ofcolor"
 	                if "`table_number'" == "5" {
-	                    local comparison_sample_vars "`comparison_sample_vars' hcity temp_city place_name"
+	                    local comparison_sample_vars "`comparison_sample_vars' hcity temp_city"
 	                }
 	                else {
-	                    local comparison_sample_vars "`comparison_sample_vars' hcityx hcity_ad temp_city place_name"
+	                    local comparison_sample_vars "`comparison_sample_vars' hcityx hcity_ad temp_city"
 	                }
 	                mark_complete_case `comparison_complete_case' "`comparison_sample_vars'"
 	                keep if `comparison_complete_case'
@@ -355,11 +355,13 @@ program define run_comparison_regressions, rclass
             }
             else if `cols' == 5 {
                 local racial_minority "ofcolor"
-                local geofe "place_name"
+                // Place/county fixed effects are disabled; retain corrected-city FE.
+                local geofe "temp_city"
             }
             else {
                 local racial_minority "ofcolor"
-                local geofe "county_name"
+                // Place/county fixed effects are disabled; retain corrected-city FE.
+                local geofe "temp_city"
             }
 
             disp as text "Dep. Var. is: " as result "`dependent_var_`d''"
@@ -543,11 +545,11 @@ program define correct_table, rclass
     if "`analysis_type'" == "corrected" {
         if "`table_number'" == "5" {
             apply_hds_fixed_race_spec "race_ad"
-            keep if !inlist(hcity, "", ".", "NA") & !inlist(place_name, "", ".", "NA") & !inlist(county_name, "", ".", "NA")
+            keep if !inlist(hcity, "", ".", "NA")
         }
         else {
             apply_hds_fixed_race_spec "race_rec"
-            keep if !inlist(hcityx, "", ".", "NA") & !inlist(hcity_ad, "", ".", "NA") & !inlist(place_name, "", ".", "NA") & !inlist(county_name, "", ".", "NA")
+            keep if !inlist(hcityx, "", ".", "NA") & !inlist(hcity_ad, "", ".", "NA")
         }
     }
 
@@ -580,7 +582,9 @@ program define correct_table, rclass
         }
         else if "`analysis_type'" == "corrected" {
             local racial_minority = "ofcolor"
-            local geofe = "place_name"
+            // Place/county fixed effects are disabled; use the corrected city
+            // source selected by process_data/data_cleaner instead.
+            local geofe = "temp_city"
         }
         if `drop_trial_invariant' {
             local geofe ""
@@ -606,10 +610,10 @@ program define correct_table, rclass
 	            }
 	            local full_control_sample_vars "`full_sample_CONTROL_VARS' `full_sample_ABS_VARS' `fs_same_ctrl' `fs_same_abs' `dependent_var' aprace ofcolor"
 	            if "`table_number'" == "5" {
-	                local full_control_sample_vars "`full_control_sample_vars' hcity temp_city place_name county_name"
+	                local full_control_sample_vars "`full_control_sample_vars' hcity temp_city"
 	            }
 	            else {
-	                local full_control_sample_vars "`full_control_sample_vars' hcityx hcity_ad temp_city place_name county_name"
+	                local full_control_sample_vars "`full_control_sample_vars' hcityx hcity_ad temp_city"
 	            }
 	            mark_complete_case `full_control_complete_case' "`full_control_sample_vars'"
 	        }

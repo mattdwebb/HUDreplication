@@ -1,14 +1,34 @@
 resolve_repo_root <- function() {
-  cwd <- normalizePath(getwd(), winslash = "/", mustWork = TRUE)
-  if (basename(cwd) == "HUDreplication") return(cwd)
-  if (basename(cwd) == "ct_sample") return(dirname(cwd))
+  cmd_args <- commandArgs(FALSE)
+  file_arg <- grep("^--file=", cmd_args, value = TRUE)
+  start_dirs <- normalizePath(getwd(), winslash = "/", mustWork = TRUE)
 
-  candidate <- file.path(cwd, "HUDreplication")
-  if (dir.exists(candidate)) {
-    return(normalizePath(candidate, winslash = "/", mustWork = TRUE))
+  if (length(file_arg) == 1) {
+    script_path <- normalizePath(sub("^--file=", "", file_arg), winslash = "/", mustWork = TRUE)
+    start_dirs <- c(dirname(script_path), start_dirs)
   }
 
-  stop("Could not infer repo_root. Run from HUDreplication or ct_sample.")
+  for (start_dir in unique(start_dirs)) {
+    repo_root <- start_dir
+    while (repo_root != dirname(repo_root)) {
+      if (
+        dir.exists(file.path(repo_root, "ct_sample")) &&
+        dir.exists(file.path(repo_root, "Data"))
+      ) {
+        return(repo_root)
+      }
+      candidate <- file.path(repo_root, "HUDReplication")
+      if (
+        dir.exists(file.path(candidate, "ct_sample")) &&
+        dir.exists(file.path(candidate, "Data"))
+      ) {
+        return(normalizePath(candidate, winslash = "/", mustWork = TRUE))
+      }
+      repo_root <- dirname(repo_root)
+    }
+  }
+
+  stop("Could not infer repo_root. Run from HUDReplication or ct_sample.")
 }
 
 repo_root <- resolve_repo_root()
@@ -32,15 +52,16 @@ output_dir <- env_value(
   file.path(source_dir, "formatted"),
   legacy_name = "SELECTED_SAMPLE_FORMAT_OUTPUT_DIR"
 )
-table_subtitle <- env_value(
-  "CT_SAMPLE_FORMAT_TABLE_SUBTITLE",
-  "Corrected Model-Based Replication",
-  legacy_name = "SELECTED_SAMPLE_FORMAT_TABLE_SUBTITLE"
-)
+table_subtitle <- "Within-Trial Controls Only"
 label_prefix <- env_value("CT_SAMPLE_FORMAT_LABEL_PREFIX", "corrected_table", "SELECTED_SAMPLE_FORMAT_LABEL_PREFIX")
-ad_control_row_mode <- env_value("CT_SAMPLE_FORMAT_AD_CONTROL_ROWS", "corrected", "SELECTED_SAMPLE_FORMAT_AD_CONTROL_ROWS")
-exclude_tables <- strsplit(env_value("CT_SAMPLE_FORMAT_EXCLUDE_TABLES", legacy_name = "SELECTED_SAMPLE_FORMAT_EXCLUDE_TABLES"), "[, ]+")[[1]]
+ad_control_row_mode <- env_value("CT_SAMPLE_FORMAT_AD_CONTROL_ROWS", "omitted", "SELECTED_SAMPLE_FORMAT_AD_CONTROL_ROWS")
+# The corrected C&T appendix driver intentionally skips Table 13 because the
+# drop-trial-invariant-controls specification is not meaningful for that table.
+# Keep it excluded unless a user explicitly supplies generated Table 13 CSVs and
+# overrides this setting.
+exclude_tables <- strsplit(env_value("CT_SAMPLE_FORMAT_EXCLUDE_TABLES", "13", legacy_name = "SELECTED_SAMPLE_FORMAT_EXCLUDE_TABLES"), "[, ]+")[[1]]
 exclude_tables <- exclude_tables[nzchar(exclude_tables)]
+exclude_tables <- setdiff(exclude_tables, "none")
 
 dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
 
@@ -729,7 +750,8 @@ manifest <- c(
   "",
   "Notes:",
   "- The script consumes the current raw corrected CSV outputs; it does not rerun Stata.",
-  "- Split raw outputs for Tables 8, 10, 13, and 14 are combined into one file per C&T table.",
+  "- Split raw outputs for Tables 8, 10, and 14 are combined into one file per C&T table.",
+  "- Corrected Table 13 is skipped by default because appendix_tables.do does not estimate Table 13 under the corrected drop-trial-invariant-controls specification.",
   "- Table 14 Panel A is rebuilt from table14A_override_corrected.csv and therefore reports the corrected same-race tester coefficients and available summary rows only."
 )
 writeLines(manifest, file.path(output_dir, "README.txt"), useBytes = TRUE)

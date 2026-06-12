@@ -353,6 +353,7 @@ process_data "`HUD_CENSUS_WITH_DUPLICATES'" "`FORCE_CLEAN_LOCAL'" "" "hcityx" "H
 clean_vars "povrate_rec povrate_ad"
 gen low_povrate = 0
 replace low_povrate = 1 if povrate_rec < 0.1
+replace low_povrate = . if missing(povrate_rec)
 keep if povrate_ad < 0.1
 egen tag = tag(testerid control)
 egen cnt = total(tag), by(control)
@@ -369,6 +370,7 @@ process_data "`HUD_CENSUS_PROCESSED'" "`FORCE_CLEAN_LOCAL'" "" "hcityx" "HUDproc
 clean_vars "povrate_rec povrate_ad"
 gen low_povrate = 0
 replace low_povrate = 1 if povrate_rec < 0.1
+replace low_povrate = . if missing(povrate_rec)
 keep if povrate_ad < 0.1
 egen tag = tag(testerid control)
 egen cnt = total(tag), by(control)
@@ -385,6 +387,7 @@ process_data "`HUD_CENSUS_PROCESSED'" "`FORCE_CLEAN_LOCAL'" "" "hcity_ad" "HUDpr
 clean_vars "povrate_rec povrate_ad"
 gen low_povrate = 0
 replace low_povrate = 1 if povrate_rec < 0.1
+replace low_povrate = . if missing(povrate_rec)
 keep if povrate_ad < 0.1
 egen tag = tag(testerid control)
 egen cnt = total(tag), by(control)

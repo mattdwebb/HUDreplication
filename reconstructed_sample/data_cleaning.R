@@ -40,9 +40,11 @@ if (stop_before_geocoding) {
 
 resolve_repo_root <- function() {
   cwd <- normalizePath(getwd(), winslash = "/", mustWork = TRUE)
-  if (basename(cwd) == "HUDreplication") return(cwd)
+  if (tolower(basename(cwd)) == "hudreplication") return(cwd)
   if (basename(cwd) == "reconstructed_sample") return(dirname(cwd))
   candidate <- file.path(cwd, "HUDreplication")
+  if (dir.exists(candidate)) return(normalizePath(candidate, winslash = "/", mustWork = TRUE))
+  candidate <- file.path(cwd, "HUDReplication")
   if (dir.exists(candidate)) return(normalizePath(candidate, winslash = "/", mustWork = TRUE))
   stop("Could not infer repo_root. Run from HUDreplication or reconstructed_sample.")
 }
@@ -58,6 +60,31 @@ dir.create(reconstructed_sample_generated_path, showWarnings = FALSE, recursive 
 
 generated_file <- function(filename) {
   file.path(reconstructed_sample_generated_path, filename)
+}
+
+missing_category_label <- "Did not answer"
+
+as_missing_category <- function(x) {
+  x_chr <- trimws(as.character(x))
+  ifelse(!is.na(x_chr) & x_chr == "-1", missing_category_label, x_chr)
+}
+
+recode_savlbad_without_discouragement <- function(x) {
+  savlbad <- trimws(as.character(x))
+  case_when(
+    savlbad == "1" ~ 1,
+    savlbad %in% c("2", "3", "5", "6") ~ 0,
+    TRUE ~ NA_real_
+  )
+}
+
+recode_savlbad_literal_available <- function(x) {
+  savlbad <- trimws(as.character(x))
+  case_when(
+    savlbad %in% c("1", "5") ~ 1,
+    savlbad %in% c("2", "3", "6") ~ 0,
+    TRUE ~ NA_real_
+  )
 }
 
 
@@ -90,6 +117,10 @@ assignment <- assignment_raw %>%
     all_rel_na = is.na(ARELATE2) & is.na(ARELATE3) & is.na(ARELATE4) & is.na(ARELATE5),
     kids = if_else(all_rel_na, NA_real_, if_else(has_child, 1, 0))
   ) %>%
+  mutate(across(
+    any_of(c("ARELATE2", "AMOVERS", "AELNG1", "ALGNCUR", "ALEASETP", "ACAROWN", "DPMTEXP")),
+    as_missing_category
+  )) %>%
   select(CONTROL, TESTERID, kids, SEQUENCE, ARELATE2, AMOVERS, AELNG1, ALGNCUR, ALEASETP, ACAROWN, DPMTEXP)
 cat("Assignment: ", nrow(assignment_raw), "→", nrow(assignment), "rows after filtering to only sales and released tests\n")
 
@@ -148,7 +179,7 @@ parse_date_string <- function(date_string, is_birth_date = FALSE) {
   )
   
   if (date_standardized %in% names(corrections)) {
-    return(as.Date(corrections[[date_clean]]))
+    return(as.Date(corrections[[date_standardized]]))
   }
 
   # Date parsing patterns 
@@ -304,7 +335,7 @@ parse_time_string <- function(time_string, am_pm_indicator = NULL) {
   if (is.na(time_clean) || time_clean == "" || 
       grepl("^(N/A|NA|n/a|na)$", time_clean, ignore.case = TRUE) ||
       grepl("^[^0-9:;.]+$", time_clean)) {
-    return(list(hour = 0, minute = 0))
+    return(list(hour = 0, minute = 0, am_pm_indicator = NA_real_))
   }
   
   # Extract hour and minute based on format
@@ -322,7 +353,7 @@ parse_time_string <- function(time_string, am_pm_indicator = NULL) {
     hour <- as.numeric(parts[1])
     minute <- if(length(parts) > 1) as.numeric(parts[2]) else 0
   } else {
-    return(list(hour = 0, minute = 0))
+    return(list(hour = 0, minute = 0, am_pm_indicator = NA_real_))
   }
   
   # Validate and clean minute
@@ -347,7 +378,7 @@ parse_time_string <- function(time_string, am_pm_indicator = NULL) {
     }
     
     # Convert to 24-hour format (only if hour is not NA)
-    if (!is.na(hour) && am_pm_indicator == 2 && hour < 12) {
+    if (!is.na(hour) && !is.na(am_pm_indicator) && am_pm_indicator == 2 && hour < 12) {
       hour <- hour + 12  # PM hours (1-11) + 12
     }
   } 
@@ -355,7 +386,7 @@ parse_time_string <- function(time_string, am_pm_indicator = NULL) {
   # Handle invalid hours
   if (is.na(hour) || hour >= 24) hour <- 0
   
-  return(list(hour = hour, minute = minute))
+  return(list(hour = hour, minute = minute, am_pm_indicator = am_pm_indicator))
 }
 
 # Function to correct incorrect appointment dates
@@ -422,6 +453,7 @@ correct_invalid_times <- function(df) {
   # Identify rows with 00:00:00 times
   df <- df %>%
     mutate(
+      .time_fix_row_id = row_number(),
       is_midnight = !is.na(appointment_datetime) & 
                     format(appointment_datetime, "%H:%M:%S") == "00:00:00"
     )
@@ -436,7 +468,7 @@ correct_invalid_times <- function(df) {
       filter(CONTROL == current_control,
               !is.na(appointment_datetime),
               as.Date(appointment_datetime) == current_date,
-              row_number() != i)
+              .time_fix_row_id != df$.time_fix_row_id[i])
     
     # If other appointments exist on same day, set time to NA
     if (nrow(same_control_same_day) > 0) {
@@ -448,7 +480,7 @@ correct_invalid_times <- function(df) {
   }
   
   # Remove temporary column
-  df <- df %>% select(-is_midnight)
+  df <- df %>% select(-is_midnight, -.time_fix_row_id)
   
   return(df)
 }
@@ -966,10 +998,13 @@ cat("=== CLEANING SALES DATA ===\n")
 sales_clean <- sales %>%
   mutate(
     STOTUNIT = as.numeric(STOTUNIT),
-    SAVLBAD_BINARY = ifelse(SAVLBAD == "1", 1, 0)
+    SBEGAM = na_if(as.numeric(SBEGAM), -1),
+    SAVLBAD_RAW = trimws(as.character(SAVLBAD)),
+    SAVLBAD_BINARY = recode_savlbad_without_discouragement(SAVLBAD),
+    SAVLBAD_LITERAL_BINARY = recode_savlbad_literal_available(SAVLBAD)
   ) %>%
   select(CONTROL, TESTERID, RACEID, SEQUENCE, SSNDVIS, SAPPTD, SAPPTDY, 
-         SBEGH, SBEGAM, STOTUNIT, SAVLBAD_BINARY) %>%
+         SBEGH, SBEGAM, STOTUNIT, SAVLBAD_RAW, SAVLBAD_BINARY, SAVLBAD_LITERAL_BINARY) %>%
   filter(!is.na(CONTROL) & !is.na(TESTERID))
 
 # Parse appointment dates and times
@@ -983,13 +1018,20 @@ sales_with_time <- sales_clean %>%
     time_parsed = map2(SBEGH, SBEGAM, parse_time_string),
     hour_24 = map_dbl(time_parsed, ~ .x$hour),
     minute_part = map_dbl(time_parsed, ~ .x$minute),
+    am_indicator_from_time = map_lgl(
+      time_parsed,
+      ~ if (is.null(.x$am_pm_indicator) || is.na(.x$am_pm_indicator)) NA else .x$am_pm_indicator == 1
+    ),
     appointment_datetime = as.POSIXct(
       paste(appointment_date, sprintf("%02d:%02d:00", hour_24, minute_part)),
       format = "%Y-%m-%d %H:%M:%S"
     ),
-    am_indicator = correct_am_pm_indicator(hour = hour_24, am_pm_indicator = SBEGAM)
+    am_indicator = coalesce(
+      am_indicator_from_time,
+      correct_am_pm_indicator(hour = hour_24, am_pm_indicator = SBEGAM)
+    )
   ) %>%
-  select(-time_parsed, -hour_24, -minute_part) %>%
+  select(-time_parsed, -hour_24, -minute_part, -am_indicator_from_time) %>%
   correct_invalid_times() # correct cases where appointment time is 00:00 or some non-time value
 
 # Summary of appointment date and time issues
@@ -1052,11 +1094,14 @@ sales_final <- sales_with_time %>%
     am_indicator_first = first_by_order(am_indicator, substantive_visit_order),
     STOTUNIT_FIRST = first_by_order(STOTUNIT, substantive_visit_order),
     SAVLBAD_FIRST = first_by_order(SAVLBAD_BINARY, substantive_visit_order),
+    SAVLBAD_LITERAL_FIRST = first_by_order(SAVLBAD_LITERAL_BINARY, substantive_visit_order),
+    SAVLBAD_FIRST_LITERAL = first_by_order(SAVLBAD_LITERAL_BINARY, substantive_visit_order),
     first_visit_datetime = first_by_order(appointment_datetime, substantive_visit_order),
     first_substantive_visit_order = suppressWarnings(min(substantive_visit_order, na.rm = TRUE)),
     num_visits = sum(!is.na(substantive_visit_order)),
     STOTUNIT_TOTAL = if(all(is.na(STOTUNIT))) NA_real_ else sum(STOTUNIT, na.rm = TRUE),
     SAVLBAD_ANY = if(all(is.na(SAVLBAD_BINARY))) NA_real_ else as.numeric(any(SAVLBAD_BINARY == 1, na.rm = TRUE)),
+    SAVLBAD_ANY_LITERAL = if(all(is.na(SAVLBAD_LITERAL_BINARY))) NA_real_ else as.numeric(any(SAVLBAD_LITERAL_BINARY == 1, na.rm = TRUE)),
     .groups = 'drop'
   ) %>%
   mutate(
@@ -1080,6 +1125,28 @@ sales_final <- sales_with_time %>%
   select(-RACEID, -first_substantive_order_in_trial)
 
 cat("Final sales dataset:", nrow(sales_final), "rows (one per tester per control)\n")
+
+savlbad_diagnostics <- sales_with_time %>%
+  summarise(
+    raw_sales_rows = n(),
+    raw_savlbad_minus1_rows = sum(SAVLBAD_RAW == "-1", na.rm = TRUE),
+    raw_savlbad_code5_rows = sum(SAVLBAD_RAW == "5", na.rm = TRUE),
+    invalid_nonmissing_savlbad_rows = sum(
+      !is.na(SAVLBAD_RAW) & SAVLBAD_RAW != "" &
+        !SAVLBAD_RAW %in% c("1", "2", "3", "5", "6"),
+      na.rm = TRUE
+    ),
+    tester_trial_rows = n_distinct(paste(CONTROL, TESTERID)),
+    tester_trial_savlbad_any_missing = sum(is.na(sales_final$SAVLBAD_ANY)),
+    tester_trial_savlbad_literal_any_missing = sum(is.na(sales_final$SAVLBAD_ANY_LITERAL)),
+    tester_trial_literal_differs = sum(
+      !is.na(sales_final$SAVLBAD_ANY) &
+        !is.na(sales_final$SAVLBAD_ANY_LITERAL) &
+        sales_final$SAVLBAD_ANY != sales_final$SAVLBAD_ANY_LITERAL
+    )
+  )
+write_csv(savlbad_diagnostics, generated_file("savlbad_coding_diagnostics.csv"))
+cat("Exported SAVLBAD coding diagnostics to ", generated_file("savlbad_coding_diagnostics.csv"), "\n", sep = "")
 
 # Count distinct controls with non-missing outcomes and two testers, by first two letters
 outcome_summary <- sales_final %>%
@@ -1126,6 +1193,12 @@ tester_clean <- tester %>%
     age = as.numeric(difftime(as.Date("2012-01-01"), birth_date, units = "days")) / 365.25,
     age = round(age, 0),
     age = if_else(age <= 17, NA_real_, age)  # Remove unrealistic ages
+  ) %>%
+  mutate(
+    across(
+      any_of(c("THHEGAI", "TPEGAI", "THIGHEDU", "TCURTENR")),
+      as_missing_category
+    )
   )
 
 cat("Cleaned birth dates for", nrow(tester_clean), "testers\n")
@@ -1596,7 +1669,10 @@ if (skip_geocoding) {
     # Backfill kids/mother for older cached geocoding files
     if (!("kids" %in% names(sales_tester_rechomes_geocoded))) {
       sales_tester_rechomes_geocoded <- sales_tester_rechomes_geocoded %>%
-        left_join(assignment_kids, by = c("CONTROL", "TESTERID"))
+        left_join(
+          assignment %>% select(CONTROL, TESTERID, kids),
+          by = c("CONTROL", "TESTERID")
+        )
     }
     if (!("mother" %in% names(sales_tester_rechomes_geocoded))) {
       sales_tester_rechomes_geocoded <- sales_tester_rechomes_geocoded %>%

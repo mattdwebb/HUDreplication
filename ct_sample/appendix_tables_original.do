@@ -368,9 +368,11 @@ clean_vars "povrate_rec povrate_ad nodad_rec nodad_ad"
 
 gen low_povrate = 0
 replace low_povrate = 1 if povrate_rec < 0.1
+replace low_povrate = . if missing(povrate_rec)
 
 gen low_povrate_high_dad = 0 
 replace low_povrate_high_dad = 1 if povrate_rec < 0.1 & nodad_rec <0.5
+replace low_povrate_high_dad = . if missing(povrate_rec) | missing(nodad_rec)
 
 
 
