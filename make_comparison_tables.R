@@ -15,7 +15,11 @@ output_dir <- if (length(args) == 0) "comparison_tables" else args[[1]]
 cmd_args <- commandArgs(FALSE)
 file_arg <- grep("^--file=", cmd_args, value = TRUE)
 script_dir <- if (length(file_arg) == 1) {
-  dirname(normalizePath(sub("^--file=", "", file_arg)))
+  script_arg <- sub("^--file=", "", file_arg)
+  if (!file.exists(script_arg)) {
+    script_arg <- gsub("~+~", " ", script_arg, fixed = TRUE)
+  }
+  dirname(normalizePath(script_arg))
 } else {
   getwd()
 }

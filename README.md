@@ -91,7 +91,7 @@ From the `HUDReplication` folder, the main replication sequence is:
 3. Run the remaining R workflow:
    - `Rscript run_post_stata.R`
 
-The post-Stata R runner starts at reconstructed-sample data cleaning, then runs the reconstructed analysis, formats reconstructed-sample tables, formats the corrected C&T-sample appendix tables, generates comparison tables, regenerates the data-description diagnostics, and regenerates the matching-diagnosis appendix tables.
+The post-Stata R runner starts at reconstructed-sample data cleaning, then runs the reconstructed analysis, formats reconstructed-sample tables, formats the supplemental C&T-sample appendix tables, generates comparison tables, regenerates the data-description diagnostics, and regenerates the matching-diagnosis appendix tables.
 
 The runner does not invoke Stata. Stata command-line behavior differs across operating systems and installations, so the C&T Stata step is kept as an explicit manual step. The runner assumes `ct_sample/main.do` has already produced the required C&T-sample outputs.
 
@@ -148,19 +148,20 @@ C&T-sample outputs are written to:
 
 The meta-analysis figure script is separate. After setting the repository root in `ct_sample/main.do`, run `do "${CODE}/meta_analysis.do"` from Stata if the meta-analysis figure needs to be regenerated. This writes `meta_analysis_p_values.pdf` and `meta_analysis_p_values.png` to `ct_sample/Output`.
 
-### Step 3: Format corrected C&T-sample appendix tables
+### Step 3: Format supplemental C&T-sample appendix tables
 
 This step is run automatically by `Rscript run_post_stata.R`. To run it by itself, use:
 
-To combine the corrected C&T-sample component CSVs into the formatted appendix tables, run:
+To combine the corrected and original C&T-sample component CSVs into formatted supplemental appendix tables, run:
 
-- `Rscript ct_sample/format_corrected_tables.R`
+- `Rscript ct_sample/format_supplemental_appendix_tables.R`
 
-The formatter reads from `ct_sample/Output/corrected` by default and writes to:
+The formatter reads from `ct_sample/Output/corrected` and `ct_sample/Output/original` by default and writes to:
 
 - `ct_sample/Output/corrected/formatted`
+- `ct_sample/Output/original/formatted`
 
-Corrected Table 13 is skipped by default. The corrected C&T-sample appendix driver does not estimate Table 13 because the drop-trial-invariant-controls specification is not meaningful for that table, so there are no corrected Table 13 component CSVs to combine.
+Corrected Table 13 is skipped by default. The corrected C&T-sample appendix driver does not estimate Table 13 because the drop-trial-invariant-controls specification is not meaningful for that table, so there are no corrected Table 13 component CSVs to combine. Original-replication Table 13 is included because the original-sample appendix driver estimates it.
 
 ## Reconstructed-Sample Workflow
 
@@ -298,3 +299,94 @@ For a full clean replication from source inputs:
 
 For exact replication, the post-Stata runner reuses the canonical geocoding cache when it exists. To rebuild geocodes from live services, use `Rscript run_post_stata.R --live-geocoding`.
 
+## Reference Stata Environment
+
+The C&T-sample Stata workflow was run successfully in the following Stata environment:
+
+- StataNow 19.5, BE edition
+- Stata born date: 14 Jan 2026
+- Operating system: macOS 14.6.1 (`MacOSX`)
+- Machine type: Mac (Apple Silicon)
+- Stata installation root: `/Applications/StataNow/`
+
+The required user-written Stata packages were installed from the Boston College SSC mirror (`http://fmwww.bc.edu/repec/bocode`). The versions observed for the main commands used by the replication scripts were:
+
+| Package / command | Observed version |
+| --- | --- |
+| `strgroup` | 1.0.4, 17 Dec 2021 |
+| `levenshtein` | 1.0.2, 28 Feb 2020 |
+| `matchit` | 1.5.2, May 2020 |
+| `freqindex` | 1.3.1, Apr 2019 |
+| `reghdfe` | 6.13.1, 10 Jan 2026 |
+| `ftools` | 2.50.0, 09 Jan 2026 |
+| `estout` | 3.33, 23 Mar 2026 |
+| `esttab` | 2.1.4, 13 Apr 2026 |
+| `eststo` | 1.1.0, 05 Nov 2008 |
+| `estadd` | 2.3.5, 05 Feb 2016 |
+
+The Stata driver also checks for the `egenmore` package. `egenmore` is a package that supplies extensions to Stata's built-in `egen` command, so `which egenmore` may report no top-level command even when the package is installed.
+
+For a reproducibility log on a new machine, run the following in Stata after package installation:
+
+```stata
+about
+display "Stata version: " c(stata_version)
+display "Born date: " c(born_date)
+display "OS: " c(os)
+display "OS detail: " c(osdtl)
+display "Machine type: " c(machine_type)
+display "Edition: " c(edition)
+ado dir
+foreach cmd in strgroup levenshtein matchit freqindex reghdfe ftools estout esttab eststo estadd {
+    display "----- `cmd' -----"
+    capture noisily which `cmd', all
+}
+```
+
+## Reference R and OS Environment
+
+The live-geocoding replication run was performed on:
+
+- macOS 14.6.1, build 23G93
+- Apple Silicon (`aarch64-apple-darwin20`)
+- R 4.5.1 (2025-06-13)
+- Locale for R commands: `LC_ALL=en_US.UTF-8`, `LANG=en_US.UTF-8`
+
+Observed R package versions for the main workflow dependencies were:
+
+| Package | Version |
+| --- | --- |
+| `dplyr` | 1.1.4 |
+| `readr` | 2.1.5 |
+| `haven` | 2.5.5 |
+| `stringr` | 1.5.1 |
+| `tidyr` | 1.3.1 |
+| `purrr` | 1.1.0 |
+| `readxl` | 1.4.5 |
+| `sf` | 1.0.21 |
+| `tigris` | 2.2.1 |
+| `lfe` | 3.1.1 |
+| `broom` | 1.0.9 |
+| `xtable` | 1.8.4 |
+| `httr` | 1.4.7 |
+| `jsonlite` | 2.0.0 |
+| `tibble` | 3.3.0 |
+| `tidygeocoder` | 1.0.6 |
+| `tidycensus` | 1.7.3 |
+| `data.table` | 1.17.8 |
+| `RANN` | 2.6.2 |
+| `foreign` | 0.8.90 |
+| `hdf5r` | 1.3.12 |
+| `stringdist` | 0.9.15 |
+| `ggplot2` | 3.5.2 |
+| `lubridate` | 1.9.4 |
+| `forcats` | 1.0.0 |
+| `Matrix` | 1.7.3 |
+
+The `sf` external-library versions were GEOS 3.13.0, GDAL 3.8.5, and PROJ 9.5.1. `hdf5r` was installed and used for PM2.5 NetCDF/HDF5 inputs; `rhdf5` was not installed in this environment.
+
+For this run, the canonical geocoded recommended-home cache was not provided. The reconstructed-sample cleaning workflow was run with live geocoding, generating:
+
+- `Data/Generated/reconstructed_sample/sales_tester_rechomes_geocoded.csv`
+
+The geocoding run reported 18,862 of 18,862 recommended-home rows geocoded after Census batch geocoding, Nominatim and ArcGIS fallback geocoding, and TIGERweb GEOID lookup.

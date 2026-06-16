@@ -4,7 +4,11 @@ resolve_repo_root <- function() {
   start_dirs <- normalizePath(getwd(), winslash = "/", mustWork = TRUE)
 
   if (length(file_arg) == 1) {
-    script_path <- normalizePath(sub("^--file=", "", file_arg), winslash = "/", mustWork = TRUE)
+    script_arg <- sub("^--file=", "", file_arg)
+    if (!file.exists(script_arg)) {
+      script_arg <- gsub("~+~", " ", script_arg, fixed = TRUE)
+    }
+    script_path <- normalizePath(script_arg, winslash = "/", mustWork = TRUE)
     start_dirs <- c(dirname(script_path), start_dirs)
   }
 
@@ -42,26 +46,129 @@ env_value <- function(name, default = "", legacy_name = NULL) {
   default
 }
 
-source_dir <- env_value(
-  "CT_SAMPLE_FORMAT_SOURCE_DIR",
-  file.path(repo_root, "ct_sample", "Output", "corrected"),
-  legacy_name = "SELECTED_SAMPLE_FORMAT_SOURCE_DIR"
+args <- commandArgs(trailingOnly = TRUE)
+mode_arg <- args[startsWith(args, "--mode=")]
+requested_modes <- if (length(mode_arg) == 0L) {
+  c("corrected", "original")
+} else {
+  strsplit(sub("^--mode=", "", mode_arg[[1]]), "[, ]+")[[1]]
+}
+requested_modes <- requested_modes[nzchar(requested_modes)]
+
+mode_configs <- list(
+  corrected = list(
+    label = "corrected C&T sample",
+    source_dir = file.path(repo_root, "ct_sample", "Output", "corrected"),
+    output_dir = file.path(repo_root, "ct_sample", "Output", "corrected", "formatted"),
+    table_suffix = "corrected",
+    label_prefix = "corrected_table",
+    ad_control_row_mode = "omitted",
+    exclude_tables = "13",
+    preview_file = "formatted_corrected_tables_preview.tex",
+    white_sd_file = "ct_sample_appendix_white_sds.csv",
+    manifest_title = "Generated formatted corrected C&T-sample supplemental appendix tables.",
+    white_sd_sample_label = "Corrected C\\&T Sample",
+    white_sd_specification = "Dropped Trial-Invariant Controls",
+    subtitle_for_table = function(table_number) {
+      paste0(
+        "Corrected C\\&T Sample with Dropped Trial-Invariant Controls for Table ",
+        table_number,
+        ", C\\&T 2022"
+      )
+    },
+    table13_note = "- Corrected Table 13 is skipped by default because appendix_tables.do does not estimate Table 13 under the corrected drop-trial-invariant-controls specification.",
+    table14_note = "- Table 14 Panel A is rebuilt from table14A_override_corrected.csv and therefore reports the corrected same-race tester coefficients and available summary rows only."
+  ),
+  original = list(
+    label = "original replicated C&T sample",
+    source_dir = file.path(repo_root, "ct_sample", "Output", "original"),
+    output_dir = file.path(repo_root, "ct_sample", "Output", "original", "formatted"),
+    table_suffix = "original",
+    label_prefix = "replicated_table",
+    ad_control_row_mode = "reported",
+    exclude_tables = character(),
+    preview_file = "formatted_original_tables_preview.tex",
+    white_sd_file = "ct_sample_appendix_white_sds.csv",
+    manifest_title = "Generated formatted original-replication C&T-sample supplemental appendix tables.",
+    white_sd_sample_label = "Original C\\&T Sample",
+    white_sd_specification = "Original Sample and Specification",
+    subtitle_for_table = function(table_number) {
+      paste0(
+        "Replication with Original Sample and Specification of Table ",
+        table_number,
+        ", C\\&T 2022"
+      )
+    },
+    table13_note = "- Original replicated Table 13 is included because appendix_tables.do estimates Table 13 for the original sample and specification.",
+    table14_note = "- Table 14 Panel A is rebuilt from table14A_override_original.csv and therefore reports the same-race tester coefficients and available summary rows only."
+  )
 )
-output_dir <- env_value(
-  "CT_SAMPLE_FORMAT_OUTPUT_DIR",
-  file.path(source_dir, "formatted"),
-  legacy_name = "SELECTED_SAMPLE_FORMAT_OUTPUT_DIR"
-)
-table_subtitle <- "Within-Trial Controls Only"
-label_prefix <- env_value("CT_SAMPLE_FORMAT_LABEL_PREFIX", "corrected_table", "SELECTED_SAMPLE_FORMAT_LABEL_PREFIX")
-ad_control_row_mode <- env_value("CT_SAMPLE_FORMAT_AD_CONTROL_ROWS", "omitted", "SELECTED_SAMPLE_FORMAT_AD_CONTROL_ROWS")
-# The corrected C&T appendix driver intentionally skips Table 13 because the
-# drop-trial-invariant-controls specification is not meaningful for that table.
-# Keep it excluded unless a user explicitly supplies generated Table 13 CSVs and
-# overrides this setting.
-exclude_tables <- strsplit(env_value("CT_SAMPLE_FORMAT_EXCLUDE_TABLES", "13", legacy_name = "SELECTED_SAMPLE_FORMAT_EXCLUDE_TABLES"), "[, ]+")[[1]]
+
+unknown_modes <- setdiff(requested_modes, names(mode_configs))
+if (length(unknown_modes) > 0L) {
+  stop("Unknown supplemental appendix table mode(s): ", paste(unknown_modes, collapse = ", "))
+}
+
+generate_mode <- function(mode_name, config) {
+source_dir <- if (identical(mode_name, "corrected")) {
+  env_value(
+    "CT_SAMPLE_FORMAT_SOURCE_DIR",
+    config$source_dir,
+    legacy_name = "SELECTED_SAMPLE_FORMAT_SOURCE_DIR"
+  )
+} else {
+  config$source_dir
+}
+output_dir <- if (identical(mode_name, "corrected")) {
+  env_value(
+    "CT_SAMPLE_FORMAT_OUTPUT_DIR",
+    config$output_dir,
+    legacy_name = "SELECTED_SAMPLE_FORMAT_OUTPUT_DIR"
+  )
+} else {
+  config$output_dir
+}
+table_suffix <- config$table_suffix
+label_prefix <- if (identical(mode_name, "corrected")) {
+  env_value(
+    "CT_SAMPLE_FORMAT_LABEL_PREFIX",
+    config$label_prefix,
+    legacy_name = "SELECTED_SAMPLE_FORMAT_LABEL_PREFIX"
+  )
+} else {
+  config$label_prefix
+}
+ad_control_row_mode <- if (identical(mode_name, "corrected")) {
+  env_value(
+    "CT_SAMPLE_FORMAT_AD_CONTROL_ROWS",
+    config$ad_control_row_mode,
+    legacy_name = "SELECTED_SAMPLE_FORMAT_AD_CONTROL_ROWS"
+  )
+} else {
+  config$ad_control_row_mode
+}
+exclude_tables <- if (identical(mode_name, "corrected")) {
+  strsplit(
+    env_value(
+      "CT_SAMPLE_FORMAT_EXCLUDE_TABLES",
+      paste(config$exclude_tables, collapse = " "),
+      legacy_name = "SELECTED_SAMPLE_FORMAT_EXCLUDE_TABLES"
+    ),
+    "[, ]+"
+  )[[1]]
+} else {
+  config$exclude_tables
+}
 exclude_tables <- exclude_tables[nzchar(exclude_tables)]
 exclude_tables <- setdiff(exclude_tables, "none")
+preview_file <- config$preview_file
+white_sd_file <- config$white_sd_file
+manifest_title <- config$manifest_title
+white_sd_sample_label <- config$white_sd_sample_label
+white_sd_specification <- config$white_sd_specification
+subtitle_for_table <- config$subtitle_for_table
+table13_note <- config$table13_note
+table14_note <- config$table14_note
 
 dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
 
@@ -82,11 +189,15 @@ table_included <- function(table_number) {
   !(as.character(table_number) %in% exclude_tables)
 }
 
+stem <- function(base_name) {
+  paste0(base_name, "_", table_suffix)
+}
+
 table_cache <- new.env(parent = emptyenv())
 
 read_raw_csv <- function(stem) {
   path <- file.path(source_dir, paste0(stem, ".csv"))
-  if (!file.exists(path)) stop("Missing raw corrected CSV: ", path)
+  if (!file.exists(path)) stop("Missing raw supplemental appendix CSV: ", path)
 
   raw <- read.csv(
     path,
@@ -194,8 +305,8 @@ record_white_sd_rows <- function(table_id, panel_title, col_names, category_stem
       white_sd_rows[[length(white_sd_rows) + 1L]] <<- data.frame(
         table_id = table_id,
         panel_title = panel_title,
-        sample_label = "C\\&T Sample",
-        specification = "Drop Trial-Invariant Controls",
+        sample_label = white_sd_sample_label,
+        specification = white_sd_specification,
         display_column = display_col,
         column_label = col_labels[[display_col]],
         analysis = analysis,
@@ -280,7 +391,8 @@ summary_lines <- function(category_stems, minority_stems = NULL, include_minorit
 build_model_panel <- function(panel_title = NULL, header_span = "Dependent Variable",
                               col_names, category_stems, minority_stems = NULL,
                               include_minority = TRUE, additional_rows = list(),
-                              white_sd_table = NULL, white_sd_panel = panel_title,
+                              column_groups = NULL, white_sd_table = NULL,
+                              white_sd_panel = panel_title,
                               white_sd_col_labels = col_names) {
   n_cols <- length(col_names)
 
@@ -299,13 +411,39 @@ build_model_panel <- function(panel_title = NULL, header_span = "Dependent Varia
     lines <- c(lines, paste0("\\textbf{", panel_title, "}\\\\[0.5em]"))
   }
 
+  header_lines <- c(
+    paste0("& \\multicolumn{", n_cols, "}{c}{", header_span, "} \\\\"),
+    paste0("\\cmidrule(lr){2-", n_cols + 1L, "}")
+  )
+
+  if (!is.null(column_groups)) {
+    group_spans <- vapply(column_groups, function(group) group$span, integer(1))
+    if (sum(group_spans) != n_cols) {
+      stop("Column group spans must sum to the number of columns.")
+    }
+
+    group_cells <- vapply(
+      column_groups,
+      function(group) paste0("\\multicolumn{", group$span, "}{c}{", group$label, "}"),
+      character(1)
+    )
+    group_starts <- cumsum(c(2L, head(group_spans, -1L)))
+    group_ends <- group_starts + group_spans - 1L
+    group_rules <- paste0("\\cmidrule(lr){", group_starts, "-", group_ends, "}")
+
+    header_lines <- c(
+      header_lines,
+      paste0("& ", paste(group_cells, collapse = " & "), " \\\\"),
+      paste(group_rules, collapse = " ")
+    )
+  }
+
   lines <- c(
     lines,
     "\\resizebox{\\textwidth}{!}{%",
     paste0("\\begin{tabular}{l*{", n_cols, "}{c}}"),
     "\\toprule",
-    paste0("& \\multicolumn{", n_cols, "}{c}{", header_span, "} \\\\"),
-    paste0("\\cmidrule(lr){2-", n_cols + 1L, "}"),
+    header_lines,
     paste0("& ", paste(paste0("\\multicolumn{1}{c}{", col_names, "}"), collapse = " & "), " \\\\"),
     "\\midrule"
   )
@@ -343,13 +481,14 @@ build_model_panel <- function(panel_title = NULL, header_span = "Dependent Varia
 }
 
 build_table14a_panel <- function() {
-  panel <- get_table("table14A_override_corrected")
+  table14a_stem <- stem("table14A_override")
+  panel <- get_table(table14a_stem)
   buyer_headers <- c("Buyer White", "Buyer African American", "Buyer Hispanic", "Buyer Asian")
   record_white_sd_rows(
     table_id = "table14",
     panel_title = "Panel A: Buyers upon Sale",
     col_names = buyer_headers,
-    category_stems = "table14A_override_corrected",
+    category_stems = table14a_stem,
     analysis = "override",
     col_labels = buyer_headers
   )
@@ -429,12 +568,16 @@ write_table <- function(file_name, caption, label, panels) {
 
 write_table(
   "table5.tex",
-  paste0("Discriminatory Steering and Availability of Advertised Properties\\\\[0.5em]\\textit{", table_subtitle, " of Table 5, C\\&T 2022}"),
+  paste0("Discriminatory Steering and Availability of Advertised Properties\\\\[0.5em]\\textit{", subtitle_for_table(5), "}"),
   paste0("tab:", label_prefix, "5"),
   list(build_model_panel(
     col_names = c("(1)", "(2)", "(3)", "(4)"),
-    category_stems = "table5_categories_corrected",
-    minority_stems = "table5_minority_corrected",
+    column_groups = list(
+      list(label = "Number of Recommendations", span = 2L),
+      list(label = "Home Availability", span = 2L)
+    ),
+    category_stems = stem("table5_categories"),
+    minority_stems = stem("table5_minority"),
     white_sd_table = "table5",
     white_sd_panel = "",
     white_sd_col_labels = c(
@@ -452,12 +595,13 @@ write_table(
 
 write_table(
   "table6.tex",
-  paste0("Discriminatory Steering and Neighborhood Racial Composition\\\\[0.5em]\\textit{", table_subtitle, " of Table 6, C\\&T 2022}"),
+  paste0("Discriminatory Steering and Neighborhood Racial Composition\\\\[0.5em]\\textit{", subtitle_for_table(6), "}"),
   paste0("tab:", label_prefix, "6"),
   list(build_model_panel(
+    header_span = "Dependent Variable: White Household Share",
     col_names = c("(1)", "(2)", "(3)", "(4)", "(5)"),
-    category_stems = "table6_categories_corrected",
-    minority_stems = "table6_minority_corrected",
+    category_stems = stem("table6_categories"),
+    minority_stems = stem("table6_minority"),
     white_sd_table = "table6",
     white_sd_panel = "",
     white_sd_col_labels = rep("White household share", 5),
@@ -472,12 +616,13 @@ write_table(
 
 write_table(
   "table7.tex",
-  paste0("Discriminatory Steering and Neighborhood Racial Composition by Income\\\\[0.5em]\\textit{", table_subtitle, " of Table 7, C\\&T 2022}"),
+  paste0("Discriminatory Steering and Neighborhood Racial Composition by Income\\\\[0.5em]\\textit{", subtitle_for_table(7), "}"),
   paste0("tab:", label_prefix, "7"),
   list(build_model_panel(
+    header_span = "Dependent Variable: White Household Share by Income",
     col_names = c("High Income", "Middle Income", "Low Income"),
-    category_stems = "table7_categories_corrected",
-    minority_stems = "table7_minority_corrected",
+    category_stems = stem("table7_categories"),
+    minority_stems = stem("table7_minority"),
     white_sd_table = "table7",
     white_sd_panel = "",
     white_sd_col_labels = c(
@@ -514,15 +659,15 @@ acs_controls <- list(
 
 write_table(
   "table8.tex",
-  paste0("Discriminatory Steering and Neighborhood Effects\\\\[0.5em]\\textit{", table_subtitle, " of Table 8, C\\&T 2022}"),
+  paste0("Discriminatory Steering and Neighborhood Effects\\\\[0.5em]\\textit{", subtitle_for_table(8), "}"),
   paste0("tab:", label_prefix, "8"),
   list(
     build_model_panel(
       panel_title = "Panel A: School Quality and Neighborhood Safety",
       header_span = "Dependent Variable",
       col_names = school_headers,
-      category_stems = c("table8A1_categories_corrected", "table8A2_categories_corrected"),
-      minority_stems = c("table8A1_minority_corrected", "table8A2_minority_corrected"),
+      category_stems = c(stem("table8A1_categories"), stem("table8A2_categories")),
+      minority_stems = c(stem("table8A1_minority"), stem("table8A2_minority")),
       white_sd_table = "table8",
       white_sd_panel = "Panel A: School Quality and Neighborhood Safety",
       white_sd_col_labels = c(
@@ -537,8 +682,8 @@ write_table(
       panel_title = "Panel B: American Community Survey",
       header_span = "Dependent Variable",
       col_names = acs_headers,
-      category_stems = "table8B_categories_corrected",
-      minority_stems = "table8B_minority_corrected",
+      category_stems = stem("table8B_categories"),
+      minority_stems = stem("table8B_minority"),
       white_sd_table = "table8",
       white_sd_panel = "Panel B: American Community Survey",
       white_sd_col_labels = acs_headers,
@@ -556,14 +701,14 @@ pollution_controls <- list(
 
 write_table(
   "table9.tex",
-  paste0("Discriminatory Steering and Local Pollution Exposures\\\\[0.5em]\\textit{", table_subtitle, " of Table 9, C\\&T 2022}"),
+  paste0("Discriminatory Steering and Local Pollution Exposures\\\\[0.5em]\\textit{", subtitle_for_table(9), "}"),
   paste0("tab:", label_prefix, "9"),
   list(
     build_model_panel(
       panel_title = "Panel A: Differences for the Entire Sample",
       col_names = pollution_headers,
-      category_stems = "table9A_categories_corrected",
-      minority_stems = "table9A_minority_corrected",
+      category_stems = stem("table9A_categories"),
+      minority_stems = stem("table9A_minority"),
       white_sd_table = "table9",
       white_sd_panel = "Panel A: Differences for the Entire Sample",
       white_sd_col_labels = pollution_headers,
@@ -572,8 +717,8 @@ write_table(
     build_model_panel(
       panel_title = "Panel B: Differences for Sample of Mothers",
       col_names = pollution_headers,
-      category_stems = "table9B_categories_corrected",
-      minority_stems = "table9B_minority_corrected",
+      category_stems = stem("table9B_categories"),
+      minority_stems = stem("table9B_minority"),
       white_sd_table = "table9",
       white_sd_panel = "Panel B: Differences for Sample of Mothers",
       white_sd_col_labels = pollution_headers,
@@ -584,14 +729,14 @@ write_table(
 
 write_table(
   "table10.tex",
-  paste0("Discriminatory Steering and Neighborhood Effects (Mothers)\\\\[0.5em]\\textit{", table_subtitle, " of Table 10, C\\&T 2022}"),
+  paste0("Discriminatory Steering and Neighborhood Effects (Mothers)\\\\[0.5em]\\textit{", subtitle_for_table(10), "}"),
   paste0("tab:", label_prefix, "10"),
   list(
     build_model_panel(
       panel_title = "Panel A: School Quality and Neighborhood Safety",
       col_names = school_headers,
-      category_stems = c("table10A1_categories_corrected", "table10A2_categories_corrected"),
-      minority_stems = c("table10A1_minority_corrected", "table10A2_minority_corrected"),
+      category_stems = c(stem("table10A1_categories"), stem("table10A2_categories")),
+      minority_stems = c(stem("table10A1_minority"), stem("table10A2_minority")),
       white_sd_table = "table10",
       white_sd_panel = "Panel A: School Quality and Neighborhood Safety",
       white_sd_col_labels = c(
@@ -605,8 +750,8 @@ write_table(
     build_model_panel(
       panel_title = "Panel B: American Community Survey",
       col_names = acs_headers,
-      category_stems = "table10B_categories_corrected",
-      minority_stems = "table10B_minority_corrected",
+      category_stems = stem("table10B_categories"),
+      minority_stems = stem("table10B_minority"),
       white_sd_table = "table10",
       white_sd_panel = "Panel B: American Community Survey",
       white_sd_col_labels = acs_headers,
@@ -617,7 +762,7 @@ write_table(
 
 write_table(
   "table11.tex",
-  paste0("Discriminatory Steering: Low-Poverty Neighborhoods\\\\[0.5em]\\textit{", table_subtitle, " of Table 11, C\\&T 2022}"),
+  paste0("Discriminatory Steering: Low-Poverty Neighborhoods\\\\[0.5em]\\textit{", subtitle_for_table(11), "}"),
   paste0("tab:", label_prefix, "11"),
   list(build_model_panel(
     col_names = c(
@@ -628,7 +773,7 @@ write_table(
       "Low Poverty/High Dad: Families",
       "Low Poverty/High Dad: Moms"
     ),
-    category_stems = "table11_categories_corrected",
+    category_stems = stem("table11_categories"),
     include_minority = FALSE,
     white_sd_table = "table11",
     white_sd_panel = "",
@@ -645,11 +790,11 @@ write_table(
 
 write_table(
   "table12.tex",
-  paste0("Discriminatory Steering: Median Income in Neighborhood\\\\[0.5em]\\textit{", table_subtitle, " of Table 12, C\\&T 2022}"),
+  paste0("Discriminatory Steering: Median Income in Neighborhood\\\\[0.5em]\\textit{", subtitle_for_table(12), "}"),
   paste0("tab:", label_prefix, "12"),
   list(build_model_panel(
     col_names = c("All Testers", "Families", "Moms"),
-    category_stems = "table12_categories_corrected",
+    category_stems = stem("table12_categories"),
     include_minority = FALSE,
     white_sd_table = "table12",
     white_sd_panel = "",
@@ -660,21 +805,21 @@ write_table(
 if (table_included(13)) {
   write_table(
     "table13.tex",
-    paste0("Discriminatory Steering by Implied Preferences for Neighborhood Attributes\\\\[0.5em]\\textit{", table_subtitle, " of Table 13, C\\&T 2022}"),
+    paste0("Discriminatory Steering by Implied Preferences for Neighborhood Attributes\\\\[0.5em]\\textit{", subtitle_for_table(13), "}"),
     paste0("tab:", label_prefix, "13"),
     list(
       build_model_panel(
         panel_title = "Panel A: School Quality and Neighborhood Safety",
         col_names = school_headers,
-        category_stems = c("table13A1_categories_corrected", "table13A2_categories_corrected"),
-        minority_stems = c("table13A1_minority_corrected", "table13A2_minority_corrected"),
+        category_stems = c(stem("table13A1_categories"), stem("table13A2_categories")),
+        minority_stems = c(stem("table13A1_minority"), stem("table13A2_minority")),
         additional_rows = school_controls
       ),
       build_model_panel(
         panel_title = "Panel B: American Community Survey",
         col_names = acs_headers,
-        category_stems = "table13B_categories_corrected",
-        minority_stems = "table13B_minority_corrected",
+        category_stems = stem("table13B_categories"),
+        minority_stems = stem("table13B_minority"),
         additional_rows = acs_controls
       )
     )
@@ -683,15 +828,15 @@ if (table_included(13)) {
 
 write_table(
   "table14.tex",
-  paste0("Discriminatory Steering and Later Transactions\\\\[0.5em]\\textit{", table_subtitle, " of Table 14, C\\&T 2022}"),
+  paste0("Discriminatory Steering and Later Transactions\\\\[0.5em]\\textit{", subtitle_for_table(14), "}"),
   paste0("tab:", label_prefix, "14"),
   list(
     build_table14a_panel(),
     build_model_panel(
       panel_title = "Panel B: Dependent Variable: Logarithm of Price",
       col_names = c("(1)", "(2)", "(3)", "(4)", "(5)"),
-      category_stems = "table14B_categories_corrected",
-      minority_stems = "table14B_minority_corrected",
+      category_stems = stem("table14B_categories"),
+      minority_stems = stem("table14B_minority"),
       white_sd_table = "table14",
       white_sd_panel = "Panel B: Dependent Variable: Logarithm of Price",
       white_sd_col_labels = rep("Log sale price", 5),
@@ -714,7 +859,7 @@ white_sd_output <- if (length(white_sd_rows) == 0L) {
 }
 write.csv(
   white_sd_output,
-  file.path(output_dir, "ct_sample_appendix_white_sds.csv"),
+  file.path(output_dir, white_sd_file),
   row.names = FALSE
 )
 
@@ -735,26 +880,31 @@ preview_lines <- c(
   preview_body,
   "\\end{document}"
 )
-writeLines(preview_lines, file.path(output_dir, "formatted_corrected_tables_preview.tex"), useBytes = TRUE)
+writeLines(preview_lines, file.path(output_dir, preview_file), useBytes = TRUE)
 
 manifest <- c(
-  "Generated formatted corrected model-based tables.",
+  manifest_title,
   paste("Generated at:", format(Sys.time(), "%Y-%m-%d %H:%M:%S %Z")),
   paste("Input directory:", source_dir),
   paste("Output directory:", output_dir),
   "",
   "Outputs:",
   paste0("- table", preview_tables, ".tex"),
-  "- formatted_corrected_tables_preview.tex",
-  "- ct_sample_appendix_white_sds.csv",
+  paste0("- ", preview_file),
+  paste0("- ", white_sd_file),
   "",
   "Notes:",
-  "- The script consumes the current raw corrected CSV outputs; it does not rerun Stata.",
+  "- The script consumes the current raw Stata CSV outputs; it does not rerun Stata.",
   "- Split raw outputs for Tables 8, 10, and 14 are combined into one file per C&T table.",
-  "- Corrected Table 13 is skipped by default because appendix_tables.do does not estimate Table 13 under the corrected drop-trial-invariant-controls specification.",
-  "- Table 14 Panel A is rebuilt from table14A_override_corrected.csv and therefore reports the corrected same-race tester coefficients and available summary rows only."
+  table13_note,
+  table14_note
 )
 writeLines(manifest, file.path(output_dir, "README.txt"), useBytes = TRUE)
 
-cat("Wrote formatted corrected tables to:\n")
+cat("Wrote formatted ", config$label, " supplemental appendix tables to:\n", sep = "")
 cat(output_dir, "\n")
+}
+
+for (mode_name in requested_modes) {
+  generate_mode(mode_name, mode_configs[[mode_name]])
+}

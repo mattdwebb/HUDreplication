@@ -69,7 +69,7 @@ run_step <- function(label, script, step_args = character()) {
   cat("\n== ", label, " ==\n", command, "\n", sep = "")
   flush.console()
 
-  status <- system2(rscript, c(script_path, step_args), stdout = "", stderr = "")
+  status <- system(command)
   if (!identical(status, 0L)) {
     stop("Step failed: ", label, call. = FALSE)
   }
@@ -94,7 +94,7 @@ if (!has_arg("--skip-data-cleaning")) {
 
 run_step("Run reconstructed-sample analysis", file.path("reconstructed_sample", "analysis.R"))
 run_step("Format reconstructed-sample tables", file.path("reconstructed_sample", "format_tables.R"))
-run_step("Format corrected C&T-sample appendix tables", file.path("ct_sample", "format_corrected_tables.R"))
+run_step("Format supplemental C&T-sample appendix tables", file.path("ct_sample", "format_supplemental_appendix_tables.R"))
 run_step("Generate comparison tables", "make_comparison_tables.R")
 
 if (!has_arg("--skip-data-description")) {

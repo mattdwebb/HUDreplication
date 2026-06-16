@@ -27,6 +27,9 @@ resolve_repo_root <- function() {
   start_dirs <- normalizePath(getwd(), winslash = "/", mustWork = TRUE)
   if (length(file_arg) == 1) {
     script_arg <- sub("^--file=", "", file_arg)
+    if (!file.exists(script_arg)) {
+      script_arg <- gsub("~+~", " ", script_arg, fixed = TRUE)
+    }
     script_path <- normalizePath(script_arg, winslash = "/", mustWork = TRUE)
     start_dirs <- c(dirname(script_path), start_dirs)
   }
