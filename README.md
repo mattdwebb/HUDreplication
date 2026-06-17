@@ -5,7 +5,7 @@ This repository provides the code required to replicate an upcoming comment whic
 The repository has two major sections:
 
 1. `ct_sample`: replication of the Christensen and Timmins (2022) analysis, starting from their replication files, with corrections to a number of data cleaning errors and several approaches to generating fixed effects for the geographical region of recommended houses.
-2. `reconstructed_sample`: a new specification and reconstructed cleaned dataset drawn fromt the 2012 Housing Discrimination Study (HDS 2012) that address issues in the original analysis. This section works directly from the raw data of HDS 2012 with no inputs from the C&T2022 replication package.
+2. `reconstructed_sample`: a new specification and reconstructed cleaned dataset drawn from the 2012 Housing Discrimination Study (HDS 2012) that address issues in the original analysis. This section works directly from the raw data of HDS 2012 with no inputs from the C&T2022 replication package.
 
 The repository is organized so that raw or source inputs live in `Data`, C&T-sample intermediates live in `Data/Generated/ct_sample`, reconstructed-sample intermediates live in `Data/Generated/reconstructed_sample`, and final output tables are written inside the corresponding folder for each analysis approach.
 
@@ -150,9 +150,7 @@ The meta-analysis figure script is separate. After setting the repository root i
 
 ### Step 3: Format supplemental C&T-sample appendix tables
 
-This step is run automatically by `Rscript run_post_stata.R`. To run it by itself, use:
-
-To combine the corrected and original C&T-sample component CSVs into formatted supplemental appendix tables, run:
+This step is run automatically by `Rscript run_post_stata.R`. To combine the corrected and original C&T-sample component CSVs into formatted supplemental appendix tables by itself, run:
 
 - `Rscript ct_sample/format_supplemental_appendix_tables.R`
 
@@ -173,7 +171,7 @@ Run:
 
 - `Rscript reconstructed_sample/data_cleaning.R`
 
-This script reads the HDS raw files from `Data/HDS2012_Raw_Data`, performs the internal merges and cleaning, geocodes recommended properties, pulls ACS data, merges the external datasets, and writes reconstructed-sample intermediates to `Data/Generated/reconstructed_sample`. This script takes about 30 minutes to run on a M1 Macbook Pro, with the majority of the time spent in geocoding particularly the address-by-address fallback geocoding methods. 
+This script reads the HDS raw files from `Data/HDS2012_Raw_Data`, performs the internal merges and cleaning, geocodes recommended properties, pulls ACS data, merges the external datasets, and writes reconstructed-sample intermediates to `Data/Generated/reconstructed_sample`. This script takes about 30 minutes to run on an M1 MacBook Pro, with most of the time spent geocoding, particularly in the address-by-address fallback geocoding methods.
 
 Key outputs include:
 
@@ -186,7 +184,7 @@ Key outputs include:
 
 ### Exact replication with the canonical geocoding cache
 
-The preferred exact-replication path is to use the canonical generated geocoding cache included in the data bundle. This is done first for the convenience of the replicator; rerunning the geocoding sequence can take a lot of time. Second, the geocoding process, as it relies on external APIs and server infrastructure is not deterministic and can create slighly different outputs between runs. Providing the pre-geocoded file allows the replicator to be sure to recover the same results as the original authors. The geocoded data cache is present here:
+The preferred exact-replication path is to use the canonical generated geocoding cache included in the data bundle. This is done first for the convenience of the replicator; rerunning the geocoding sequence can take a lot of time. Second, because the geocoding process relies on external APIs and server infrastructure, it is not deterministic and can create slightly different outputs between runs. Providing the pre-geocoded file allows the replicator to be sure to recover the same results as the original authors. The geocoded data cache is present here:
 
 - `Data/Generated/reconstructed_sample/sales_tester_rechomes_geocoded.csv`
 
@@ -292,7 +290,7 @@ To write the comparison tables somewhere else, pass an output directory:
 For a full clean replication from source inputs:
 
 1. Set `HUD_REPLICATION_ROOT` in `preprocess.R` and `main.do`
-2. Ensure `reconstructed_sample/api_keys.R` contains a valid Census API key 
+2. Ensure `reconstructed_sample/api_keys.R` contains a valid Census API key
 3. Run `Rscript ct_sample/preprocess.R`
 4. Run `ct_sample/main.do`
 5. Run `Rscript run_post_stata.R`
